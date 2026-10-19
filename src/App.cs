@@ -62,9 +62,9 @@ internal sealed class MainForm : Form
         _content.BackColor = Ui.Bg;
 
         var title = Ui.Text_(Program.AppName, Ui.Text, Ui.F(12.5f, FontStyle.Bold), new Padding(0));
-        title.Location = new Point(Ui.S(22), Ui.S(20));
+        title.Location = new Point(Ui.S(22), Ui.S(6));
         var ver = Ui.Text_(Program.Version, Ui.TextFaint, Ui.F(8.5f), new Padding(0));
-        ver.Location = new Point(Ui.S(22), Ui.S(48));
+        ver.Location = new Point(Ui.S(22), Ui.S(34));
         _sidebar.Controls.Add(title);
         _sidebar.Controls.Add(ver);
 
@@ -82,6 +82,7 @@ internal sealed class MainForm : Form
 
         Controls.Add(_content);
         Controls.Add(_sidebar);
+        Controls.Add(new TitleBar(this, _sidebar.Width)); // 自己畫嘅標題列（最後加 = 最先 dock，橫跨成個頂）
         // 開頭就整晒所有頁（咁各頁嘅快捷鍵唔使打開過都用得）
         for (int i = _pages.Count - 1; i >= 0; i--) Show(i);
     }
@@ -90,6 +91,41 @@ internal sealed class MainForm : Form
     {
         base.OnHandleCreated(e);
         DarkTheme.DarkTitleBar(this);
+        // 叫 Windows 重新計外框（拎走預設標題列）
+        SetWindowPos(Handle, 0, 0, 0, 0, 0, 0x0002 | 0x0001 | 0x0004 | 0x0020 /*NOMOVE|NOSIZE|NOZORDER|FRAMECHANGED*/);
+    }
+
+    // ---------- 拎走 Windows 預設標題列，但保留邊框拉大細、陰影、貼邊分割畫面 ----------
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NCCALCSIZE_PARAMS { public RECT R0, R1, R2; public nint Pos; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(nint h, nint after, int x, int y, int cx, int cy, uint flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsZoomed(nint h);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int i);
+
+    protected override void WndProc(ref Message m)
+    {
+        const int WM_NCCALCSIZE = 0x0083;
+        if (m.Msg == WM_NCCALCSIZE && m.WParam != 0)
+        {
+            // 先等 Windows 計好左右下嘅（隱形）拉大細邊框，再將頂部改返去視窗最頂 = 冇標題列
+            var p = System.Runtime.InteropServices.Marshal.PtrToStructure<NCCALCSIZE_PARAMS>(m.LParam);
+            int top = p.R0.Top;
+            base.WndProc(ref m);
+            p = System.Runtime.InteropServices.Marshal.PtrToStructure<NCCALCSIZE_PARAMS>(m.LParam);
+            // 最大化時視窗會超出螢幕少少，頂部要縮返入嚟
+            p.R0.Top = top + (IsZoomed(Handle) ? GetSystemMetrics(33 /*SM_CYSIZEFRAME*/) + GetSystemMetrics(92 /*SM_CXPADDEDBORDER*/) : 0);
+            System.Runtime.InteropServices.Marshal.StructureToPtr(p, m.LParam, false);
+            m.Result = 0;
+            return;
+        }
+        base.WndProc(ref m);
     }
 
     protected override void OnShown(EventArgs e)
@@ -103,7 +139,7 @@ internal sealed class MainForm : Form
     {
         var nav = new NavItem(name);
         int index = _pages.Count;
-        nav.SetBounds(0, Ui.S(84) + index * Ui.S(44), _sidebar.Width, Ui.S(40));
+        nav.SetBounds(0, Ui.S(70) + index * Ui.S(44), _sidebar.Width, Ui.S(40));
         nav.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
         nav.Click += (_, _) => Show(index);
         _sidebar.Controls.Add(nav);
@@ -252,5 +288,139 @@ internal sealed class WrapText : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(0, 0, Width, TextH(Width)), Ui.TextDim, Flags);
+    }
+}
+
+/// <summary>
+/// 自己畫嘅標題列：左邊同側欄同色，右邊有最小化 / 最大化 / 關閉；
+/// 拖住可以移動視窗，雙擊最大化，最頂幾 px 可以拉高。
+/// </summary>
+internal sealed class TitleBar : Control
+{
+    private readonly Form _form;
+    private readonly int _sidebarW;
+    private int _hover = -1, _down = -1; // 0 最小化, 1 最大化, 2 關閉
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ReleaseCapture();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern nint SendMessage(nint h, int msg, nint w, nint l);
+
+    public TitleBar(Form form, int sidebarWidth)
+    {
+        _form = form;
+        _sidebarW = sidebarWidth;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint |
+                 ControlStyles.ResizeRedraw, true);
+        Dock = DockStyle.Top;
+        Height = Ui.S(34);
+        form.Resize += (_, _) => Invalidate();
+    }
+
+    private int BtnW => Ui.S(46);
+    private Rectangle Btn(int i) => new(Width - BtnW * (3 - i), 0, BtnW, Height);
+
+    private int HitButton(Point p)
+    {
+        for (int i = 0; i < 3; i++) if (Btn(i).Contains(p)) return i;
+        return -1;
+    }
+
+    private bool Maximized => _form.WindowState == FormWindowState.Maximized;
+    private int TopGrip => Maximized ? 0 : Ui.S(5);
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Ui.Bg);
+        using (var side = new SolidBrush(Ui.Panel)) g.FillRectangle(side, 0, 0, _sidebarW, Height);
+
+        for (int i = 0; i < 3; i++)
+        {
+            var r = Btn(i);
+            if (i == _hover)
+            {
+                var bg = i == 2 ? (_down == 2 ? ControlPaint.Dark(Ui.Danger, 0.1f) : Ui.Danger) : (_down == i ? Ui.BorderHi : Ui.CardHi);
+                using var b = new SolidBrush(bg);
+                g.FillRectangle(b, r);
+            }
+            var col = i == _hover && i == 2 ? Color.White : i == _hover ? Ui.Text : Ui.TextDim;
+            using var pen = new Pen(col, Math.Max(1f, Ui.S(1f)));
+            int cx = r.X + r.Width / 2, cy = r.Y + r.Height / 2, s = Ui.S(5);
+            switch (i)
+            {
+                case 0: // 最小化
+                    g.DrawLine(pen, cx - s, cy, cx + s, cy);
+                    break;
+                case 1: // 最大化 / 還原
+                    if (Maximized)
+                    {
+                        g.DrawRectangle(pen, cx - s, cy - s + Ui.S(2), s * 2 - Ui.S(2), s * 2 - Ui.S(2));
+                        g.DrawLine(pen, cx - s + Ui.S(2), cy - s, cx + s, cy - s);
+                        g.DrawLine(pen, cx + s, cy - s, cx + s, cy + s - Ui.S(2));
+                    }
+                    else g.DrawRectangle(pen, cx - s, cy - s, s * 2, s * 2);
+                    break;
+                case 2: // 關閉
+                    var old = g.SmoothingMode;
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    g.DrawLine(pen, cx - s, cy - s, cx + s, cy + s);
+                    g.DrawLine(pen, cx + s, cy - s, cx - s, cy + s);
+                    g.SmoothingMode = old;
+                    break;
+            }
+        }
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        int h = HitButton(e.Location);
+        if (h != _hover) { _hover = h; Invalidate(); }
+        Cursor = h < 0 && e.Y < TopGrip ? Cursors.SizeNS : Cursors.Default;
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        _hover = _down = -1;
+        Invalidate();
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (e.Button != MouseButtons.Left) return;
+        int h = HitButton(e.Location);
+        if (h >= 0) { _down = h; Invalidate(); return; }
+        if (e.Clicks >= 2)
+        {
+            ToggleMax();
+            return;
+        }
+        // 交俾 Windows：拖動 = 移動視窗（支援貼邊分割畫面）；最頂幾 px = 拉高
+        const int WM_NCLBUTTONDOWN = 0xA1, HTCAPTION = 2, HTTOP = 12;
+        ReleaseCapture();
+        SendMessage(_form.Handle, WM_NCLBUTTONDOWN, e.Y < TopGrip ? HTTOP : HTCAPTION, 0);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        int h = HitButton(e.Location);
+        int down = _down;
+        _down = -1;
+        Invalidate();
+        if (h < 0 || h != down) return;
+        switch (h)
+        {
+            case 0: _form.WindowState = FormWindowState.Minimized; break;
+            case 1: ToggleMax(); break;
+            case 2: _form.Close(); break;
+        }
+    }
+
+    private void ToggleMax()
+    {
+        _form.WindowState = Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+        Invalidate();
     }
 }
