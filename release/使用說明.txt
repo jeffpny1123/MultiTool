@@ -1,0 +1,22 @@
+多功能工具 (MultiTool) v1.0
+開發者：白兔糖v3v
+
+【使用方法】
+1. 直接開 MultiTool.exe 就用得，唔使安裝 .NET。
+2. 左邊揀「我的腳本」，撳「+」新增腳本，或者用內附嘅「自動點擊」範例腳本：
+   撳「修改」→ 截好怪物圖、設好按鍵 → 撳「開始」。
+3. 每個腳本可以設快捷鍵，喺遊戲入面直接開始 / 停止。
+
+【注意】
+- MultiTool.exe 同 data 資料夾要放喺同一個位置；所有腳本、截圖、設定都存喺 data 入面。
+- 如果遊戲用管理員權限開，MultiTool.exe 都要「以系統管理員身分執行」，否則點擊同按鍵會被擋住。
+- 搵圖用嘅圖最好直接喺遊戲畫面截（用截圖模式框），配對會準好多。
+- 出錯記錄：data\error.log
+
+【授權】
+© 白兔糖v3v。本軟件按 PolyForm Noncommercial License 1.0.0 授權：
+可以免費使用、修改同分享，但禁止轉售或任何商業用途。
+https://polyformproject.org/licenses/noncommercial/1.0.0
+
+【更新】
+每次開程式會自動檢查 GitHub 有冇新版本：https://github.com/jeffpny1123/MultiTool

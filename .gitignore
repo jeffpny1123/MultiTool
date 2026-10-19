@@ -1,0 +1,18 @@
+# 個人資料（腳本、截圖、設定）— 唔好上傳
+/data/
+Build/data/
+
+# 編譯 / 打包產物（exe 放喺 GitHub Release，唔放入 repo）
+MultiTool.dll
+*.exe
+*.new
+*.tmp
+Build/*.zip
+*.zip
+
+# Python cache
+__pycache__/
+*.pyc
+
+# 本機打包輸出（派俾人嘅說明檔喺 release/）
+Build/
