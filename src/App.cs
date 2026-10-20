@@ -10,7 +10,7 @@ namespace MultiTool;
 internal static class Program
 {
     public const string AppName = "多功能工具";
-    public const string Version = "v1.0";
+    public const string Version = "v1.1";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -78,6 +78,7 @@ internal sealed class MainForm : Form
         // ---- 功能清單（以後喺度加）----
         AddPage("首頁", BuildHomePage);
         AddPage("我的腳本", Scripts.ScriptsPage.Build);
+        AddPage("AI 助手", Ai.AiPage.Build);
         AddPage("關於", BuildAboutPage);
 
         Controls.Add(_content);
@@ -190,6 +191,10 @@ internal sealed class MainForm : Form
             "IF 框同主線程同時行；每個腳本可以揀「行一次」或者「一直行」，亦可以設自己嘅快捷鍵（入咗嗰個腳本嘅預覽頁先用得）。\n\n" +
             "已經幫你寫好一個「自動點擊」腳本：截圖搵怪物 → 搵到就點擊 → 喺點選CD 期間循環按鍵 → 再搵。" +
             "入去截好怪物圖、設好按鍵就用得。"));
+
+        stack.AddRow(Feature("AI 助手", 2,
+            "用你部機已經安裝同登入咗嘅 Claude Code、Codex CLI（ChatGPT）或者 Gemini CLI 嚟問嘢，做基本日常問答，對話會自動儲存。" +
+            "唔使喺呢度輸入任何帳號密碼；撳右上角「登入」揀用邊個，未登入就喺彈出嘅視窗登入一次。"));
 
         var tips = new CardPanel { Title = "小貼士" };
         tips.SetContent(new WrapText(

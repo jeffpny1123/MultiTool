@@ -1,8 +1,8 @@
 # MultiTool 多功能工具
 
-A lightweight Windows automation tool (.NET 9 WinForms, single-file `.exe`). Build your own macros with keyboard and mouse actions, on-screen image matching, loops, conditions and background execution.
+A lightweight Windows automation tool (.NET 9 WinForms, single-file `.exe`). Build your own macros with keyboard and mouse actions, on-screen image matching, loops, conditions and background execution, and chat with your own AI (Claude / ChatGPT / Gemini) to answer questions or write scripts for you.
 
-一款輕量的 Windows 自動化工具（.NET 9 WinForms，單一 `.exe` 檔案）。可自行編寫巨集腳本，支援鍵盤與滑鼠操作、螢幕圖像比對、循環、條件判斷及背景執行。
+一款輕量的 Windows 自動化工具（.NET 9 WinForms，單一 `.exe` 檔案）。可自行編寫巨集腳本，支援鍵盤與滑鼠操作、螢幕圖像比對、循環、條件判斷及背景執行；亦可連接你自己的 AI（Claude／ChatGPT／Gemini）進行問答或協助編寫腳本。
 
 Developed by / 開發者：**白兔糖v3v**
 Interface language / 介面語言：Traditional Chinese / 繁體中文
@@ -33,6 +33,39 @@ Interface language / 介面語言：Traditional Chinese / 繁體中文
 - **Auto update** checks GitHub Releases on startup and updates with one click.
   **自動更新**：啟動時檢查 GitHub Releases，一鍵完成更新。
 
+**AI Assistant AI 助手** — uses the AI command-line tool already installed and signed in on your computer / 使用你電腦上已安裝並已登入的 AI 命令列工具
+
+| Platform 平台 | Required tool 所需工具 |
+|---|---|
+| Claude | [Claude Code](https://claude.com/claude-code) |
+| ChatGPT | [Codex CLI](https://github.com/openai/codex) |
+| Gemini | [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
+
+- **Sign in / out** from the **Sign in** dialog; the top-right corner shows the current status (e.g. `已登入 Claude - Pro`). MultiTool never handles your account, password or token — sign-in is done by each official tool in your browser, and usage counts towards your own plan.
+  在「登入」視窗中**登入／登出**，右上角顯示目前狀態（例如 `已登入 Claude - Pro`）。MultiTool 不會接觸你的帳戶、密碼或權杖——登入由各官方工具於瀏覽器完成，用量計入你自己的方案。
+- **Chat history** is saved automatically (`data/ai/chats/`) and listed on the left; reopen a chat to continue it, or rename / delete it with a right-click.
+  **對話紀錄**自動儲存（`data/ai/chats/`）並列於左側；重新開啟可繼續對話，右鍵可重新命名或刪除。
+- **Script AI helper**: while editing a script, click the cloud button at the bottom-right to describe what you want. The AI rewrites the current script, and you can **apply** or **undo** the result. It cannot create screenshots or guess screen positions — it leaves those for you to fill in and lists them after applying.
+  **腳本 AI 助手**：編輯腳本時按右下角的雲朵按鈕，描述你想要的效果，AI 會改寫目前的腳本，你可**套用**或**復原**。AI 無法擷取圖片或猜測螢幕座標，會留空並於套用後列出需自行補充的項目。
+- The AI runs in an empty folder in read-only / Q&A mode: it cannot run commands or modify your files.
+  AI 於空白資料夾內以唯讀／問答模式運行，不能執行指令或修改你的檔案。
+
+---
+
+## Changelog 更新紀錄
+
+### v1.1
+- **New: AI Assistant page** — chat with Claude, ChatGPT or Gemini through your own installed CLI tool, with sign-in / sign-out, status display and saved chat history.
+  **新增：AI 助手頁面**——透過你自己安裝的命令列工具與 Claude、ChatGPT 或 Gemini 對話，支援登入／登出、狀態顯示及對話紀錄。
+- **New: Script AI helper** — a cloud button in the script editor opens a small chat that can write or modify the current script, with apply and undo.
+  **新增：腳本 AI 助手**——腳本編輯頁右下角的雲朵按鈕可開啟小型對話欄，協助編寫或修改目前腳本，支援套用及復原。
+- Home page now introduces the AI Assistant.
+  首頁加入 AI 助手介紹。
+
+### v1.0
+- First release: My Scripts (keys, mouse clicks, waits, find image & click, loops, IF conditions, parallel IF blocks, background mode, hotkeys), custom title bar and auto update.
+  首個版本：我的腳本（按鍵、滑鼠點擊、等待、搵圖點擊、循環、IF 條件、並行 IF 區塊、背景執行、快捷鍵）、自訂標題列及自動更新。
+
 ---
 
 ## Download 下載
@@ -52,7 +85,7 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`Updater.cs` auto update 自動更新 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`Updater.cs` auto update 自動更新 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
 | `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
 | `release/` | User guide shipped with releases 隨發佈版本附上的使用說明（`使用說明.txt`） |

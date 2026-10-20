@@ -1044,6 +1044,7 @@ public sealed class ScriptsPage : Panel
     {
         var ed = new ScriptEditor(sc);
         ed.Back += () => Open(sc); // 改完返去預覽
+        ed.Reload += () => OpenEditor(sc);
         ShowView(ed);
     }
 }
@@ -1200,6 +1201,8 @@ internal sealed class ScriptEditor : Panel
     private readonly Action _onChanged;
 
     public event Action? Back;
+    /// <summary>AI 套用咗新腳本：要重新整個編輯器。</summary>
+    public event Action? Reload;
 
     public ScriptEditor(Script sc)
     {
@@ -1256,6 +1259,9 @@ internal sealed class ScriptEditor : Panel
         ScriptRunner.Status += _onStatus;
         ScriptRunner.Changed += _onChanged;
         UpdateButtons();
+
+        // 右下角「雲」：揀咗 AI 而且登入咗先會出現
+        _ = new MultiTool.Ai.ScriptAssist(this, sc, () => BeginInvoke(() => Reload?.Invoke()));
     }
 
     private void Commit()
