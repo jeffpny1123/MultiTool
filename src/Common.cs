@@ -60,9 +60,9 @@ internal static class Mouse
     [StructLayout(LayoutKind.Explicit)] private struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
     [StructLayout(LayoutKind.Sequential)] private struct INPUT { public uint type; public InputUnion u; }
 
-    private static void Send(uint flags, int dx = 0, int dy = 0)
+    private static void Send(uint flags, int dx = 0, int dy = 0, uint data = 0)
     {
-        var inp = new INPUT[] { new() { type = INPUT_MOUSE, u = new InputUnion { mi = new MOUSEINPUT { dx = dx, dy = dy, dwFlags = flags } } } };
+        var inp = new INPUT[] { new() { type = INPUT_MOUSE, u = new InputUnion { mi = new MOUSEINPUT { dx = dx, dy = dy, dwFlags = flags, mouseData = data } } } };
         SendInput(1, inp, Marshal.SizeOf<INPUT>());
     }
 
@@ -110,6 +110,19 @@ internal static class Mouse
     }
 
     public static void LeftClick(int x, int y) => Click(x, y, false, restore: true);
+
+    /// <summary>喺 (x, y) 碌滾輪：notches &gt; 0 向上，&lt; 0 向下。</summary>
+    public static void Wheel(int x, int y, int notches)
+    {
+        Move(x, y);
+        Thread.Sleep(30);
+        int dir = Math.Sign(notches);
+        for (int i = 0; i < Math.Abs(notches); i++)
+        {
+            Send(0x0800 /*WHEEL*/, 0, 0, (uint)(120 * dir));
+            Thread.Sleep(40);
+        }
+    }
 }
 
 /// <summary>管理員權限：Windows 唔准普通權限嘅程式控制用管理員權限開嘅程式（UIPI），點擊同按鍵會無聲無息被擋。</summary>
@@ -448,6 +461,24 @@ internal static class Keyboard
     {
         Send(vk, true);
         Interlocked.Exchange(ref _lastInjectTicks, Environment.TickCount64);
+    }
+
+    /// <summary>打一段文字（Unicode，中文都得）。</summary>
+    public static void TypeText(string text, CancellationToken ct, int delayMs = 15)
+    {
+        const uint KEYEVENTF_UNICODE = 0x4;
+        foreach (char ch in text.Replace("\r\n", "\n"))
+        {
+            ct.ThrowIfCancellationRequested();
+            Interlocked.Exchange(ref _lastInjectTicks, Environment.TickCount64);
+            if (ch == '\n') { Down(0x0D); Thread.Sleep(10); Up(0x0D); Thread.Sleep(delayMs); continue; }
+            var down = new INPUT { type = INPUT_KEYBOARD };
+            down.u.ki = new KEYBDINPUT { wVk = 0, wScan = ch, dwFlags = KEYEVENTF_UNICODE };
+            var up = new INPUT { type = INPUT_KEYBOARD };
+            up.u.ki = new KEYBDINPUT { wVk = 0, wScan = ch, dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP };
+            SendInput(2, new[] { down, up }, Marshal.SizeOf<INPUT>());
+            Thread.Sleep(delayMs);
+        }
     }
 
     private static void Send(int vk, bool up)

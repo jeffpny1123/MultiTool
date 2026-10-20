@@ -16,17 +16,20 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 | Step 步驟 | Description 說明 |
 |---|---|
 | Key press 按鍵 | Any key or key combination (e.g. `Shift + Alt + T`); hold for N milliseconds, press down only, or release only.<br>任何按鍵或組合鍵（例如 `Shift + Alt + T`）；可設定按住 N 毫秒、僅按下或僅彈起。 |
-| Mouse click 滑鼠點擊 | Left or right button at a position, with a 3-second position picker; hold, press down only, or release only. **Drag**: "Down" at A → delay → "Up" at B.<br>於指定座標按下左鍵或右鍵，並提供 3 秒倒數的座標拾取功能；可按住、僅按下或僅彈起。**拖曳**：在 A 點「按下」→ 延遲 → 在 B 點「彈起」。 |
-| Delay 延遲 | Pause for N milliseconds.<br>暫停 N 毫秒（ms）。 |
+| Mouse 滑鼠 | Left button, right button or wheel (chosen from a drop-down) at a position, with a 3-second position picker. Buttons: hold, press down only, or release only. Wheel: up / down N notches. **Drag**: "Down" at A → delay → "Up" at B.<br>於指定座標使用左鍵、右鍵或滾輪（下拉式選單選擇），並提供 3 秒倒數的座標拾取功能。按鍵可按住、僅按下或僅彈起；滾輪可向上／向下捲動 N 格。**拖曳**：在 A 點「按下」→ 延遲 → 在 B 點「彈起」。 |
+| Delay 延遲 | Pause for N milliseconds, or a random time between two values.<br>暫停 N 毫秒（ms），或於兩個時間之間隨機暫停。 |
+| Type text 輸入文字 | Types a piece of text (any language); line breaks press Enter.<br>輸入一段文字（支援中文），換行會按 Enter。 |
 | Find image & click 搵圖點擊 | Snip screen regions (up to 6 images per step) and click the best match above the similarity threshold.<br>擷取螢幕區域作為目標圖片（每個步驟最多 6 張），並點擊相似度最高且達到門檻的位置。 |
 | Loop / Break 循環／中斷循環 | Repeat steps N times (0 = forever), optionally stop after N seconds or at a set clock time, and break out early when needed. When a loop ends, everything inside it stops at once and keys / buttons it pressed down are released.<br>重複執行步驟 N 次（0 代表無限次），可設定運行 N 秒後或到指定時間停止，並可提前跳出循環。循環結束時，其內所有步驟會即時停止，循環內按下的按鍵／滑鼠鍵會自動彈起。 |
 | Parallel 同時運行 | Two or more branches (add more with **+**, up to 8) run at the same time; the next step runs after all branches finish.<br>兩條或以上支線（可按 **+** 新增，最多 8 條）同時執行，全部完成後才執行下一步。 |
-| New thread 新線程 | Starts a side thread that runs its steps in parallel; the main thread continues immediately.<br>開啟一條支線同時執行其中步驟，主線程無須等待，立即執行下一步。 |
-| IF condition IF 條件 | Image found, image not found, pixel color, clock time, countdown or time limit (script has run for N seconds); conditions can be nested.<br>條件包括：找到圖片、找不到圖片、指定位置的顏色、現實時間、倒數計時及時限（腳本已運行 N 秒）；可多層巢狀使用。 |
+| IF condition IF 條件 | Image found, image not found, pixel color, clock time, countdown or time limit (script has run for N seconds). Several conditions can be combined with **AND / OR**; IFs can be nested.<br>條件包括：找到圖片、找不到圖片、指定位置的顏色、現實時間、倒數計時及時限（腳本已運行 N 秒）。多個條件可用 **AND／OR** 組合；可多層巢狀使用。 |
+| System 系統 | Open an app, close a program, switch to a window, shut down the PC, or play a sound (once or repeating).<br>打開應用程式、關閉程式、切換視窗、關閉電腦，或播放音效（播放一次或不斷重複）。 |
 | Stop script 停止腳本 | Stops the whole script, including all IF blocks and threads.<br>停止整個腳本，包括所有 IF 區塊及線程。 |
 
-- **Parallel IF blocks** run alongside the main thread and keep watching their conditions.
-  **並行 IF 區塊**與主線程同時運行，持續監察條件。
+- **Threads**: click **+ New thread** below the main thread to add threads that run alongside it.
+  **線程**：於主線程下方按 **+ 新線程**，新增與主線程同時運行的線程。
+- **Record**: click **● Record** at the top of the editor, then play normally; keys, mouse buttons and wheel (not mouse movement) and the delays between them become steps. Press **F10** to stop.
+  **錄製**：於修改頁頂部按 **● 錄製**，然後正常操作；按鍵、滑鼠鍵、滾輪（不記錄滑鼠移動）及其間隔會變成步驟。按 **F10** 停止。
 - Run **once** or **continuously**, with a per-script **hotkey** to start and stop.
   可選擇**執行一次**或**持續執行**，每個腳本可設定獨立**快捷鍵**開始及停止。
 - **Target window**: pick the program window a script works in (in the script list, the preview page or the editor). Positions are **relative to that window and scale with its size**, so you can move or resize it. If the same program is open several times, each window can be picked separately (`#1`, `#2`…).
@@ -39,8 +42,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **管理員權限偵測**：如目標程式以系統管理員權限執行，MultiTool 會提示以系統管理員身分重新啟動（否則 Windows 會阻擋輸入）。
 - **Start several scripts together**: tick scripts in the list and click **Start selected**; **Stop all** stops every running script. One global hotkey does both: it starts the ticked scripts when nothing is running and stops all when something is.
   **多個腳本同時開始**：於列表勾選腳本後按**開始已選**；**全部停止**會停止所有運行中的腳本。同一個全域快捷鍵兼具兩者：沒有腳本運行時開始已選腳本，有腳本運行時全部停止。
-- **Editing**: right-click a step to copy / paste it (loops, IFs and branches are copied with everything inside) or insert a new step above / below.
-  **編輯**：右鍵步驟可複製／貼上（循環、IF 及支線會連同其內容一併複製），或在上方／下方插入新步驟。
+- **Editing**: right-click a step to copy / cut / paste it (loops, IFs and branches are copied with everything inside) or insert a new step above / below. **↶ Undo** at the bottom-right restores the last change. Loops and parallel steps can be collapsed, and the top bar stays visible while scrolling.
+  **編輯**：右鍵步驟可複製／剪下／貼上（循環、IF 及支線會連同其內容一併複製），或在上方／下方插入新步驟。右下角 **↶ 復原** 可還原上一次改動。循環及同時運行可摺疊，捲動時頂部列保持顯示。
 - **Run speed** (0.5x – 3.0x) on the preview page scales delays, hold times, check intervals and countdowns; it can be changed while the script is running.
   預覽頁的**運行速度**（0.5x – 3.0x）會按倍率調整延遲、按住時間、檢查間隔及倒數，運行中亦可即時更改。
 - Scripts are validated before running (missing images, unset keys, empty loops, etc.).
@@ -84,6 +87,24 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v1.5
+- **New: System step** — open an app, close a program, switch to a window, shut down the PC, or play a sound (once or repeating).
+  **新增：「系統」步驟**——打開應用程式、關閉程式、切換視窗、關閉電腦，或播放音效（播放一次或不斷重複）。
+- **New: Record script** — record keys, mouse buttons and wheel with their timing; press F10 to stop.
+  **新增：錄製腳本**——錄製按鍵、滑鼠鍵及滾輪連同時間間隔；按 F10 停止。
+- **New: Type text step** and **mouse wheel** (in the Mouse step's drop-down).
+  **新增：「輸入文字」步驟**及**滑鼠滾輪**（於「滑鼠」步驟的下拉式選單）。
+- **New: Random delay** — pause for a random time between two values.
+  **新增：隨機延遲**——於兩個時間之間隨機暫停。
+- **New: AND / OR** — an IF can have several conditions.
+  **新增：AND／OR**——IF 可加入多個條件。
+- **New: Threads below the main thread**, **Undo**, **Cut**, collapsible loops / parallel steps, and a fixed top bar in the editor.
+  **新增：主線程下方的線程**、**復原**、**剪下**、可摺疊的循環／同時運行，以及修改頁固定頂部列。
+- "Mouse click" is renamed "Mouse"; loop stop conditions are added with "+ Stop condition"; less common steps are under "+ More"; the editor's "Start" button is renamed "Test".
+  「滑鼠點擊」改名為「滑鼠」；循環停止條件改為以「+ 停止條件」加入；較少用的步驟移至「+ 更多」；修改頁的「開始」改名為「測試」。
+- Faster editing with many steps, smoother window resizing, and buttons no longer overlap on long rows.
+  步驟多時編輯更快、調整視窗大小更流暢，長行的按鈕不再重疊。
 
 ### v1.4
 - **New: Parallel step** — two or more branches run at the same time (add more with **+**); the next step runs after all finish.

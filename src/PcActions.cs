@@ -215,6 +215,15 @@ internal static class PcActions
     /// 開網址 / 程式。MultiTool 用「系統管理員」身分運行（玩遊戲成日要）嗰陣，直接開會變成用管理員身分開 Chrome，
     /// Chrome 會拒絕或者淨係開個新分頁；所以交俾 explorer.exe（普通權限）去開，同你自己雙擊一樣。
     /// </summary>
+    /// <summary>已安裝程式（名, 開啟用嘅路徑）：腳本「系統 → 打開應用程式」揀程式用。</summary>
+    public static List<(string Name, string Launch)> InstalledApps() =>
+        ScanApps().Select(a => (a.Name, a.AppsFolder && !File.Exists(a.Target) ? "shell:AppsFolder\\" + a.Target : a.Target))
+            .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>開一個程式 / 檔案 / 網址（管理員身分時經 explorer 開）。</summary>
+    public static void OpenPath(string target) => ShellOpen(target);
+
     private static void ShellOpen(string target)
     {
         bool admin = false;

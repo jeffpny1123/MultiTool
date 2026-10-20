@@ -237,6 +237,27 @@ namespace UI
     }
 
     /// <summary>一頁：由上至下排卡，可以捲動。</summary>
+    /// <summary>拖緊視窗邊改大細：期間唔重新排位（放手先排一次），費事拖嗰陣卡住。</summary>
+    public static class LiveResize
+    {
+        public static bool Active;
+
+        /// <summary>放手：成個視窗入面所有 CardStack 排一次。</summary>
+        public static void End(Control root)
+        {
+            Active = false;
+            void Walk(Control c)
+            {
+                foreach (Control ch in c.Controls)
+                {
+                    if (ch is CardStack cs && cs.Visible) { cs.PerformLayout(); cs.Invalidate(true); }
+                    Walk(ch);
+                }
+            }
+            Walk(root);
+        }
+    }
+
     public class CardStack : Panel
     {
         private readonly List<CardPanel[]> _rows = new();
@@ -276,7 +297,7 @@ namespace UI
 
         protected override void OnLayout(LayoutEventArgs e)
         {
-            if (_inLayout) { base.OnLayout(e); return; }
+            if (_inLayout || LiveResize.Active) { base.OnLayout(e); return; }
             _inLayout = true;
             bool changed = false;
             try
@@ -320,7 +341,7 @@ namespace UI
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
-            PerformLayout();
+            if (!LiveResize.Active) PerformLayout();
         }
     }
 

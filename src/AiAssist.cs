@@ -34,6 +34,9 @@ internal static class ScriptJson
         {
           "mode": "once" | "loop",            // once = 主線程行一次；loop = 一直重複
           "steps": [ 步驟... ],                // 主線程：由上至下逐步做
+          "threads": [                         // 新線程：同主線程同時行（腳本一直行就一直重複）
+            { "name": "新線程 1", "steps": [ 步驟... ] }
+          ],
           "ifs": [                             // IF 框：同主線程「同時」行，每 interval 秒檢查一次條件，成立就行入面啲步驟
             { "name": "IF 條件 1", "condition": 條件, "steps": [ 步驟... ] }
           ]
@@ -43,10 +46,13 @@ internal static class ScriptJson
               key 用 .NET Keys 名：A-Z、D0-D9（數字鍵）、F1-F12、Space、Enter、Escape、Tab、Back、Left、Up、Right、Down、
               ShiftKey、ControlKey、Menu(Alt)、NumPad0-9 等。action：hold = 撳住 hold 秒再放；down = 淨係按下；up = 淨係彈起
           {"type":"click","button":"left"|"right","x":100,"y":200,"action":"hold","hold":0.1}   // 螢幕座標滑鼠點擊
-          {"type":"wait","seconds":1}                                // 延遲（介面用 ms 顯示）
+          {"type":"wait","seconds":1,"random_max":0}                 // 延遲（介面用 ms 顯示）；random_max > seconds 就喺 seconds 至 random_max 之間隨機
+          {"type":"text","text":"你好"}                              // 輸入文字（中文都得）
+          {"type":"scroll","x":100,"y":200,"notches":-3}             // 滑鼠滾輪：喺 (x,y) 碌 notches 格；正數向上，負數向下
           {"type":"drag","button":"left","x":100,"y":200,"x2":300,"y2":200,"seconds":0.5}   // 由 (x,y) 撳住拖去 (x2,y2)，用時 seconds
           {"type":"image","images":["怪物.png"],"similarity":80}   // 喺畫面搵其中一張圖（最多 6 張），搵到就點擊佢，搵唔到就跳過繼續
           {"type":"loop","count":0,"limit_seconds":0,"until":"","steps":[...]}   // 重複 count 次；0 = 一直重複；limit_seconds = 行咗幾多秒就停（0 = 唔限）；until = 到呢個現實時間 "HH:mm" 就停（空 = 唔限）
+          {"type":"system","action":"open_app","target":"C:\\...\\app.exe","name":"App"}   // 系統：play_sound 播音效（target = wav/mp3 路徑，repeat = true 一直重複到腳本停）；open_app 開程式（target = 路徑）；close_app 閂程式（target = process 名，例如 notepad）；switch_window 切換視窗（target = process 名，name = 視窗標題，可空）；shutdown 關機（seconds = 幾多秒後）
           {"type":"stop"}                                          // 停止成個腳本（包括 IF 框）
           {"type":"parallel","branches":[[...],[...]]}             // 同時運行：幾條支線（最少 2 條）一齊行，全部行完先做下一步
           {"type":"thread","steps":[...]}                          // 新線程：開一條支線同時行入面啲步驟，主線程唔使等即刻做下一步
@@ -60,6 +66,8 @@ internal static class ScriptJson
           {"kind":"countdown","seconds":60}                                                          // 倒數完；只可以用喺頂層 ifs
           {"kind":"elapsed","seconds":1800}                                                          // 腳本運行咗 N 秒（時限）；頂層 ifs 觸發一次
           interval（每幾秒檢查一次）只對頂層 ifs 有用。
+        幾個條件：IF（ifs 或者 type=if）可以加 "more_conditions":[條件, ...] 同 "logic":"and"|"or"
+          and = 全部條件成立先做；or = 任何一個成立就做。
         """;
 
     // ---------------- 腳本 → JSON ----------------
@@ -70,9 +78,12 @@ internal static class ScriptJson
         {
             ["mode"] = sc.Loop ? "loop" : "once",
             ["steps"] = StepsArr(sc.Steps),
+            ["threads"] = new JsonArray(sc.Threads.Select(t => (JsonNode)new JsonObject { ["name"] = t.Name, ["steps"] = StepsArr(t.Steps) }).ToArray()),
             ["ifs"] = new JsonArray(sc.Ifs.Select(b =>
             {
-                var o = new JsonObject { ["name"] = b.Name, ["condition"] = Cond(b, true), ["steps"] = StepsArr(b.Steps) };
+                var o = new JsonObject { ["name"] = b.Name, ["condition"] = Cond(b, true) };
+                AddMore(o, b, true);
+                o["steps"] = StepsArr(b.Steps);
                 return (JsonNode)o;
             }).ToArray())
         };
@@ -105,7 +116,14 @@ internal static class ScriptJson
                 if (s.Mode == PressMode.Hold) o["hold"] = s.Hold;
                 return o;
             }
-            case StepKind.Wait: return new JsonObject { ["type"] = "wait", ["seconds"] = s.Seconds };
+            case StepKind.Wait:
+            {
+                var w = new JsonObject { ["type"] = "wait", ["seconds"] = s.Seconds };
+                if (s.Random) w["random_max"] = s.Seconds2;
+                return w;
+            }
+            case StepKind.Text: return new JsonObject { ["type"] = "text", ["text"] = s.Target };
+            case StepKind.Scroll: return new JsonObject { ["type"] = "scroll", ["x"] = s.X, ["y"] = s.Y, ["notches"] = s.Count };
             case StepKind.Drag:
                 return new JsonObject
                 {
@@ -114,6 +132,13 @@ internal static class ScriptJson
                 };
             case StepKind.Loop: return new JsonObject { ["type"] = "loop", ["count"] = s.Count, ["limit_seconds"] = s.LimitSec, ["until"] = s.Until, ["steps"] = StepsArr(s.Body) };
             case StepKind.StopScript: return new JsonObject { ["type"] = "stop" };
+            case StepKind.System:
+                return new JsonObject
+                {
+                    ["type"] = "system",
+                    ["action"] = s.Sys switch { SysAction.OpenApp => "open_app", SysAction.CloseApp => "close_app", SysAction.SwitchWindow => "switch_window", SysAction.PlaySound => "play_sound", _ => "shutdown" },
+                    ["target"] = s.Target, ["name"] = s.TargetName, ["seconds"] = s.Seconds, ["repeat"] = s.Repeat
+                };
             case StepKind.Thread: return new JsonObject { ["type"] = "thread", ["steps"] = StepsArr(s.Body) };
             case StepKind.Parallel:
             {
@@ -125,10 +150,28 @@ internal static class ScriptJson
             case StepKind.If:
             {
                 var b = s.Sub ?? new IfBlock();
-                return new JsonObject { ["type"] = "if", ["name"] = b.Name, ["condition"] = Cond(b, false), ["steps"] = StepsArr(b.Steps) };
+                var io = new JsonObject { ["type"] = "if", ["name"] = b.Name, ["condition"] = Cond(b, false) };
+                AddMore(io, b, false);
+                io["steps"] = StepsArr(b.Steps);
+                return io;
             }
             default: return new JsonObject { ["type"] = "image", ["images"] = Imgs(s.Image), ["similarity"] = s.Similarity };
         }
+    }
+
+    private static void AddMore(JsonObject o, IfBlock b, bool top)
+    {
+        if (b.More.Count == 0) return;
+        o["logic"] = b.Or ? "or" : "and";
+        o["more_conditions"] = new JsonArray(b.More.Select(m => (JsonNode)Cond(m, false)).ToArray());
+    }
+
+    private static void ParseMore(JsonObject o, IfBlock b, bool top, string where, HashSet<string> have, List<string> warn)
+    {
+        b.Or = Str(o, "logic") == "or";
+        if (o["more_conditions"] is not JsonArray more) return;
+        foreach (var n in more)
+            if (n is JsonObject mo) b.More.Add(ParseCond(mo, top, where, have, warn));
     }
 
     private static JsonObject Cond(IfBlock b, bool top)
@@ -148,7 +191,7 @@ internal static class ScriptJson
 
     // ---------------- JSON → 腳本 ----------------
 
-    public sealed record Parsed(bool Loop, List<Step> Steps, List<IfBlock> Ifs, List<string> Warnings);
+    public sealed record Parsed(bool Loop, List<Step> Steps, List<IfBlock> Ifs, List<string> Warnings, List<ThreadBlock>? Threads = null);
 
     /// <summary>讀 AI 俾嘅 JSON。images 只保留腳本資料夾入面真係有嘅檔。出錯會 throw。</summary>
     public static Parsed FromJson(string json, Script sc)
@@ -168,12 +211,26 @@ internal static class ScriptJson
                 n++;
                 if (node is not JsonObject o) continue;
                 var b = ParseCond(o["condition"] as JsonObject, true, Lang.F("IF 框 {0}", n), have, warn);
+                ParseMore(o, b, true, Lang.F("IF 框 {0}", n), have, warn);
                 b.Name = Str(o, "name") is { Length: > 0 } nm ? nm : Lang.F("IF 條件 {0}", n);
                 b.Steps = ParseSteps(o["steps"] as JsonArray, Lang.F("IF 框「{0}」", b.Name), false, true, have, warn);
                 ifs.Add(b);
             }
         }
-        return new Parsed(loop, steps, ifs, warn);
+        var threads = new List<ThreadBlock>();
+        if (root["threads"] is JsonArray tarr)
+        {
+            int n = 0;
+            foreach (var node in tarr)
+            {
+                n++;
+                if (node is not JsonObject o) continue;
+                var t = new ThreadBlock { Name = Str(o, "name") is { Length: > 0 } nm ? nm : Lang.T("新線程 ") + n };
+                t.Steps = ParseSteps(o["steps"] as JsonArray, t.Name, false, true, have, warn);
+                threads.Add(t);
+            }
+        }
+        return new Parsed(loop, steps, ifs, warn, threads);
     }
 
     public static List<string> ExistingImages(Script sc)
@@ -296,7 +353,18 @@ internal static class ScriptJson
                     });
                     break;
                 case "wait":
-                    list.Add(new Step { Kind = StepKind.Wait, Seconds = Math.Max(0, Dec(o, "seconds", 1m)) });
+                {
+                    var ws = new Step { Kind = StepKind.Wait, Seconds = Math.Max(0, Dec(o, "seconds", 1m)) };
+                    decimal mx = Dec(o, "random_max", 0m);
+                    if (mx > ws.Seconds) { ws.Random = true; ws.Seconds2 = mx; }
+                    list.Add(ws);
+                    break;
+                }
+                case "text":
+                    list.Add(new Step { Kind = StepKind.Text, Target = Str(o, "text") });
+                    break;
+                case "scroll":
+                    list.Add(new Step { Kind = StepKind.Scroll, X = Int(o, "x", 0), Y = Int(o, "y", 0), Count = Int(o, "notches", -3) is var nn && nn != 0 ? nn : -3 });
                     break;
                 case "image":
                     list.Add(new Step { Kind = StepKind.Image, Image = Images(o, where, have, warn), Similarity = Math.Clamp(Int(o, "similarity", 80), 1, 100) });
@@ -313,6 +381,16 @@ internal static class ScriptJson
                 case "stop":
                     list.Add(new Step { Kind = StepKind.StopScript });
                     break;
+                case "system":
+                {
+                    var sys = Str(o, "action") switch { "close_app" => SysAction.CloseApp, "switch_window" => SysAction.SwitchWindow, "shutdown" => SysAction.Shutdown, "play_sound" => SysAction.PlaySound, _ => SysAction.OpenApp };
+                    var ss = new Step { Kind = StepKind.System, Sys = sys, Target = Str(o, "target"), TargetName = Str(o, "name"), Seconds = Math.Max(0, Dec(o, "seconds", 60m)),
+                        Repeat = o["repeat"] is JsonValue rv && rv.TryGetValue<bool>(out var rb) && rb };
+                    if (sys == SysAction.PlaySound && ss.TargetName.Length == 0) ss.TargetName = Path.GetFileNameWithoutExtension(ss.Target);
+                    if (sys != SysAction.Shutdown && ss.Target.Length == 0) warn.Add(Lang.F("{0}：系統步驟未揀程式 / 視窗", where));
+                    list.Add(ss);
+                    break;
+                }
                 case "parallel":
                 {
                     var ps = new Step { Kind = StepKind.Parallel };
@@ -337,6 +415,7 @@ internal static class ScriptJson
                 case "if":
                 {
                     var b = ParseCond(o["condition"] as JsonObject, false, where, have, warn);
+                    ParseMore(o, b, false, where, have, warn);
                     b.Name = Str(o, "name");
                     b.Steps = ParseSteps(o["steps"] as JsonArray, where + " IF", inLoop, false, have, warn);
                     list.Add(new Step { Kind = StepKind.If, Sub = b });
@@ -404,6 +483,7 @@ internal sealed class AssistState
     public bool Open;
     public string? Pending;          // AI 最新建議、未套用嘅 JSON
     public (bool Loop, List<Step> Steps, List<IfBlock> Ifs)? Undo;
+    public List<ThreadBlock>? UndoThreads;
 
     private static readonly Dictionary<Script, AssistState> All = new();
     public static AssistState Of(Script sc) => All.TryGetValue(sc, out var s) ? s : All[sc] = new AssistState();
@@ -604,6 +684,9 @@ internal sealed class ScriptAssist
         }
         // 留底，可以復原
         _st.Undo = (_sc.Loop, _sc.Steps.Select(x => x.Clone()).ToList(), _sc.Ifs.Select(x => x.Clone()).ToList());
+        _st.UndoThreads = _sc.Threads.ToList();
+        _sc.Threads.Clear();
+        if (p.Threads != null) _sc.Threads.AddRange(p.Threads);
         _sc.Loop = p.Loop;
         _sc.Steps.Clear();
         _sc.Steps.AddRange(p.Steps);
@@ -627,8 +710,10 @@ internal sealed class ScriptAssist
         _sc.Steps.AddRange(u.Steps);
         _sc.Ifs.Clear();
         _sc.Ifs.AddRange(u.Ifs);
+        if (_st.UndoThreads != null) { _sc.Threads.Clear(); _sc.Threads.AddRange(_st.UndoThreads); }
         _sc.Save();
         _st.Undo = null;
+        _st.UndoThreads = null;
         _st.Msgs.Add(("system", Lang.T("已復原返套用之前嘅腳本。")));
         _reload();
     }

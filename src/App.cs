@@ -10,7 +10,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v1.4";
+    public const string Version = "v1.5";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -52,6 +52,14 @@ internal sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(Ui.S(1100), Ui.S(680));
         MinimumSize = new Size(Ui.S(900), Ui.S(500));
+        // 拖視窗邊改大細：放手先重新排位（步驟多時唔會拖到卡）
+        Size sizeAtBegin = Size.Empty;
+        ResizeBegin += (_, _) => { sizeAtBegin = Size; LiveResize.Active = true; };
+        ResizeEnd += (_, _) =>
+        {
+            if (Size == sizeAtBegin) LiveResize.Active = false; // 淨係搬視窗：唔使重新排
+            else LiveResize.End(this);
+        };
         try { Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath ?? "") ?? Icon; } catch { }
 
         _sidebar.Dock = DockStyle.Left;
