@@ -44,23 +44,47 @@ public static class KeyList
 /// <summary>真滑鼠操作（前景）。</summary>
 internal static class Mouse
 {
-    private const uint LeftDown = 0x0002, LeftUp = 0x0004, RightDown = 0x0008, RightUp = 0x0010;
+    // 用 SendInput 送「真」滑鼠事件（移動都會產生 raw input），遊戲會當係真滑鼠
+    private const uint INPUT_MOUSE = 0;
+    private const uint MOVE = 0x0001, LeftDown = 0x0002, LeftUp = 0x0004, RightDown = 0x0008, RightUp = 0x0010,
+        ABSOLUTE = 0x8000, VIRTUALDESK = 0x4000;
 
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
-    [DllImport("user32.dll")] private static extern void mouse_event(uint flags, int dx, int dy, uint data, nint extra);
+    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int i);
+    [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint n, INPUT[] inputs, int size);
 
     [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public nint dwExtraInfo; }
+    [StructLayout(LayoutKind.Sequential)] private struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public nint dwExtraInfo; }
+    [StructLayout(LayoutKind.Explicit)] private struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
+    [StructLayout(LayoutKind.Sequential)] private struct INPUT { public uint type; public InputUnion u; }
+
+    private static void Send(uint flags, int dx = 0, int dy = 0)
+    {
+        var inp = new INPUT[] { new() { type = INPUT_MOUSE, u = new InputUnion { mi = new MOUSEINPUT { dx = dx, dy = dy, dwFlags = flags } } } };
+        SendInput(1, inp, Marshal.SizeOf<INPUT>());
+    }
+
+    /// <summary>移去螢幕 (x, y)：SendInput 絕對移動（遊戲收到移動事件）+ SetCursorPos 確保準確。</summary>
+    public static void Move(int x, int y)
+    {
+        int vx = GetSystemMetrics(76), vy = GetSystemMetrics(77), vw = Math.Max(1, GetSystemMetrics(78)), vh = Math.Max(1, GetSystemMetrics(79));
+        int nx = (int)Math.Round((x - vx) * 65535.0 / Math.Max(1, vw - 1));
+        int ny = (int)Math.Round((y - vy) * 65535.0 / Math.Max(1, vh - 1));
+        Send(MOVE | ABSOLUTE | VIRTUALDESK, nx, ny);
+        SetCursorPos(x, y);
+    }
 
     /// <summary>移去 (x, y) 撳一下；restore = 撳完將滑鼠放返原位。</summary>
     public static void Click(int x, int y, bool right, bool restore)
     {
         GetCursorPos(out var old);
-        SetCursorPos(x, y);
-        Thread.Sleep(30);
-        mouse_event(right ? RightDown : LeftDown, 0, 0, 0, 0);
+        Move(x, y);
         Thread.Sleep(40);
-        mouse_event(right ? RightUp : LeftUp, 0, 0, 0, 0);
+        Send(right ? RightDown : LeftDown);
+        Thread.Sleep(60);
+        Send(right ? RightUp : LeftUp);
         if (restore)
         {
             Thread.Sleep(30);
@@ -68,36 +92,98 @@ internal static class Mouse
         }
     }
 
-    public static void Move(int x, int y) => SetCursorPos(x, y);
-
     public static void Down(int x, int y, bool right)
     {
-        SetCursorPos(x, y);
-        Thread.Sleep(20);
-        mouse_event(right ? RightDown : LeftDown, 0, 0, 0, 0);
+        Move(x, y);
+        Thread.Sleep(30);
+        Send(right ? RightDown : LeftDown);
     }
 
     public static void Up(int x, int y, bool right, bool move = true)
     {
         if (move)
         {
-            SetCursorPos(x, y);
-            Thread.Sleep(20);
+            Move(x, y);
+            Thread.Sleep(30);
         }
-        mouse_event(right ? RightUp : LeftUp, 0, 0, 0, 0);
+        Send(right ? RightUp : LeftUp);
     }
 
-    public static void LeftClick(int x, int y)
+    public static void LeftClick(int x, int y) => Click(x, y, false, restore: true);
+}
+
+/// <summary>管理員權限：Windows 唔准普通權限嘅程式控制用管理員權限開嘅程式（UIPI），點擊同按鍵會無聲無息被擋。</summary>
+internal static class Elevation
+{
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint h, out uint pid);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern nint OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll")] private static extern bool CloseHandle(nint h);
+    [DllImport("advapi32.dll", SetLastError = true)] private static extern bool OpenProcessToken(nint p, uint access, out nint token);
+    [DllImport("advapi32.dll", SetLastError = true)] private static extern bool GetTokenInformation(nint t, int cls, out int info, int len, out int ret);
+
+    public static readonly bool IsAdmin = CheckSelf();
+
+    private static bool CheckSelf()
     {
-        GetCursorPos(out var old);
-        SetCursorPos(x, y);
-        Thread.Sleep(30);
-        mouse_event(LeftDown, 0, 0, 0, 0);
-        Thread.Sleep(40);
-        mouse_event(LeftUp, 0, 0, 0, 0);
-        Thread.Sleep(30);
-        SetCursorPos(old.X, old.Y);
+        try
+        {
+            using var id = System.Security.Principal.WindowsIdentity.GetCurrent();
+            return new System.Security.Principal.WindowsPrincipal(id).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+        catch { return false; }
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> Cache = new();
+
+    /// <summary>個視窗嘅程式係咪用咗比我哋高嘅權限開（我哋已經係管理員就永遠 false）。</summary>
+    public static bool IsHigherThanUs(nint hwnd)
+    {
+        if (IsAdmin || hwnd == 0) return false;
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == 0 || pid == (uint)Environment.ProcessId) return false;
+        return Cache.GetOrAdd(pid, Check);
+    }
+
+    private static bool Check(uint pid)
+    {
+        var p = OpenProcess(0x1000 /*QUERY_LIMITED_INFORMATION*/, false, pid);
+        if (p == 0) return Marshal.GetLastWin32Error() == 5; // 連問都唔准：受保護 / 高權限
+        try
+        {
+            if (!OpenProcessToken(p, 0x0008 /*TOKEN_QUERY*/, out var tok)) return Marshal.GetLastWin32Error() == 5;
+            try { return GetTokenInformation(tok, 20 /*TokenElevation*/, out int elev, 4, out _) && elev != 0; }
+            finally { CloseHandle(tok); }
+        }
+        finally { CloseHandle(p); }
+    }
+
+    public static string ProcessName(nint hwnd)
+    {
+        try { GetWindowThreadProcessId(hwnd, out uint pid); return System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; }
+        catch { return "?"; }
+    }
+
+    /// <summary>用管理員身份重新開自己；用戶撳「否」就回傳 false。</summary>
+    public static bool RestartAsAdmin()
+    {
+        try
+        {
+            string exe = Environment.ProcessPath ?? Application.ExecutablePath;
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
+            {
+                UseShellExecute = true, Verb = "runas", WorkingDirectory = Path.GetDirectoryName(exe) ?? ""
+            });
+            return true;
+        }
+        catch { return false; }
+    }
+}
+
+/// <summary>要用管理員權限先控制到目標程式。</summary>
+internal sealed class NeedAdminException : Exception
+{
+    public readonly string Process;
+    public NeedAdminException(string process) : base(process) { Process = process; }
 }
 
 /// <summary>灰階影像（0–255 float）。</summary>
@@ -441,6 +527,7 @@ internal sealed class HotkeyBox : TextBox
     {
         _file = file;
         ReadOnly = true;
+        TabStop = false; // 切入視窗時唔好自動攞焦點
         ShortcutsEnabled = false;
         TextAlign = HorizontalAlignment.Center;
         Cursor = Cursors.Hand;
@@ -455,15 +542,21 @@ internal sealed class HotkeyBox : TextBox
         set { _hotkey = value; if (!Focused) Text = value.ToString(); }
     }
 
-    protected override void OnGotFocus(EventArgs e)
+    /// <summary>撳咗個格仔、等緊撳快捷鍵（淨係攞到焦點唔算，例如切返入嚟個視窗）。</summary>
+    public bool Capturing { get; private set; }
+
+    protected override void OnMouseDown(MouseEventArgs e)
     {
-        base.OnGotFocus(e);
+        base.OnMouseDown(e);
+        if (e.Button != MouseButtons.Left) return;
+        Capturing = true;
         Text = Lang.T("請撳快捷鍵…");
     }
 
     protected override void OnLostFocus(EventArgs e)
     {
         base.OnLostFocus(e);
+        Capturing = false;
         Text = _hotkey.ToString();
     }
 
@@ -471,6 +564,7 @@ internal sealed class HotkeyBox : TextBox
     {
         const int WM_KEYDOWN = 0x0100, WM_SYSKEYDOWN = 0x0104;
         if (msg.Msg != WM_KEYDOWN && msg.Msg != WM_SYSKEYDOWN) return base.ProcessCmdKey(ref msg, keyData);
+        if (!Capturing) return base.ProcessCmdKey(ref msg, keyData); // 未撳過個格仔：唔當設定
         var code = keyData & Keys.KeyCode;
         var mods = keyData & Keys.Modifiers;
         if (code == Keys.Tab && mods == Keys.None) return base.ProcessCmdKey(ref msg, keyData);
@@ -513,6 +607,7 @@ internal sealed class HotkeyBox : TextBox
             catch { }
         }
         Changed?.Invoke();
+        Capturing = false;
         // 設定完離開格仔，費事再撳就改咗
         var f = FindForm();
         if (f != null) f.ActiveControl = null;

@@ -610,7 +610,7 @@ namespace UI
             {
                 if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar) && !(e.KeyChar == '.' && _decimals > 0)) e.Handled = true;
             };
-            _text.MouseWheel += (_, e) => Step(e.Delta > 0 ? 1 : -1);
+            _text.MouseWheel += (_, e) => ForwardWheel(e); // 滾輪唔改數字，交返俾頁面捲動
             _text.MouseEnter += (_, _) => { _hover = true; Invalidate(); };
             _text.MouseLeave += (_, _) => { _hover = false; Invalidate(); };
             Controls.Add(_text);
@@ -713,10 +713,21 @@ namespace UI
             _repeat.Stop();
         }
 
-        protected override void OnMouseWheel(MouseEventArgs e)
+        protected override void OnMouseWheel(MouseEventArgs e) => ForwardWheel(e);
+
+        /// <summary>滾輪唔改數字：捲動外面嘅頁面（費事捲頁時誤改咗設定）。</summary>
+        private void ForwardWheel(MouseEventArgs e)
         {
-            base.OnMouseWheel(e);
-            Step(e.Delta > 0 ? 1 : -1);
+            if (e is HandledMouseEventArgs h) h.Handled = true;
+            for (Control? p = Parent; p != null; p = p.Parent)
+            {
+                if (p is ScrollableControl sc && sc.AutoScroll && sc.VerticalScroll.Visible)
+                {
+                    int y = -sc.AutoScrollPosition.Y - e.Delta;
+                    sc.AutoScrollPosition = new Point(-sc.AutoScrollPosition.X, Math.Max(0, y));
+                    return;
+                }
+            }
         }
 
         protected override void Dispose(bool disposing)
