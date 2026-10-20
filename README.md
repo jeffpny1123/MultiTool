@@ -15,8 +15,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 | Step 步驟 | Description 說明 |
 |---|---|
-| Key press 按鍵 | Any key or key combination (e.g. `Shift + Alt + T`); hold for N milliseconds, press down only, or release only.<br>任何按鍵或組合鍵（例如 `Shift + Alt + T`）；可設定按住 N 毫秒、僅按下或僅放開。 |
-| Mouse click 滑鼠點擊 | Left or right button at a screen position, with a 3-second position picker.<br>於指定螢幕座標按下左鍵或右鍵，並提供 3 秒倒數的座標拾取功能。 |
+| Key press 按鍵 | Any key or key combination (e.g. `Shift + Alt + T`); hold for N milliseconds, press down only, or release only.<br>任何按鍵或組合鍵（例如 `Shift + Alt + T`）；可設定按住 N 毫秒、僅按下或僅彈起。 |
+| Mouse click 滑鼠點擊 | Left or right button at a position, with a 3-second position picker; hold, press down only, or release only. **Drag**: "Down" at A → delay → "Up" at B.<br>於指定座標按下左鍵或右鍵，並提供 3 秒倒數的座標拾取功能；可按住、僅按下或僅彈起。**拖曳**：在 A 點「按下」→ 延遲 → 在 B 點「彈起」。 |
 | Delay 延遲 | Pause for N milliseconds.<br>暫停 N 毫秒（ms）。 |
 | Find image & click 搵圖點擊 | Snip screen regions (up to 6 images per step) and click the best match above the similarity threshold.<br>擷取螢幕區域作為目標圖片（每個步驟最多 6 張），並點擊相似度最高且達到門檻的位置。 |
 | Loop / Break 循環／中斷循環 | Repeat steps N times (0 = forever) and break out early when needed.<br>重複執行步驟 N 次（0 代表無限次），並可提前跳出循環。 |
@@ -26,8 +26,10 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **並行 IF 區塊**與主線程同時運行，持續監察條件。
 - Run **once** or **continuously**, with a per-script **hotkey** to start and stop.
   可選擇**執行一次**或**持續執行**，每個腳本可設定獨立**快捷鍵**開始及停止。
-- **Background mode** captures, clicks and types only inside a selected program window, so you can switch to other windows while the script runs. Some games do not accept background input.
-  **背景執行模式**只於指定程式視窗內擷取畫面、點擊及輸入按鍵，運行期間可切換至其他視窗。部分遊戲不接受背景輸入。
+- **Background mode** captures, clicks, drags and types only inside a selected program window, even when it is covered by other windows. Positions are **relative to that window**, so you can move it. If the same program is open several times, each window can be picked separately (`#1`, `#2`…). Set it in the script list, the preview page or the editor. Some games do not accept background input; the window must not be minimized.
+  **背景執行模式**只於指定程式視窗內擷取畫面、點擊、拖曳及輸入按鍵，即使被其他視窗遮擋亦可運行。座標**相對於該視窗**，可隨意移動視窗位置。同一程式開啟多個時可分別選擇（`#1`、`#2`…）。可於腳本列表、預覽頁或修改頁設定。部分遊戲不接受背景輸入；程式視窗不可最小化。
+- **Start several scripts together**: tick scripts in the list and click **Start selected**; **Stop all** (with its own global hotkey) stops every running script.
+  **多個腳本同時開始**：於列表勾選腳本後按**開始已選**；**全部停止**（可設定全域快捷鍵）會停止所有運行中的腳本。
 - **Run speed** (0.5x – 3.0x) on the preview page scales delays, hold times, check intervals and countdowns; it can be changed while the script is running.
   預覽頁的**運行速度**（0.5x – 3.0x）會按倍率調整延遲、按住時間、檢查間隔及倒數，運行中亦可即時更改。
 - Scripts are validated before running (missing images, unset keys, empty loops, etc.).
@@ -71,6 +73,22 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v1.3
+- **New: Start several scripts together** — the script list is now one script per row with a tick box; tick scripts and click **Start selected** (each follows its own run-once / repeat setting).
+  **新增：多個腳本同時開始**——腳本列表改為每行一個腳本並附勾選格；勾選後按**開始已選**即可一同開始（各自按「執行一次／持續執行」設定運行）。
+- **New: Stop all** button and global hotkey; the button is greyed out when nothing is running.
+  **新增：全部停止**按鈕及全域快捷鍵；沒有腳本運行時按鈕會變灰。
+- **New: Choose the background program from the script list**, preview page or editor (no need to open the editor).
+  **新增：可於腳本列表、預覽頁或修改頁選擇背景執行的程式**（無須進入修改頁）。
+- **New: Positions relative to the program window** in background mode — move the window freely; existing scripts are converted automatically.
+  **新增：背景執行時座標相對程式視窗**——可隨意移動視窗位置；舊腳本會自動轉換。
+- **New: Drag** — "Down" at A, a delay, then "Up" at B drags from A to B (also works in background mode).
+  **新增：拖曳**——在 A 點「按下」、延遲、再在 B 點「彈起」即可由 A 拖曳至 B（背景執行亦適用）。
+- Hold / Down / Up is now a drop-down menu; choosing "Up" without an earlier "Down" shows a reminder. "Release" is renamed **Up**.
+  按住／按下／彈起改為下拉式選單；如前面沒有「按下」而選擇「彈起」會顯示提醒。「放開」改名為**彈起**。
+- Fixed: with several windows of the same program open, picking one no longer selects all of them.
+  修正：同一程式開啟多個視窗時，選擇其中一個不會再全部被選取。
 
 ### v1.2
 - **New: Voice chat** — press a hotkey and talk to the AI; offline speech recognition (Whisper), automatic end-of-speech detection, replies read aloud, Cantonese supported.

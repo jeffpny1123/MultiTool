@@ -43,7 +43,8 @@ internal static class ScriptJson
               key 用 .NET Keys 名：A-Z、D0-D9（數字鍵）、F1-F12、Space、Enter、Escape、Tab、Back、Left、Up、Right、Down、
               ShiftKey、ControlKey、Menu(Alt)、NumPad0-9 等。action：hold = 撳住 hold 秒再放；down = 淨係按下；up = 淨係彈起
           {"type":"click","button":"left"|"right","x":100,"y":200,"action":"hold","hold":0.1}   // 螢幕座標滑鼠點擊
-          {"type":"wait","seconds":1}
+          {"type":"wait","seconds":1}                                // 延遲（介面用 ms 顯示）
+          {"type":"drag","button":"left","x":100,"y":200,"x2":300,"y2":200,"seconds":0.5}   // 由 (x,y) 撳住拖去 (x2,y2)，用時 seconds
           {"type":"image","images":["怪物.png"],"similarity":80}   // 喺畫面搵其中一張圖（最多 6 張），搵到就點擊佢，搵唔到就跳過繼續
           {"type":"loop","count":0,"steps":[...]}                  // 重複 count 次；0 = 一直重複
           {"type":"break"}                                         // 中斷最近一層循環；只可以放喺 loop 入面（包括 loop 入面嘅 if）
@@ -101,6 +102,12 @@ internal static class ScriptJson
                 return o;
             }
             case StepKind.Wait: return new JsonObject { ["type"] = "wait", ["seconds"] = s.Seconds };
+            case StepKind.Drag:
+                return new JsonObject
+                {
+                    ["type"] = "drag", ["button"] = s.Right ? "right" : "left", ["x"] = s.X, ["y"] = s.Y,
+                    ["x2"] = s.X2, ["y2"] = s.Y2, ["seconds"] = s.Hold
+                };
             case StepKind.Loop: return new JsonObject { ["type"] = "loop", ["count"] = s.Count, ["steps"] = StepsArr(s.Body) };
             case StepKind.Break: return new JsonObject { ["type"] = "break" };
             case StepKind.If:
@@ -267,6 +274,14 @@ internal static class ScriptJson
                     list.Add(st);
                     break;
                 }
+                case "drag":
+                    list.Add(new Step
+                    {
+                        Kind = StepKind.Drag, Right = Str(o, "button").ToLowerInvariant() == "right",
+                        X = Int(o, "x", 0), Y = Int(o, "y", 0), X2 = Int(o, "x2", 0), Y2 = Int(o, "y2", 0),
+                        Hold = Math.Max(0.01m, Dec(o, "seconds", 0.5m))
+                    });
+                    break;
                 case "wait":
                     list.Add(new Step { Kind = StepKind.Wait, Seconds = Math.Max(0, Dec(o, "seconds", 1m)) });
                     break;
@@ -459,6 +474,7 @@ internal sealed class ScriptAssist
             sb.AppendLine();
         }
         sb.AppendLine("腳本資料夾而家有嘅圖片：" + (imgs.Count > 0 ? string.Join("、", imgs) : "（冇）"));
+        if (_sc.Background && _sc.Relative) sb.AppendLine("注意：呢個腳本係背景執行，所有 x / y 座標都係相對程式視窗內容區左上角，唔係螢幕座標。");
         sb.AppendLine("而家嘅腳本（用戶可能自己改過，以呢個為準）：");
         sb.AppendLine("```json");
         sb.AppendLine(ScriptJson.ToJson(_sc));

@@ -19,7 +19,7 @@ namespace MultiTool.Scripts;
 //  資料
 // =====================================================================
 
-public enum StepKind { Key, Click, Wait, Image, If, Loop, Break }
+public enum StepKind { Key, Click, Wait, Image, If, Loop, Break, Drag }
 
 /// <summary>按鍵 / 滑鼠嘅動作：撳住（按下 → 等 → 彈起）、淨係按下、淨係彈起。</summary>
 public enum PressMode { Hold, Down, Up }
@@ -33,7 +33,8 @@ public sealed class Step
     public PressMode Mode = PressMode.Hold; // 按鍵 / 點擊
     public decimal Hold = 0.1m;    // 按鍵 / 點擊：撳住幾多秒
     public bool Right;             // 點擊：右鍵
-    public int X, Y;               // 點擊：座標
+    public int X, Y;               // 點擊：座標；拖拉：起點
+    public int X2, Y2;             // 拖拉：終點（拖拉用 Hold 做用時）
     public decimal Seconds = 1m;   // 等待
     public string Image = "";      // 搵圖：腳本資料夾入面嘅檔名
     public int Similarity = 80;    // 搵圖：相似度 %
@@ -57,6 +58,7 @@ public sealed class Step
         StepKind.If => Lang.T("IF 條件"),
         StepKind.Loop => Lang.T("循環"),
         StepKind.Break => Lang.T("中斷循環"),
+        StepKind.Drag => Lang.T("拖拉"),
         _ => Lang.T("搵圖點擊")
     };
 
@@ -71,6 +73,7 @@ public sealed class Step
         StepKind.Wait => $"wait|{D(Seconds)}",
         StepKind.If => "if|" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes((Sub ?? new IfBlock()).SerializeFull())),
         StepKind.Break => "break",
+        StepKind.Drag => $"drag|{(Right ? "R" : "L")}|{X}|{Y}|{X2}|{Y2}|{D(Hold)}",
         StepKind.Loop => $"loop|{Count}|" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
             string.Join("\n", Body.Select(b => b.Serialize())))),
         _ => $"image|{Image}|{Similarity}"
@@ -101,6 +104,11 @@ public sealed class Step
                 "wait" => new Step { Kind = StepKind.Wait, Seconds = Dec(p[1], 1m) },
                 "image" => new Step { Kind = StepKind.Image, Image = p[1], Similarity = Int(p[2], 80) },
                 "break" => new Step { Kind = StepKind.Break },
+                "drag" => new Step
+                {
+                    Kind = StepKind.Drag, Right = p[1] == "R", X = Int(At(2), 0), Y = Int(At(3), 0),
+                    X2 = Int(At(4), 0), Y2 = Int(At(5), 0), Hold = Dec(At(6), 0.5m)
+                },
                 "loop" => new Step
                 {
                     Kind = StepKind.Loop, Count = Math.Max(0, Int(p[1], 2)),
@@ -251,6 +259,9 @@ public sealed class Script
     public string TargetProcess = "";  // 背景程式（process 名）
     public string TargetTitle = "";    // 背景程式視窗標題
     public double Speed = 1.0;         // 運行速度倍率（0.5x – 3.0x）：等待 / 撳住 / 檢查間隔都除以佢
+    public bool Relative;              // 座標係「相對程式視窗」（背景執行時用），唔係成個螢幕
+    public long TargetHwnd;            // 揀咗嘅視窗（同一個程式開幾個時分得清；重開程式會變，變咗就用 TargetIndex）
+    public int TargetIndex;            // 同名視窗入面第幾個
 
     public string Dir
     {
@@ -319,7 +330,10 @@ public sealed class Script
                 "bg=" + (Background ? "1" : "0"),
                 "bgproc=" + TargetProcess,
                 "bgtitle=" + TargetTitle.Replace('\n', ' ').Replace('\r', ' '),
-                "speed=" + Speed.ToString("0.0", CultureInfo.InvariantCulture)
+                "speed=" + Speed.ToString("0.0#", CultureInfo.InvariantCulture),
+                "rel=" + (Relative ? "1" : "0"),
+                "bghwnd=" + TargetHwnd,
+                "bgidx=" + TargetIndex
             };
             lines.AddRange(Steps.Select(s => "step=" + s.Serialize()));
             foreach (var b in Ifs)
@@ -352,6 +366,9 @@ public sealed class Script
                     case "bg": sc.Background = v == "1"; break;
                     case "bgproc": sc.TargetProcess = v; break;
                     case "bgtitle": sc.TargetTitle = v; break;
+                    case "rel": sc.Relative = v == "1"; break;
+                    case "bghwnd": long.TryParse(v, out sc.TargetHwnd); break;
+                    case "bgidx": int.TryParse(v, out sc.TargetIndex); break;
                     case "speed":
                         if (double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var sp)) sc.Speed = Math.Clamp(sp, 0.5, 3.0);
                         break;
@@ -471,7 +488,7 @@ public static class ScriptRunner
         if (s.Background)
         {
             if (s.TargetProcess.Length == 0) errs.Add(Lang.T("背景執行：未揀程式"));
-            else if (Win.Find(s.TargetProcess, s.TargetTitle) == 0) errs.Add(Lang.F("背景執行：搵唔到「{0} - {1}」，請先開咗個程式或者重新揀", s.TargetProcess, s.TargetTitle));
+            else if (Win.Find(s) == 0) errs.Add(Lang.F("背景執行：搵唔到「{0} - {1}」，請先開咗個程式或者重新揀", s.TargetProcess, s.TargetTitle));
         }
         CheckSteps(s, s.Steps, Lang.T("主線程"), errs);
         foreach (var b in s.Ifs)
@@ -579,11 +596,11 @@ public static class ScriptRunner
     /// <summary>每輪 / 每次檢查前整一個運行環境：前景（成個螢幕 + 真滑鼠鍵盤）或者背景（指定視窗）。</summary>
     private static RunCtx MakeCtx(Script s)
     {
-        var (bg, proc, title) = OnUi(() => (s.Background, s.TargetProcess, s.TargetTitle));
-        if (!bg) return new RunCtx(OwnWindow(), 0);
-        var h = Win.Find(proc, title);
+        var (bg, proc, title, rel) = OnUi(() => (s.Background, s.TargetProcess, s.TargetTitle, s.Relative));
+        if (!bg) return new RunCtx(OwnWindow(), 0, false);
+        var h = OnUi(() => Win.Find(s));
         if (h == 0) throw new InvalidOperationException(Lang.F("搵唔到背景程式視窗（{0} - {1}），佢係咪閂咗？", proc, title));
-        return new RunCtx(null, h);
+        return new RunCtx(null, h, rel);
     }
 
     private static Rectangle? OwnWindow() => OnUi(() =>
@@ -787,12 +804,15 @@ public static class ScriptRunner
             }
             case StepKind.Click:
             {
-                var pt = exclude.FromScreen(st.X, st.Y);
+                var pt = exclude.Pt(st.X, st.Y);
                 await Press(exclude, pt.X, pt.Y, st.Right, st.Mode, st.Hold, held, ct);
             }
                 break;
             case StepKind.Wait:
                 await Task.Delay(Scaled((double)st.Seconds), ct);
+                break;
+            case StepKind.Drag:
+                await exclude.DragAsync(exclude.Pt(st.X, st.Y), exclude.Pt(st.X2, st.Y2), st.Right, Scaled((double)st.Hold), ct);
                 break;
             case StepKind.If:
                 // IF 入面嘅 IF：行到呢步就檢查一次，成立先行入面嘅步驟
@@ -832,7 +852,16 @@ public static class ScriptRunner
 
     private static async Task Press(RunCtx ctx, int x, int y, bool right, PressMode mode, decimal hold, Held held, CancellationToken ct)
     {
+        var from = held.LastMouse;
+        bool holding = right ? held.Right : held.Left;
         held.LastMouse = new Point(x, y);
+        // 拖拉：之前喺 A「按下」咗，而家喺 B「彈起」→ 撳住慢慢移去 B 先放（背景都得）
+        if (mode == PressMode.Up && holding && from != new Point(x, y))
+        {
+            await ctx.DragAsync(from, new Point(x, y), right, Scaled(0.15), ct, pressAtStart: false);
+            if (right) held.Right = false; else held.Left = false;
+            return;
+        }
         if (mode != PressMode.Up)
         {
             ctx.MouseDown(x, y, right);
@@ -960,6 +989,8 @@ public sealed class ScriptsPage : Panel
             ScriptRunner.Stop(sc);
             try { Directory.Delete(sc.Dir, true); } catch (Exception ex) { AppPaths.LogError("刪除腳本", ex); }
             _scripts.Remove(sc);
+            _grid.Selected.Remove(sc);
+            UpdateSelButton();
             _grid.Refresh2();
         };
         _grid.CopyRequested += sc =>
@@ -968,6 +999,7 @@ public sealed class ScriptsPage : Panel
             {
                 Name = sc.Name + Lang.T(" (副本)"), Loop = sc.Loop, Steps = sc.Steps.Select(x => x.Clone()).ToList(),
                 Background = sc.Background, TargetProcess = sc.TargetProcess, TargetTitle = sc.TargetTitle, Speed = sc.Speed,
+                Relative = sc.Relative, TargetHwnd = sc.TargetHwnd, TargetIndex = sc.TargetIndex,
                 Ifs = sc.Ifs.Select(x => x.Clone()).ToList()
             };
             try
@@ -982,13 +1014,30 @@ public sealed class ScriptsPage : Panel
             _grid.Refresh2();
         };
 
-        var card = new CardPanel { Title = Lang.T("我的腳本"), Hint = Lang.T("撳「+」新增腳本；撳腳本睇預覽，再撳「修改」入去改；右鍵可以複製 / 刪除。入咗預覽頁先可以用快捷鍵開始 / 停止。") };
+        // ---- 上面一行：開始剔咗嘅腳本 / 全部停止（+ 快捷鍵）----
+        _startSel = new FancyButton { Kind = BtnKind.Success, Font = Ui.F(9.75f) };
+        _startSel.Click += (_, _) => StartSelected();
+        var stopAll = new FancyButton { Text = Lang.T("⏹ 全部停止"), Kind = BtnKind.Danger, Font = Ui.F(9.75f) };
+        _stopAll = stopAll;
+        stopAll.Size = new Size(Math.Max(Ui.S(110), stopAll.GetPreferredSize(Size.Empty).Width), Ui.S(34));
+        stopAll.Click += (_, _) => StopAllScripts();
+        _stopAllKey = new HotkeyBox(Path.Combine(AppPaths.Data, "stopall_hotkey.txt"));
+        var stopKeyHost = new InputHost(_stopAllKey, Ui.S(130));
+        var stopKeyLabel = Ui.Text_(Lang.T("全部停止快捷鍵"), Ui.TextDim, Ui.F(9.5f), new Padding(0));
+        _grid.SelectionChanged += UpdateSelButton;
+        UpdateSelButton();
+        var bar = new BareRow { Padding = new Padding(0) };
+        bar.SetContent(new FlowRow(new Control[] { _startSel, stopAll }, new Control[] { stopKeyHost, stopKeyLabel }));
+        _listView.AddRow(bar);
+
+        var card = new CardPanel { Title = Lang.T("我的腳本"), Hint = Lang.T("撳「+」新增腳本；撳腳本睇預覽，再撳「修改」入去改；右鍵可以複製 / 刪除。入咗預覽頁先可以用快捷鍵開始 / 停止。") + Lang.T("剔右上角個格可以揀幾個腳本一齊開始。") };
         card.SetContent(_grid);
         _listView.AddRow(card);
         _listView.Dock = DockStyle.Fill;
         Controls.Add(_listView);
 
-        ScriptRunner.Changed += () => _grid.Invalidate();
+        ScriptRunner.Changed += () => { _grid.Invalidate(); UpdateStopAll(); };
+        UpdateStopAll();
 
         // 全部腳本嘅快捷鍵（頁未打開都有效）
         _poll.Tick += (_, _) =>
@@ -996,6 +1045,10 @@ public sealed class ScriptsPage : Panel
             var form = FindForm();
             bool typing = form != null && Form.ActiveForm == form && form.ActiveControl is HotkeyBox;
             if (_handling) return; // 彈緊提示視窗（modal 期間 timer 照跳）：唔好再觸發
+            // 全部停止快捷鍵：喺邊度都用得
+            bool stopDown = !typing && !_stopAllKey.Hotkey.IsEmpty && _stopAllKey.Hotkey.IsDown();
+            if (stopDown && !_stopWasDown && !Keyboard.RecentlyInjected) StopAllScripts();
+            _stopWasDown = stopDown;
             foreach (var sc in _scripts.ToList())
             {
                 // 快捷鍵只喺「入咗呢個腳本嘅預覽頁」先可以開始；行緊嘅腳本喺邊度都可以用快捷鍵停
@@ -1016,6 +1069,43 @@ public sealed class ScriptsPage : Panel
         };
         _poll.Start();
         HandleDestroyed += (_, _) => { _poll.Stop(); ScriptRunner.StopAll(); };
+    }
+
+    private FancyButton _startSel = null!;
+    private FancyButton _stopAll = null!;
+
+    /// <summary>冇腳本行緊就灰咗「全部停止」。</summary>
+    private void UpdateStopAll()
+    {
+        _stopAll.Enabled = _scripts.Any(ScriptRunner.IsRunning);
+        _stopAll.Invalidate();
+    }
+    private HotkeyBox _stopAllKey = null!;
+    private bool _stopWasDown;
+
+    private void UpdateSelButton()
+    {
+        _grid.Selected.RemoveWhere(sc => !_scripts.Contains(sc));
+        int n = _grid.Selected.Count;
+        _startSel.Text = Lang.F("▶ 開始已選（{0}）", n);
+        _startSel.Enabled = n > 0;
+        _startSel.Size = new Size(Math.Max(Ui.S(130), _startSel.GetPreferredSize(Size.Empty).Width), Ui.S(34));
+        _startSel.Invalidate();
+        _startSel.Parent?.PerformLayout();
+    }
+
+    /// <summary>一次過開始剔咗嘅腳本（各自跟自己「行一次 / 一直行」設定）。</summary>
+    private void StartSelected()
+    {
+        foreach (var sc in _scripts.Where(_grid.Selected.Contains).ToList())
+            if (!ScriptRunner.IsRunning(sc)) ScriptRunner.Start(sc);
+        _grid.Invalidate();
+    }
+
+    private void StopAllScripts()
+    {
+        foreach (var sc in _scripts.Where(ScriptRunner.IsRunning).ToList()) ScriptRunner.Stop(sc);
+        _grid.Invalidate();
     }
 
     private string NextName()
@@ -1056,6 +1146,7 @@ public sealed class ScriptsPage : Panel
         var v = new ScriptViewer(sc);
         v.Back += () => ShowView(null);
         v.Edit += () => OpenEditor(sc);
+        v.Reload += () => Open(sc);
         ShowView(v);
     }
 
@@ -1076,7 +1167,10 @@ internal sealed class ScriptGrid : Control
     private int _hover = -1, _menuIndex = -1;
 
     public event Action<Script>? OpenRequested, DeleteRequested, CopyRequested, PreviewRequested, EditRequested;
-    public event Action? NewRequested;
+    public event Action? NewRequested, SelectionChanged;
+    public event Action<Script>? BgChanged;
+    /// <summary>剔咗嘅腳本（可以一次過開始）。</summary>
+    public readonly HashSet<Script> Selected = new();
 
     public ScriptGrid(List<Script> scripts)
     {
@@ -1096,24 +1190,41 @@ internal sealed class ScriptGrid : Control
 
     private bool Valid(int i) => i >= 0 && i < _scripts.Count;
 
-    private int TileW => Ui.S(168);
-    private int TileH => Ui.S(84);
-    private int Gap => Ui.S(12);
+    // 一行一個腳本，向下排
+    private int TileH => Ui.S(64);
+    private int AddH => Ui.S(48);
+    private int Gap => Ui.S(8);
     private int Tiles => _scripts.Count + 1;
-    private int Cols(int w) => Math.Max(1, (w + Gap) / (TileW + Gap));
-    private int Rows(int w) => (Tiles + Cols(w) - 1) / Cols(w);
 
     public override Size GetPreferredSize(Size proposed)
     {
         int w = proposed.Width > 0 ? proposed.Width : Math.Max(Width, Ui.S(360));
-        return new Size(w, Rows(w) * TileH + (Rows(w) - 1) * Gap);
+        return new Size(w, _scripts.Count * (TileH + Gap) + AddH);
     }
 
     private Rectangle TileRect(int i)
     {
-        int c = Cols(Width);
-        return new Rectangle(i % c * (TileW + Gap), i / c * (TileH + Gap), TileW - 1, TileH - 1);
+        int h = i == _scripts.Count ? AddH : TileH;
+        return new Rectangle(0, i * (TileH + Gap), Math.Max(Ui.S(300), Width) - 1, h - 1);
     }
+
+    private int _hoverBg = -1;
+
+    /// <summary>格仔中間「背景執行：揀程式」嗰粒。</summary>
+    private Rectangle BgRect(Rectangle tile)
+    {
+        int w = Math.Clamp(tile.Width * 38 / 100, Ui.S(180), Ui.S(380));
+        int h = Ui.S(30);
+        return new Rectangle(tile.Right - Ui.S(150) - w, tile.Y + (tile.Height - h) / 2, w, h);
+    }
+
+    /// <summary>格仔右上角個剔格。</summary>
+    private Rectangle CheckRect(Rectangle tile)
+    {
+        int sz = Ui.S(20);
+        return new Rectangle(tile.X + Ui.S(14), tile.Y + (tile.Height - sz) / 2, sz, sz);
+    }
+
 
     private int HitTest(Point p)
     {
@@ -1143,27 +1254,54 @@ internal sealed class ScriptGrid : Control
             {
                 using var pen = new Pen(hover ? Ui.Accent : Ui.BorderHi, Ui.S(1.2f)) { DashStyle = DashStyle.Dash };
                 g.DrawPath(pen, path);
-                var pf = Ui.F(18f);
-                var lf = Ui.F(9f);
-                int ph = TextRenderer.MeasureText("+", pf).Height, lh = lf.Height;
-                int top = r.Y + (r.Height - ph - lh - Ui.S(2)) / 2;
-                TextRenderer.DrawText(g, "+", pf, new Rectangle(r.X, top, r.Width, ph),
-                    hover ? Ui.Accent : Ui.TextFaint, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
-                TextRenderer.DrawText(g, Lang.T("新增腳本"), lf, new Rectangle(r.X, top + ph + Ui.S(2), r.Width, lh),
-                    hover ? Ui.Accent : Ui.TextFaint, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
+                TextRenderer.DrawText(g, "+  " + Lang.T("新增腳本"), Ui.F(10f), r,
+                    hover ? Ui.Accent : Ui.TextFaint, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 continue;
             }
             var sc = _scripts[i];
             bool run = ScriptRunner.IsRunning(sc);
             using (var pen = new Pen(run ? Ui.Success : hover ? Ui.Accent : Ui.Border, run ? Ui.S(1.5f) : 1f)) g.DrawPath(pen, path);
             int pad = Ui.S(12);
-            TextRenderer.DrawText(g, sc.Name, Ui.F(10.5f, FontStyle.Bold), new Rectangle(r.X + pad, r.Y + pad, r.Width - pad * 2 - Ui.S(14), Ui.S(22)),
+            int tx = r.X + Ui.S(48);                         // 剔格右邊
+            int textW = BgRect(r).X - tx - Ui.S(12);
+            TextRenderer.DrawText(g, sc.Name, Ui.F(10.5f, FontStyle.Bold), new Rectangle(tx, r.Y + Ui.S(11), textW, Ui.S(22)),
                 Ui.Text, TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
             string info = Lang.F("{0} 個步驟", sc.Steps.Count) + (sc.Ifs.Count > 0 ? Lang.F(" · {0} 個 IF", sc.Ifs.Count) : "") + " · " + (sc.Loop ? Lang.T("一直行") : Lang.T("行一次"));
-            TextRenderer.DrawText(g, info, Ui.F(8.75f), new Point(r.X + pad, r.Y + pad + Ui.S(26)), Ui.TextDim, TextFormatFlags.NoPadding);
+            TextRenderer.DrawText(g, info, Ui.F(8.75f), new Rectangle(tx, r.Y + Ui.S(36), textW, Ui.S(18)), Ui.TextDim,
+                TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+            // 右上角剔格（多選）
+            var cb = CheckRect(r);
+            bool sel = Selected.Contains(sc);
+            using (var cp = Ui.Round(new RectangleF(cb.X, cb.Y, cb.Width, cb.Height), Ui.S(4f)))
+            {
+                using (var fb = new SolidBrush(sel ? Ui.Accent : Ui.Card)) g.FillPath(fb, cp);
+                using var pen2 = new Pen(sel ? Ui.Accent : Ui.BorderHi, Ui.S(1.2f));
+                g.DrawPath(pen2, cp);
+            }
+            if (sel)
+            {
+                using var tick = new Pen(Color.White, Ui.S(2f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                g.DrawLines(tick, new[]
+                {
+                    new PointF(cb.X + cb.Width * 0.22f, cb.Y + cb.Height * 0.52f),
+                    new PointF(cb.X + cb.Width * 0.42f, cb.Y + cb.Height * 0.72f),
+                    new PointF(cb.X + cb.Width * 0.78f, cb.Y + cb.Height * 0.30f)
+                });
+            }
+            // 背景執行：撳呢粒直接揀程式（唔使入修改）
+            var bp = BgRect(r);
+            bool bgHover = _hoverBg == i;
+            using (var bpath = Ui.Round(new RectangleF(bp.X, bp.Y, bp.Width, bp.Height), Ui.S(6f)))
+            {
+                using (var bb = new SolidBrush(bgHover ? Ui.CardHi : Ui.Card)) g.FillPath(bb, bpath);
+                using var bpen = new Pen(bgHover ? Ui.Accent : sc.Background ? Ui.Accent2 : Ui.Border, 1f);
+                g.DrawPath(bpen, bpath);
+            }
+            TextRenderer.DrawText(g, BgControls.ShortTarget(sc) + "  ▾", Ui.F(8.75f), new Rectangle(bp.X + Ui.S(8), bp.Y, bp.Width - Ui.S(12), bp.Height),
+                sc.Background ? Ui.Text : Ui.TextDim, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
             string hk = sc.Hotkey.IsEmpty ? Lang.T("冇快捷鍵") : Lang.T("快捷鍵 ") + sc.Hotkey;
-            TextRenderer.DrawText(g, run ? Lang.T("● 運行中") : hk, Ui.F(8.75f), new Point(r.X + pad, r.Bottom - pad - Ui.S(16)),
-                run ? Ui.Success : Ui.TextFaint, TextFormatFlags.NoPadding);
+            TextRenderer.DrawText(g, run ? Lang.T("● 運行中") : hk, Ui.F(8.75f), new Rectangle(r.Right - Ui.S(140), r.Y, Ui.S(128), r.Height),
+                run ? Ui.Success : Ui.TextFaint, TextFormatFlags.NoPadding | TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
         }
     }
 
@@ -1171,13 +1309,15 @@ internal sealed class ScriptGrid : Control
     {
         base.OnMouseMove(e);
         int h = HitTest(e.Location);
-        if (h != _hover) { _hover = h; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); }
+        int hb = h >= 0 && h < _scripts.Count && BgRect(TileRect(h)).Contains(e.Location) ? h : -1;
+        if (h != _hover || hb != _hoverBg) { _hover = h; _hoverBg = hb; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); }
     }
 
     protected override void OnMouseLeave(EventArgs e)
     {
         base.OnMouseLeave(e);
         _hover = -1;
+        _hoverBg = -1;
         Invalidate();
     }
 
@@ -1191,7 +1331,28 @@ internal sealed class ScriptGrid : Control
             if (e.Button == MouseButtons.Left) NewRequested?.Invoke();
             return;
         }
-        if (e.Button == MouseButtons.Left) OpenRequested?.Invoke(_scripts[i]);
+        if (e.Button == MouseButtons.Left)
+        {
+            if (BgRect(TileRect(i)).Contains(e.Location))
+            {
+                var target = _scripts[i];
+                if (ScriptRunner.IsRunning(target)) return; // 行緊唔可以轉
+                var br = BgRect(TileRect(i));
+                BgControls.ShowQuickMenu(this, new Point(br.X, br.Bottom + Ui.S(2)), target, () => { Invalidate(); BgChanged?.Invoke(target); });
+                return;
+            }
+            var cb = CheckRect(TileRect(i));
+            cb.Inflate(Ui.S(6), Ui.S(6)); // 撳近少少都算
+            if (cb.Contains(e.Location))
+            {
+                var sc = _scripts[i];
+                if (!Selected.Remove(sc)) Selected.Add(sc);
+                Invalidate();
+                SelectionChanged?.Invoke();
+                return;
+            }
+            OpenRequested?.Invoke(_scripts[i]);
+        }
         else if (e.Button == MouseButtons.Right)
         {
             _menuIndex = i;
@@ -1218,6 +1379,7 @@ internal sealed class ScriptEditor : Panel
     private readonly CardPanel _stepsCard;
     private readonly Action<string, string> _onStatus;
     private readonly Action _onChanged;
+    private readonly ToolTip _tip = new();
 
     public event Action? Back;
     /// <summary>AI 套用咗新腳本：要重新整個編輯器。</summary>
@@ -1226,6 +1388,8 @@ internal sealed class ScriptEditor : Panel
     public ScriptEditor(Script sc)
     {
         _sc = sc;
+        // 背景執行嘅腳本：座標統一用「相對程式視窗」（舊腳本喺度自動換算）
+        if (sc.Background && !sc.Relative) ScriptCoords.MakeRelative(sc);
         BackColor = Ui.Bg;
         _stack.Dock = DockStyle.Fill;
 
@@ -1265,6 +1429,16 @@ internal sealed class ScriptEditor : Panel
         _stepsCard.SetContent(_steps);
 
         _stack.AddRow(top);
+
+        // ---- 第二行：背景執行 + 揀程式視窗（可以預先設定好）----
+        var bg = new BgControls(sc, _tip);
+        var bgRow = new BareRow { Padding = new Padding(0) };
+        var bgHint = Ui.Text_(Lang.T("背景執行時，座標係相對程式視窗嘅位置"), Ui.TextFaint, Ui.F(9f), new Padding(0));
+        var bgFlow = new FlowRow(new Control[] { bg.Toggle, bg.Pick, bgHint }, Array.Empty<Control>());
+        bg.Relayout = () => bgFlow.PerformLayout();
+        bg.Changed += () => { Commit(); BeginInvoke(() => Reload?.Invoke()); }; // 座標換算咗：重新整
+        bgRow.SetContent(bgFlow);
+        _stack.AddRow(bgRow);
         _stack.AddRow(_stepsCard);
         foreach (var b in sc.Ifs) AddIfCard(b);
         Controls.Add(_stack);
@@ -1423,7 +1597,7 @@ internal sealed class StepList : Panel
         _steps = steps;
         BackColor = Color.Transparent;
         Dock = DockStyle.Fill;
-        foreach (var kind in new[] { StepKind.Key, StepKind.Click, StepKind.Wait, StepKind.Image, StepKind.Loop })
+        foreach (var kind in new[] { StepKind.Key, StepKind.Click, StepKind.Wait, StepKind.Image, StepKind.Loop }) // 拖拉 = 點擊「按下」+ 延遲 + 點擊「彈起」
         {
             var b = new FancyButton { Text = "+ " + Step.KindName(kind), Kind = BtnKind.Ghost, Dashed = true, Font = Ui.F(9.5f) };
             b.Size = new Size(Ui.S(116), Ui.S(34));
@@ -1527,11 +1701,12 @@ internal sealed class StepList : Panel
     {
         var st = new Step { Kind = kind };
         if (kind == StepKind.If) st.Sub = new IfBlock { Name = Lang.T("IF 條件") };
-        if (kind == StepKind.Click)
+        if (kind is StepKind.Click or StepKind.Drag)
         {
-            var p = Cursor.Position;
+            var p = ScriptCoords.FromScreen(_sc, Cursor.Position) ?? Point.Empty;
             st.X = p.X;
             st.Y = p.Y;
+            if (kind == StepKind.Drag) { st.X2 = p.X + 100; st.Y2 = p.Y; st.Hold = 0.5m; }
         }
         _steps.Add(st);
         Changed(true);
@@ -1621,6 +1796,21 @@ internal sealed class StepList : Panel
                 AddModeControls(list, st);
                 break;
             }
+            case StepKind.Drag:
+            {
+                var btn = new FancyButton { Text = st.Right ? Lang.T("右鍵") : Lang.T("左鍵"), Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(58), Ui.S(34)) };
+                btn.Click += (_, _) => { st.Right = !st.Right; btn.Text = st.Right ? Lang.T("右鍵") : Lang.T("左鍵"); Changed(false); };
+                var pos = L($"({st.X}, {st.Y}) → ({st.X2}, {st.Y2})", Ui.Text);
+                var pick = new FancyButton { Text = Lang.T("揀位置"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(78), Ui.S(34)) };
+                _tip.SetToolTip(pick, Lang.T("撳完 3 秒內將滑鼠移去起點，之後再 3 秒內移去終點"));
+                pick.Click += (_, _) => PickDrag(pick, st, pos);
+                var ms = new NumberBox(Ui.S(90)) { Minimum = 10m, Maximum = 60_000m, DecimalPlaces = 0, Increment = 50m };
+                ms.Value = Math.Round(st.Hold * 1000m);
+                ms.ValueChanged += (_, _) => { st.Hold = ms.Value / 1000m; Changed(false); };
+                _tip.SetToolTip(ms, Lang.T("由起點拖去終點用幾耐"));
+                list.AddRange(new Control[] { btn, pos, pick, L(Lang.T("用時")), ms, L("ms") });
+                break;
+            }
             case StepKind.Loop:
             {
                 var count = new NumberBox(Ui.S(90)) { Minimum = 0, Maximum = 99999, Increment = 1 };
@@ -1673,15 +1863,49 @@ internal sealed class StepList : Panel
     }
 
     /// <summary>「撳住 / 按下 / 彈起」掣；撳住先會出秒數。</summary>
+    /// <summary>呢步之前（同一清單前面，或者成個腳本任何地方）有冇「按下」同一個鍵 / 滑鼠鍵。</summary>
+    private bool HasDownBefore(Step st)
+    {
+        bool Match(Step x) => x != st && x.Mode == PressMode.Down && x.Kind == st.Kind &&
+                              (st.Kind == StepKind.Key ? x.Vk == st.Vk : x.Right == st.Right);
+        int i = _steps.IndexOf(st);
+        if (i > 0 && _steps.Take(i).Any(Match)) return true;
+        IEnumerable<Step> All(IEnumerable<Step> steps) =>
+            steps.SelectMany(x => new[] { x }.Concat(All(x.Body)).Concat(x.Sub != null ? All(x.Sub.Steps) : Enumerable.Empty<Step>()));
+        return All(_sc.Steps).Concat(_sc.Ifs.SelectMany(b => All(b.Steps))).Any(Match);
+    }
+
     private void AddModeControls(List<Control> list, Step st)
     {
-        var mode = new FancyButton { Text = Step.ModeName(st.Mode), Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(58), Ui.S(34)) };
+        // 下拉式選單：撳住 / 按下 / 彈起
+        var mode = new FancyButton { Text = Step.ModeName(st.Mode) + " ▾", Kind = BtnKind.Ghost, Font = Ui.F(9.75f) };
+        mode.Size = new Size(Math.Max(Ui.S(78), mode.GetPreferredSize(Size.Empty).Width), Ui.S(34));
         _tip.SetToolTip(mode, Lang.T("撳住：按下 → 等 → 彈起\n按下：淨係按落去（之後用「彈起」放開）\n彈起：淨係放開"));
-        mode.Click += (_, _) => BeginInvoke(() =>
+        mode.Click += (_, _) =>
         {
-            st.Mode = st.Mode switch { PressMode.Hold => PressMode.Down, PressMode.Down => PressMode.Up, _ => PressMode.Hold };
-            Changed(true);
-        });
+            var menu = new ContextMenuStrip();
+            try { menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
+            menu.BackColor = Ui.CardHi;
+            menu.ForeColor = Ui.Text;
+            foreach (var m in new[] { PressMode.Hold, PressMode.Down, PressMode.Up })
+            {
+                var item = new ToolStripMenuItem(Step.ModeName(m)) { Checked = st.Mode == m, ForeColor = Ui.Text };
+                var chosen = m;
+                item.Click += (_, _) => BeginInvoke(() =>
+                {
+                    if (st.Mode == chosen) return;
+                    if (chosen == PressMode.Up && !HasDownBefore(st))
+                        MessageBox.Show(FindForm(),
+                            Lang.T("提醒：前面冇「按下」同一個鍵 / 滑鼠鍵嘅步驟，「彈起」可能冇效果。\n通常做法：先加一步「按下」，之後先「彈起」（例如拖拉）。"),
+                            Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    st.Mode = chosen;
+                    Changed(true);
+                });
+                menu.Items.Add(item);
+            }
+            menu.Closed += (_, _) => BeginInvoke(() => menu.Dispose());
+            menu.Show(mode, new Point(0, mode.Height + Ui.S(2)));
+        };
         list.Add(mode);
         if (st.Mode == PressMode.Hold)
         {
@@ -1701,6 +1925,49 @@ internal sealed class StepList : Panel
         return b;
     }
 
+    /// <summary>背景執行但搵唔到程式視窗：揀唔到相對座標。</summary>
+    public static void NoWindow(Control c) =>
+        MessageBox.Show(c.FindForm(), Lang.T("背景執行：搵唔到揀咗嘅程式視窗，請先開咗個程式，或者喺上面重新揀視窗。"), Program.AppName,
+            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+    /// <summary>拖拉：3 秒後記起點，再 3 秒後記終點。</summary>
+    private void PickDrag(FancyButton btn, Step st, Label pos)
+    {
+        int left = 3, stage = 0;
+        Point a = Point.Empty;
+        btn.Enabled = false;
+        btn.Text = Lang.T("起點") + " " + left;
+        var t = new System.Windows.Forms.Timer { Interval = 1000 };
+        t.Tick += (_, _) =>
+        {
+            if (--left > 0) { btn.Text = (stage == 0 ? Lang.T("起點") : Lang.T("終點")) + " " + left; return; }
+            var p = ScriptCoords.FromScreen(_sc, Cursor.Position);
+            if (p == null)
+            {
+                t.Stop(); t.Dispose();
+                btn.Text = Lang.T("揀位置"); btn.Enabled = true;
+                NoWindow(btn);
+                return;
+            }
+            if (stage == 0)
+            {
+                a = p.Value;
+                stage = 1;
+                left = 3;
+                btn.Text = Lang.T("終點") + " " + left;
+                return;
+            }
+            t.Stop(); t.Dispose();
+            st.X = a.X; st.Y = a.Y; st.X2 = p.Value.X; st.Y2 = p.Value.Y;
+            pos.Text = $"({st.X}, {st.Y}) → ({st.X2}, {st.Y2})";
+            btn.Text = Lang.T("揀位置");
+            btn.Enabled = true;
+            Changed(false);
+            Relayout();
+        };
+        t.Start();
+    }
+
     private void PickPosition(FancyButton btn, NumberBox x, NumberBox y)
     {
         int left = 3;
@@ -1717,9 +1984,9 @@ internal sealed class StepList : Panel
             }
             t.Stop();
             t.Dispose();
-            var p = Cursor.Position;
-            x.Value = p.X;
-            y.Value = p.Y;
+            var p = ScriptCoords.FromScreen(_sc, Cursor.Position);
+            if (p == null) NoWindow(btn);
+            else { x.Value = p.Value.X; y.Value = p.Value.Y; }
             btn.Text = Lang.T("座標");
             btn.Enabled = true;
         };
@@ -2341,10 +2608,12 @@ internal sealed class IfPanel : TintPanel
                 _tip.SetToolTip(pick, Lang.T("撳完 3 秒內將滑鼠移去目標位置，會一齊記低嗰點嘅顏色"));
                 pick.Click += (_, _) => Countdown(pick, Lang.T("座標"), () =>
                 {
-                    var p = Cursor.Position;
-                    x.Value = p.X;
-                    y.Value = p.Y;
-                    var c = ScreenSearch.PixelAt(p.X, p.Y);
+                    var scr = Cursor.Position;
+                    var p = ScriptCoords.FromScreen(_sc, scr);
+                    if (p == null) { StepList.NoWindow(pick); return; }
+                    x.Value = p.Value.X;
+                    y.Value = p.Value.Y;
+                    var c = ScreenSearch.PixelAt(scr.X, scr.Y);
                     swatch.Value = (c.R << 16) | (c.G << 8) | c.B;
                 });
                 _cond.AddRange(new Control[] { L("X"), x, L("Y"), y, pick, L(Lang.T("顏色")), swatch, L(Lang.T("容差")),
@@ -2755,6 +3024,7 @@ internal static class Describe
         StepKind.Key => (st.Vk == 0 ? Lang.T("（未設定）") : KeyCaptureBox.Format(st.Mods, st.Vk)) + " " + Mode(st.Mode, st.Hold),
         StepKind.Click => $"{(st.Right ? Lang.T("右鍵") : Lang.T("左鍵"))} ({st.X}, {st.Y}) {Mode(st.Mode, st.Hold)}",
         StepKind.Wait => $"{Math.Round(st.Seconds * 1000m)} ms",
+        StepKind.Drag => $"{(st.Right ? Lang.T("右鍵") : Lang.T("左鍵"))} ({st.X}, {st.Y}) → ({st.X2}, {st.Y2}) · {Math.Round(st.Hold * 1000m)} ms",
         StepKind.Image => st.Image.Length == 0 ? Lang.T("（未揀圖）") : Lang.F("{0}相似度 {1}%，搵到最似嗰張就點", Count(st.Image), st.Similarity),
         StepKind.Loop => st.Count == 0 ? Lang.T("一直重複") : Lang.F("重複 {0} 次", st.Count),
         StepKind.Break => Lang.T("跳出最近嗰個循環"),
@@ -2895,53 +3165,252 @@ internal sealed class PreviewList : Control
     }
 }
 
+
+/// <summary>
+/// 腳本座標：背景執行時用「相對程式視窗」座標（視窗移位都照用得），前景就用螢幕座標。
+/// 開 / 閂背景執行時自動將所有座標換算。
+/// </summary>
+internal static class ScriptCoords
+{
+    private static void Each(List<Step> steps, Func<Point, Point> f)
+    {
+        foreach (var st in steps)
+        {
+            if (st.Kind is StepKind.Click or StepKind.Drag)
+            {
+                var a = f(new Point(st.X, st.Y)); st.X = a.X; st.Y = a.Y;
+                if (st.Kind == StepKind.Drag) { var b = f(new Point(st.X2, st.Y2)); st.X2 = b.X; st.Y2 = b.Y; }
+            }
+            if (st.Sub != null) { Cond(st.Sub, f); Each(st.Sub.Steps, f); }
+            Each(st.Body, f);
+        }
+    }
+
+    private static void Cond(IfBlock b, Func<Point, Point> f)
+    {
+        if (b.Kind != CondKind.PixelColor) return;
+        var p = f(new Point(b.X, b.Y)); b.X = p.X; b.Y = p.Y;
+    }
+
+    private static void All(Script sc, Func<Point, Point> f)
+    {
+        Each(sc.Steps, f);
+        foreach (var b in sc.Ifs) { Cond(b, f); Each(b.Steps, f); }
+    }
+
+    /// <summary>螢幕座標 → 相對視窗（要搵到個視窗先得）。</summary>
+    public static bool MakeRelative(Script sc)
+    {
+        if (sc.Relative) return true;
+        var h = Win.Find(sc);
+        if (h == 0) return false;
+        All(sc, p => Win.ScreenToClientPt(h, p));
+        sc.Relative = true;
+        sc.Save();
+        return true;
+    }
+
+    /// <summary>相對視窗 → 螢幕座標。</summary>
+    public static bool MakeAbsolute(Script sc)
+    {
+        if (!sc.Relative) return true;
+        var h = Win.Find(sc);
+        if (h == 0) return false;
+        All(sc, p => Win.ClientToScreenPt(h, p));
+        sc.Relative = false;
+        sc.Save();
+        return true;
+    }
+
+    /// <summary>撳「座標」揀到嘅螢幕位置 → 腳本座標；背景執行但搵唔到視窗就返 null。</summary>
+    public static Point? FromScreen(Script sc, Point screen)
+    {
+        if (!sc.Background) return sc.Relative ? null : screen;
+        var h = Win.Find(sc);
+        if (h == 0 || !MakeRelative(sc)) return null;
+        return Win.ScreenToClientPt(h, screen);
+    }
+}
+
+/// <summary>「背景執行」開關 + 揀視窗掣（預覽頁同修改頁共用）。</summary>
+internal sealed class BgControls
+{
+    public readonly ToggleChip Toggle;
+    public readonly FancyButton Pick;
+    private readonly Script _sc;
+    private readonly ToolTip _tip;
+    private readonly ContextMenuStrip _menu = new();
+    /// <summary>設定或者座標改咗：外面要重新整個畫面。</summary>
+    public event Action? Changed;
+    public Action? Relayout;
+
+    public BgControls(Script sc, ToolTip tip)
+    {
+        _sc = sc;
+        _tip = tip;
+        Toggle = new ToggleChip(Lang.T("背景執行")) { Checked = sc.Background };
+        Toggle.Size = new Size(Toggle.Width + Ui.S(8), Ui.S(34));
+        _tip.SetToolTip(Toggle, Lang.T("開咗之後，腳本淨係喺揀咗嘅程式視窗入面運行，你切去其他視窗都照行。\n") +
+                                Lang.T("注意：部分遊戲唔收背景點擊 / 按鍵；程式視窗唔可以縮細。") + "\n" +
+                                Lang.T("座標會變成相對程式視窗，移動視窗位置都照用得。"));
+        Pick = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(230), Ui.S(34)) };
+        Pick.Click += (_, _) => ShowMenu();
+        Toggle.CheckedChanged += () =>
+        {
+            if (_busy) return;
+            _busy = true;
+            try { OnToggle(); } finally { _busy = false; }
+        };
+        Update();
+    }
+
+    private bool _busy;
+
+    private void OnToggle()
+    {
+        {
+            _sc.Background = Toggle.Checked;
+            string? warn = null;
+            if (_sc.Background) ScriptCoords.MakeRelative(_sc);            // 揀咗視窗就即刻換算；未揀就等揀咗先
+            else if (!ScriptCoords.MakeAbsolute(_sc))
+                warn = Lang.T("搵唔到程式視窗，座標未能換返螢幕座標。請先開返個程式，再閂一次背景執行。");
+            if (!_sc.Background && warn != null) { _sc.Background = true; Toggle.Checked = true; }
+            _sc.Save();
+            Update();
+            if (warn != null) MessageBox.Show(Toggle.FindForm(), warn, Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Changed?.Invoke();
+        }
+    }
+
+    public static string Label(Win.WinInfo w, List<Win.WinInfo> all)
+    {
+        var same = all.Where(x => x.Process == w.Process && x.Title == w.Title).OrderBy(x => (long)x.Handle).ToList();
+        string t = $"{w.Process} - {w.Title}";
+        if (t.Length > 60) t = t[..60] + "…";
+        if (same.Count > 1)
+        {
+            var pos = Win.Position(w.Handle);
+            t += $"  #{same.IndexOf(w) + 1}  ({pos.X}, {pos.Y})";
+        }
+        return t;
+    }
+
+    public void Update()
+    {
+        Pick.Tag = _sc.Background ? null : "hidden";
+        Pick.Visible = _sc.Background;
+        string label;
+        if (_sc.TargetProcess.Length == 0) label = Lang.T("揀程式…");
+        else
+        {
+            var h = Win.Find(_sc);
+            var all = Win.List();
+            var w = all.FirstOrDefault(x => x.Handle == h);
+            label = w != null ? Label(w, all) : $"{_sc.TargetProcess} - {_sc.TargetTitle}" + Lang.T("（未開）");
+        }
+        Pick.Text = label + "  ▾";
+        _tip.SetToolTip(Pick, _sc.TargetProcess.Length == 0 ? Lang.T("揀要喺邊個程式入面運行") : label);
+        Relayout?.Invoke();
+    }
+
+    /// <summary>腳本清單用：而家揀咗邊個程式（短名）。</summary>
+    public static string ShortTarget(Script sc)
+    {
+        if (!sc.Background) return Lang.T("前景執行");
+        if (sc.TargetProcess.Length == 0) return Lang.T("背景：未揀程式");
+        var h = Win.Find(sc);
+        var all = Win.List();
+        var w = all.FirstOrDefault(x => x.Handle == h);
+        return Lang.T("背景：") + (w != null ? Label(w, all) : sc.TargetTitle + Lang.T("（未開）"));
+    }
+
+    /// <summary>腳本清單用：彈出「前景執行 / 各個視窗」選單，揀咗即刻設定（座標自動換算）。</summary>
+    public static void ShowQuickMenu(Control anchor, Point at, Script sc, Action changed)
+    {
+        var menu = new ContextMenuStrip();
+        try { menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
+        menu.BackColor = Ui.CardHi;
+        menu.ForeColor = Ui.Text;
+        var fg = new ToolStripMenuItem(Lang.T("前景執行（成個螢幕）")) { Checked = !sc.Background };
+        fg.Click += (_, _) =>
+        {
+            if (!sc.Background) return;
+            if (!ScriptCoords.MakeAbsolute(sc))
+            {
+                MessageBox.Show(anchor.FindForm(), Lang.T("搵唔到程式視窗，座標未能換返螢幕座標。請先開返個程式，再閂一次背景執行。"),
+                    Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            sc.Background = false;
+            sc.Save();
+            changed();
+        };
+        menu.Items.Add(fg);
+        menu.Items.Add(new ToolStripSeparator());
+        var wins = Win.List();
+        var cur = sc.Background ? Win.Find(sc) : 0;
+        if (wins.Count == 0) menu.Items.Add(Lang.T("（冇搵到視窗）")).Enabled = false;
+        foreach (var w in wins)
+        {
+            var item = new ToolStripMenuItem(Label(w, wins)) { Checked = w.Handle == cur };
+            var info = w;
+            item.Click += (_, _) =>
+            {
+                var same = Win.List().Where(x => x.Process == info.Process && x.Title == info.Title).OrderBy(x => (long)x.Handle).ToList();
+                sc.TargetProcess = info.Process;
+                sc.TargetTitle = info.Title;
+                sc.TargetHwnd = (long)info.Handle;
+                sc.TargetIndex = Math.Max(0, same.FindIndex(x => x.Handle == info.Handle));
+                sc.Background = true;
+                ScriptCoords.MakeRelative(sc);
+                sc.Save();
+                changed();
+            };
+            menu.Items.Add(item);
+        }
+        menu.Closed += (_, _) => anchor.BeginInvoke(() => menu.Dispose());
+        menu.Show(anchor, at);
+    }
+
+    private void ShowMenu()
+    {
+        _menu.Items.Clear();
+        try { _menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
+        _menu.BackColor = Ui.CardHi;
+        _menu.ForeColor = Ui.Text;
+        var wins = Win.List();
+        var cur = Win.Find(_sc);
+        if (wins.Count == 0) _menu.Items.Add(Lang.T("（冇搵到視窗）")).Enabled = false;
+        foreach (var w in wins)
+        {
+            var item = new ToolStripMenuItem(Label(w, wins)) { Checked = w.Handle == cur }; // 只剔真係揀咗嗰個
+            var info = w;
+            item.Click += (_, _) =>
+            {
+                var same = Win.List().Where(x => x.Process == info.Process && x.Title == info.Title).OrderBy(x => (long)x.Handle).ToList();
+                _sc.TargetProcess = info.Process;
+                _sc.TargetTitle = info.Title;
+                _sc.TargetHwnd = (long)info.Handle;
+                _sc.TargetIndex = Math.Max(0, same.FindIndex(x => x.Handle == info.Handle));
+                if (_sc.Background) ScriptCoords.MakeRelative(_sc);
+                _sc.Save();
+                Update();
+                Changed?.Invoke();
+            };
+            _menu.Items.Add(item);
+        }
+        _menu.Show(Pick, new Point(0, Pick.Height + Ui.S(2)));
+    }
+}
+
 /// <summary>腳本預覽：睇晒所有步驟（唔可以改）；上面有「修改」同「開始 / 停止」。</summary>
 internal sealed class ScriptViewer : Panel
 {
     private readonly Script _sc;
-    private ToggleChip _bgToggle = null!;
-    private FancyButton _bgPick = null!;
+    private BgControls _bg = null!;
     private FlowRow _flow = null!;
     private readonly ToolTip _tip = new();
-    private readonly ContextMenuStrip _winMenu = new();
 
-    private void UpdateBg()
-    {
-        _bgPick.Tag = _sc.Background ? null : "hidden";
-        _bgPick.Visible = _sc.Background;
-        string label = _sc.TargetProcess.Length == 0 ? Lang.T("揀程式…") : $"{_sc.TargetProcess} - {_sc.TargetTitle}";
-        _bgPick.Text = label + "  ▾";
-        _tip.SetToolTip(_bgPick, _sc.TargetProcess.Length == 0 ? Lang.T("揀要喺邊個程式入面運行") : label);
-        _flow?.PerformLayout();
-    }
-
-    /// <summary>彈出而家開緊嘅視窗清單俾用家揀。</summary>
-    private void ShowWindowMenu()
-    {
-        _winMenu.Items.Clear();
-        try { _winMenu.Renderer = DarkTheme.MenuRenderer(); } catch { }
-        _winMenu.BackColor = Ui.CardHi;
-        _winMenu.ForeColor = Ui.Text;
-        var wins = Win.List();
-        if (wins.Count == 0) _winMenu.Items.Add(Lang.T("（冇搵到視窗）")).Enabled = false;
-        foreach (var w in wins)
-        {
-            var item = new ToolStripMenuItem(w.ToString().Length > 70 ? w.ToString()[..70] + "…" : w.ToString())
-            {
-                Checked = string.Equals(w.Process, _sc.TargetProcess, StringComparison.OrdinalIgnoreCase) && w.Title == _sc.TargetTitle
-            };
-            var info = w;
-            item.Click += (_, _) =>
-            {
-                _sc.TargetProcess = info.Process;
-                _sc.TargetTitle = info.Title;
-                _sc.Save();
-                UpdateBg();
-            };
-            _winMenu.Items.Add(item);
-        }
-        _winMenu.Show(_bgPick, new Point(0, _bgPick.Height + Ui.S(2)));
-    }
     public Script Script => _sc;
     private FancyButton? _back;
     private readonly CardStack _stack = new();
@@ -2950,7 +3419,7 @@ internal sealed class ScriptViewer : Panel
     private readonly Action<string, string> _onStatus;
     private readonly Action _onChanged;
 
-    public event Action? Back, Edit;
+    public event Action? Back, Edit, Reload;
 
     public ScriptViewer(Script sc)
     {
@@ -2972,18 +3441,9 @@ internal sealed class ScriptViewer : Panel
 
         var top = new BareRow();
         // 背景執行：開咗就要揀程式，腳本淨係喺嗰個視窗入面截圖 / 點擊 / 按鍵
-        _bgToggle = new ToggleChip(Lang.T("背景執行")) { Checked = sc.Background };
-        _bgToggle.Size = new Size(_bgToggle.Width + Ui.S(8), Ui.S(34));
-        _tip.SetToolTip(_bgToggle, Lang.T("開咗之後，腳本淨係喺揀咗嘅程式視窗入面運行，你切去其他視窗都照行。\n") +
-                                   Lang.T("注意：部分遊戲唔收背景點擊 / 按鍵；程式視窗唔可以縮細。"));
-        _bgPick = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(190), Ui.S(34)) };
-        _bgPick.Click += (_, _) => ShowWindowMenu();
-        _bgToggle.CheckedChanged += () =>
-        {
-            _sc.Background = _bgToggle.Checked;
-            _sc.Save();
-            UpdateBg();
-        };
+        _bg = new BgControls(sc, _tip);
+        _bg.Relayout = () => _flow?.PerformLayout();
+        _bg.Changed += () => BeginInvoke(() => Reload?.Invoke()); // 座標換算咗：重新整預覽
         // 運行速度：0.5x（慢一倍）– 3.0x（快三倍），運行中改都即時生效。
         // 一粒掣：撳開揀常用倍率；滑鼠滾輪每格 ±0.1x
         var speed = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9.5f) };
@@ -3019,10 +3479,10 @@ internal sealed class ScriptViewer : Panel
         speed.Click += (_, _) => speedMenu.Show(speed, new Point(0, speed.Height));
         speed.MouseWheel += (_, e) => SetSpeed(_sc.Speed + (e.Delta > 0 ? 0.1 : -0.1));
         _tip.SetToolTip(speed, Lang.T("腳本運行速度倍率：1.0x 正常、2.0x 快一倍、0.5x 慢一倍（等待、撳住、檢查間隔都會跟住變）") + "\n" + Lang.T("（滑鼠滾輪可以微調 ±0.1x）"));
-        _flow = new FlowRow(new Control[] { back, title, speed }, new Control[] { _start, edit, _bgToggle, _bgPick });
+        _flow = new FlowRow(new Control[] { back, title, speed }, new Control[] { _start, edit, _bg.Toggle, _bg.Pick });
         ShowSpeed();
         top.SetContent(_flow);
-        UpdateBg();
+        _bg.Update();
         top.Padding = new Padding(0);
         _stack.AddRow(top);
 
@@ -3057,8 +3517,7 @@ internal sealed class ScriptViewer : Panel
         _start.Kind = run ? BtnKind.Danger : BtnKind.Success;
         // 運行緊唔可以返上一頁（要先停止），亦唔可以轉背景設定
         if (_back != null) _back.Enabled = !run;
-        if (_bgToggle != null) _bgToggle.Enabled = !run;
-        if (_bgPick != null) _bgPick.Enabled = !run;
+        if (_bg != null) { _bg.Toggle.Enabled = !run; _bg.Pick.Enabled = !run; }
     }
 
     protected override void Dispose(bool disposing)
@@ -3330,20 +3789,59 @@ internal sealed class ImageStrip : Control
 /// </summary>
 internal sealed class RunCtx
 {
-    public static readonly RunCtx Foreground = new(null, 0);
+    public static readonly RunCtx Foreground = new(null, 0, false);
 
     private readonly Rectangle? _exclude; // 前景：自己個視窗唔計
     public readonly nint Hwnd;
+    private readonly bool _rel;           // 腳本座標已經係「相對視窗」
     public bool Bg => Hwnd != 0;
 
-    public RunCtx(Rectangle? exclude, nint hwnd)
+    public RunCtx(Rectangle? exclude, nint hwnd, bool relative)
     {
         _exclude = exclude;
         Hwnd = hwnd;
+        _rel = relative;
     }
 
-    /// <summary>螢幕座標 → 呢個環境嘅座標（背景就換做視窗內容區座標）。</summary>
-    public Point FromScreen(int x, int y) => Bg ? Win.ScreenToClientPt(Hwnd, new Point(x, y)) : new Point(x, y);
+    /// <summary>腳本座標 → 呢個環境嘅座標。背景：相對視窗就直接用（視窗移位都啱）；舊腳本嘅螢幕座標就換算。</summary>
+    public Point Pt(int x, int y) => Bg && !_rel ? Win.ScreenToClientPt(Hwnd, new Point(x, y)) : new Point(x, y);
+
+    /// <summary>拖拉：喺 a 撳落 → 慢慢移去 b → 放開。背景用視窗訊息，被擋住都得。</summary>
+    /// <param name="pressAtStart">false = 已經撳住咗（之前一步「按下」），淨係移動同放開。</param>
+    public async Task DragAsync(Point a, Point b, bool right, TimeSpan duration, CancellationToken ct, bool pressAtStart = true)
+    {
+        int steps = Math.Clamp((int)(duration.TotalMilliseconds / 15), 5, 200);
+        var stepDelay = TimeSpan.FromMilliseconds(Math.Max(1, duration.TotalMilliseconds / steps));
+        if (Bg)
+        {
+            var (target, pa) = Win.ChildAt(Hwnd, a);
+            int dx = pa.X - a.X, dy = pa.Y - a.Y; // 子視窗座標偏移
+            nint btn = right ? 2 : 1;
+            if (pressAtStart)
+            {
+                Win.Send(target, 0x200, 0, pa);
+                Win.Send(target, right ? 0x204u : 0x201u, btn, pa);
+            }
+            for (int i = 1; i <= steps; i++)
+            {
+                await Task.Delay(stepDelay, ct);
+                var p = new Point(a.X + (b.X - a.X) * i / steps + dx, a.Y + (b.Y - a.Y) * i / steps + dy);
+                Win.Send(target, 0x200, btn, p);
+            }
+            Win.Send(target, right ? 0x205u : 0x202u, 0, new Point(b.X + dx, b.Y + dy));
+            return;
+        }
+        if (pressAtStart) Mouse.Down(a.X, a.Y, right);
+        try
+        {
+            for (int i = 1; i <= steps; i++)
+            {
+                await Task.Delay(stepDelay, ct);
+                Mouse.Move(a.X + (b.X - a.X) * i / steps, a.Y + (b.Y - a.Y) * i / steps);
+            }
+        }
+        finally { Mouse.Up(b.X, b.Y, right); }
+    }
 
     public void KeyDown(int vk, bool alt)
     {
@@ -3425,7 +3923,7 @@ internal sealed class RunCtx
     public Color PixelAt(int screenX, int screenY)
     {
         if (!Bg) return ScreenSearch.PixelAt(screenX, screenY);
-        var p = FromScreen(screenX, screenY);
+        var p = Pt(screenX, screenY);
         using var bmp = Win.CaptureClient(Hwnd);
         if (bmp == null || p.X < 0 || p.Y < 0 || p.X >= bmp.Width || p.Y >= bmp.Height) return Color.Black;
         return bmp.GetPixel(p.X, p.Y);
@@ -3491,6 +3989,55 @@ internal static class Win
         }, 0);
         return list.OrderBy(w => w.Process, StringComparer.OrdinalIgnoreCase).ThenBy(w => w.Title).ToList();
     }
+
+    /// <summary>
+    /// 搵返腳本揀咗嘅視窗：同一個程式開咗幾個都分得清。
+    /// 先用記低嘅視窗（仲開緊就用佢）；重開咗就用「同名視窗入面第幾個」；再唔得就用同 process 第一個。
+    /// </summary>
+    public static nint Find(Script s)
+    {
+        if (string.IsNullOrEmpty(s.TargetProcess)) return 0;
+        var same = List().Where(w => string.Equals(w.Process, s.TargetProcess, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (s.TargetHwnd != 0 && same.Any(w => (long)w.Handle == s.TargetHwnd)) return (nint)s.TargetHwnd;
+        var exact = same.Where(w => w.Title == s.TargetTitle).OrderBy(w => (long)w.Handle).ToList();
+        if (exact.Count > 0) return exact[Math.Clamp(s.TargetIndex, 0, exact.Count - 1)].Handle;
+        return same.FirstOrDefault()?.Handle ?? 0;
+    }
+
+    /// <summary>視窗喺螢幕嘅位置（顯示用，分辨同名視窗）。</summary>
+    public static Point Position(nint h)
+    {
+        var p = new POINT();
+        ClientToScreen(h, ref p);
+        return new Point(p.X, p.Y);
+    }
+
+    public static Point ClientToScreenPt(nint h, Point p)
+    {
+        var pt = new POINT { X = p.X, Y = p.Y };
+        ClientToScreen(h, ref pt);
+        return new Point(pt.X, pt.Y);
+    }
+
+    /// <summary>(x, y) 嗰點最入面嘅子視窗同埋喺佢入面嘅座標。</summary>
+    public static (nint Target, Point Pt) ChildAt(nint h, Point p)
+    {
+        nint target = h;
+        var pt = new POINT { X = p.X, Y = p.Y };
+        for (int i = 0; i < 8; i++)
+        {
+            var child = ChildWindowFromPointEx(target, pt, 1 | 4);
+            if (child == 0 || child == target) break;
+            var scr = pt;
+            ClientToScreen(target, ref scr);
+            ScreenToClient(child, ref scr);
+            target = child;
+            pt = scr;
+        }
+        return (target, new Point(pt.X, pt.Y));
+    }
+
+    public static void Send(nint target, uint msg, nint w, Point p) => PostMessage(target, msg, w, MakeLParam(p.X, p.Y));
 
     /// <summary>用 process 名 + 標題搵返個視窗；標題變咗就用同 process 第一個視窗。</summary>
     public static nint Find(string process, string title)

@@ -68,6 +68,8 @@ internal static class Mouse
         }
     }
 
+    public static void Move(int x, int y) => SetCursorPos(x, y);
+
     public static void Down(int x, int y, bool right)
     {
         SetCursorPos(x, y);
