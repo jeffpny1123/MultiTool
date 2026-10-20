@@ -177,6 +177,18 @@ internal static class Whisper
 
     public static bool BinReady => File.Exists(Cli) && File.Exists(Path.Combine(BinDir, "whisper-server.exe"));
     public static bool ModelReady(Model m) => File.Exists(ModelPath(m));
+
+    /// <summary>刪除模型檔（先閂咗辨識程式，否則檔案被鎖住）。</summary>
+    public static bool DeleteModel(Model m)
+    {
+        WhisperServer.Stop();
+        for (int i = 0; i < 10; i++)
+        {
+            try { if (File.Exists(ModelPath(m))) File.Delete(ModelPath(m)); return true; }
+            catch { System.Threading.Thread.Sleep(200); } // 等 server 完全閂咗
+        }
+        return false;
+    }
     public static bool Ready => BinReady && ModelReady(Current);
 
     private static HttpClient NewClient()

@@ -2984,15 +2984,43 @@ internal sealed class ScriptViewer : Panel
             _sc.Save();
             UpdateBg();
         };
-        // 運行速度：0.5x（慢一倍）– 3.0x（快三倍），運行中改都即時生效
-        var speedLabel = Ui.Text_(Lang.T("運行速度"), Ui.TextDim, Ui.F(9.5f), new Padding(0));
-        var speedBox = new NumberBox(Ui.S(70)) { Minimum = 0.5m, Maximum = 3.0m, DecimalPlaces = 1, Increment = 0.1m };
-        speedBox.Value = (decimal)Math.Clamp(sc.Speed, 0.5, 3.0);
-        speedBox.ValueChanged += (_, _) => { _sc.Speed = (double)speedBox.Value; _sc.Save(); };
-        var speedHost = new InputHost(speedBox, Ui.S(70));
-        var speedX = Ui.Text_("x", Ui.TextDim, Ui.F(9.5f), new Padding(0));
-        _tip.SetToolTip(speedBox, Lang.T("腳本運行速度倍率：1.0x 正常、2.0x 快一倍、0.5x 慢一倍（等待、撳住、檢查間隔都會跟住變）"));
-        _flow = new FlowRow(new Control[] { back, title, speedLabel, speedHost, speedX }, new Control[] { _start, edit, _bgToggle, _bgPick });
+        // 運行速度：0.5x（慢一倍）– 3.0x（快三倍），運行中改都即時生效。
+        // 一粒掣：撳開揀常用倍率；滑鼠滾輪每格 ±0.1x
+        var speed = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9.5f) };
+        void ShowSpeed()
+        {
+            speed.Text = Lang.T("運行速度") + "  " + _sc.Speed.ToString("0.0#", CultureInfo.InvariantCulture) + "x  ▾";
+            speed.Size = new Size(Math.Max(Ui.S(130), speed.GetPreferredSize(Size.Empty).Width), Ui.S(34));
+            speed.Invalidate();
+            _flow?.PerformLayout();
+        }
+        void SetSpeed(double v)
+        {
+            _sc.Speed = Math.Round(Math.Clamp(v, 0.5, 3.0), 2);
+            _sc.Save();
+            ShowSpeed();
+        }
+        var speedMenu = new ContextMenuStrip();
+        try { speedMenu.Renderer = DarkTheme.MenuRenderer(); } catch { }
+        speedMenu.BackColor = Ui.CardHi;
+        speedMenu.ForeColor = Ui.Text;
+        foreach (double v in new[] { 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0 })
+        {
+            string label = v.ToString("0.0#", CultureInfo.InvariantCulture) + "x" +
+                           (v == 1.0 ? "  " + Lang.T("（正常）") : v < 1 ? "  " + Lang.T("（慢）") : "");
+            var item = new ToolStripMenuItem(label) { ForeColor = Ui.Text, Tag = v };
+            item.Click += (_, _) => SetSpeed((double)item.Tag!);
+            speedMenu.Items.Add(item);
+        }
+        speedMenu.Opening += (_, _) =>
+        {
+            foreach (ToolStripMenuItem it in speedMenu.Items) it.Checked = Math.Abs((double)it.Tag! - _sc.Speed) < 0.001;
+        };
+        speed.Click += (_, _) => speedMenu.Show(speed, new Point(0, speed.Height));
+        speed.MouseWheel += (_, e) => SetSpeed(_sc.Speed + (e.Delta > 0 ? 0.1 : -0.1));
+        _tip.SetToolTip(speed, Lang.T("腳本運行速度倍率：1.0x 正常、2.0x 快一倍、0.5x 慢一倍（等待、撳住、檢查間隔都會跟住變）") + "\n" + Lang.T("（滑鼠滾輪可以微調 ±0.1x）"));
+        _flow = new FlowRow(new Control[] { back, title, speed }, new Control[] { _start, edit, _bgToggle, _bgPick });
+        ShowSpeed();
         top.SetContent(_flow);
         UpdateBg();
         top.Padding = new Padding(0);

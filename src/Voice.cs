@@ -542,6 +542,9 @@ internal sealed class AiSettingsDialog : Form
         Controls.Add(model);
         rest.Add(model);
         var dl = new FancyButton { Text = Lang.T("下載"), Kind = BtnKind.Primary, Font = Ui.F(9.5f), Bounds = new Rectangle(x1 + Ui.S(230), y - Ui.S(2), Ui.S(100), Ui.S(32)) };
+        var del = new FancyButton { Text = Lang.T("刪除"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Bounds = new Rectangle(x1 + Ui.S(230), y - Ui.S(2), Ui.S(100), Ui.S(32)), Visible = false };
+        Controls.Add(del);
+        rest.Add(del);
         Controls.Add(dl);
         rest.Add(dl);
         y += Ui.S(36);
@@ -558,6 +561,7 @@ internal sealed class AiSettingsDialog : Form
             mstate.Text = ok ? Lang.T("✓ 已下載，可以用") : Lang.T("未下載（只需下載一次）");
             mstate.ForeColor = ok ? Ui.Success : Ui.TextFaint;
             dl.Visible = !ok;
+            del.Visible = ok;
         }
         model.SelectedIndexChanged += (_, _) =>
         {
@@ -592,6 +596,15 @@ internal sealed class AiSettingsDialog : Form
             if (IsDisposed) return;
             bar.Visible = false;
             dl.Enabled = model.Enabled = enable.Checked;
+            ModelState();
+        };
+        del.Click += (_, _) =>
+        {
+            var m = Whisper.Models[Math.Max(0, model.SelectedIndex)];
+            if (MessageBox.Show(this, Lang.F("刪除語音辨識模型 {0}？\n（之後要用就要重新下載）", m.Label), Program.AppName,
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            if (!Whisper.DeleteModel(m))
+                MessageBox.Show(this, Lang.T("刪除失敗，請閂咗 MultiTool 再手動刪除 data\\ai\\whisper 入面嘅模型檔。"), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             ModelState();
         };
         ModelState();
