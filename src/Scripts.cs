@@ -51,16 +51,16 @@ public sealed class Step
 
     public static string KindName(StepKind k) => k switch
     {
-        StepKind.Key => "按鍵",
-        StepKind.Click => "滑鼠點擊",
-        StepKind.Wait => "等待",
-        StepKind.If => "IF 條件",
-        StepKind.Loop => "循環",
-        StepKind.Break => "中斷循環",
-        _ => "搵圖點擊"
+        StepKind.Key => Lang.T("按鍵"),
+        StepKind.Click => Lang.T("滑鼠點擊"),
+        StepKind.Wait => Lang.T("等待"),
+        StepKind.If => Lang.T("IF 條件"),
+        StepKind.Loop => Lang.T("循環"),
+        StepKind.Break => Lang.T("中斷循環"),
+        _ => Lang.T("搵圖點擊")
     };
 
-    public static string ModeName(PressMode m) => m switch { PressMode.Down => "按下", PressMode.Up => "彈起", _ => "撳住" };
+    public static string ModeName(PressMode m) => m switch { PressMode.Down => Lang.T("按下"), PressMode.Up => Lang.T("彈起"), _ => Lang.T("撳住") };
 
     private static string D(decimal d) => d.ToString(CultureInfo.InvariantCulture);
 
@@ -165,11 +165,11 @@ public sealed class IfBlock
 
     public static string KindName(CondKind k) => k switch
     {
-        CondKind.ImageFound => "畫面搵到圖",
-        CondKind.ImageNotFound => "畫面搵唔到圖",
-        CondKind.PixelColor => "某位置係某顏色",
-        CondKind.Time => "現實時間到咗",
-        _ => "倒數完"
+        CondKind.ImageFound => Lang.T("畫面搵到圖"),
+        CondKind.ImageNotFound => Lang.T("畫面搵唔到圖"),
+        CondKind.PixelColor => Lang.T("某位置係某顏色"),
+        CondKind.Time => Lang.T("現實時間到咗"),
+        _ => Lang.T("倒數完")
     };
 
     /// <summary>呢種條件要唔要設「每幾多秒檢查」。</summary>
@@ -242,7 +242,7 @@ public sealed class Script
     public string Id = Guid.NewGuid().ToString("N")[..8];
     /// <summary>資料夾名：跟腳本名（data\scripts\&lt;腳本名&gt;）。</summary>
     public string Folder = "";
-    public string Name = "新腳本";
+    public string Name = Lang.T("新腳本");
     public bool Loop;
     public Hotkey Hotkey;
     public List<Step> Steps = new();
@@ -250,6 +250,7 @@ public sealed class Script
     public bool Background;            // 背景執行：淨係喺揀咗嘅程式視窗入面截圖 / 點擊 / 按鍵
     public string TargetProcess = "";  // 背景程式（process 名）
     public string TargetTitle = "";    // 背景程式視窗標題
+    public double Speed = 1.0;         // 運行速度倍率（0.5x – 3.0x）：等待 / 撳住 / 檢查間隔都除以佢
 
     public string Dir
     {
@@ -265,7 +266,7 @@ public sealed class Script
     {
         var bad = Path.GetInvalidFileNameChars();
         var cleaned = new string(name.Select(c => bad.Contains(c) ? '_' : c).ToArray()).Trim().TrimEnd('.');
-        return cleaned.Length == 0 ? "腳本" : cleaned;
+        return cleaned.Length == 0 ? Lang.T("腳本") : cleaned;
     }
 
     /// <summary>搵一個未被其他腳本用緊嘅資料夾名（撞名就加 (2)、(3)…）。</summary>
@@ -317,7 +318,8 @@ public sealed class Script
                 "hotkey=" + Hotkey.Serialize(),
                 "bg=" + (Background ? "1" : "0"),
                 "bgproc=" + TargetProcess,
-                "bgtitle=" + TargetTitle.Replace('\n', ' ').Replace('\r', ' ')
+                "bgtitle=" + TargetTitle.Replace('\n', ' ').Replace('\r', ' '),
+                "speed=" + Speed.ToString("0.0", CultureInfo.InvariantCulture)
             };
             lines.AddRange(Steps.Select(s => "step=" + s.Serialize()));
             foreach (var b in Ifs)
@@ -350,6 +352,9 @@ public sealed class Script
                     case "bg": sc.Background = v == "1"; break;
                     case "bgproc": sc.TargetProcess = v; break;
                     case "bgtitle": sc.TargetTitle = v; break;
+                    case "speed":
+                        if (double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var sp)) sc.Speed = Math.Clamp(sp, 0.5, 3.0);
+                        break;
                     case "step":
                         var st = Step.Parse(v);
                         if (st != null) sc.Steps.Add(st);
@@ -433,21 +438,21 @@ public static class ScriptRunner
         if (IsRunning(s) || _ui == null) return;
         if (s.Steps.Count == 0 && s.Ifs.Count == 0)
         {
-            Status?.Invoke(s.Id, "冇步驟，行唔到");
+            Status?.Invoke(s.Id, Lang.T("冇步驟，行唔到"));
             return;
         }
         // 開始前先檢查有冇未設定好嘅步驟
         var problems = Validate(s);
         if (problems.Count > 0)
         {
-            Status?.Invoke(s.Id, $"有 {problems.Count} 個步驟未設定好，未開始");
+            Status?.Invoke(s.Id, Lang.F("有 {0} 個步驟未設定好，未開始", problems.Count));
             string list = string.Join("\n", problems.Take(12).Select(x => "• " + x));
-            if (problems.Count > 12) list += $"\n…仲有 {problems.Count - 12} 個";
+            if (problems.Count > 12) list += Lang.F("\n…仲有 {0} 個", problems.Count - 12);
             if (_dialogOpen) return; // 已經有個提示開緊
             _dialogOpen = true;
             try
             {
-                MessageBox.Show(_ui.FindForm(), $"「{s.Name}」有啲步驟未設定好，請先改好：\n\n{list}", "未能開始",
+                MessageBox.Show(_ui.FindForm(), Lang.F("「{0}」有啲步驟未設定好，請先改好：\n\n{1}", s.Name, list), Lang.T("未能開始"),
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally { _dialogOpen = false; }
@@ -465,13 +470,13 @@ public static class ScriptRunner
         var errs = new List<string>();
         if (s.Background)
         {
-            if (s.TargetProcess.Length == 0) errs.Add("背景執行：未揀程式");
-            else if (Win.Find(s.TargetProcess, s.TargetTitle) == 0) errs.Add($"背景執行：搵唔到「{s.TargetProcess} - {s.TargetTitle}」，請先開咗個程式或者重新揀");
+            if (s.TargetProcess.Length == 0) errs.Add(Lang.T("背景執行：未揀程式"));
+            else if (Win.Find(s.TargetProcess, s.TargetTitle) == 0) errs.Add(Lang.F("背景執行：搵唔到「{0} - {1}」，請先開咗個程式或者重新揀", s.TargetProcess, s.TargetTitle));
         }
-        CheckSteps(s, s.Steps, "主線程", errs);
+        CheckSteps(s, s.Steps, Lang.T("主線程"), errs);
         foreach (var b in s.Ifs)
         {
-            string where = $"IF 框「{b.Name}」";
+            string where = Lang.F("IF 框「{0}」", b.Name);
             CheckCond(s, b, where, errs);
             CheckSteps(s, b.Steps, where, errs);
         }
@@ -481,15 +486,15 @@ public static class ScriptRunner
     private static void CheckImages(Script s, string field, string where, List<string> errs)
     {
         var names = ImageList.Split(field);
-        if (names.Count == 0) errs.Add($"{where}：未截圖 / 揀圖");
-        else if (names.Any(n => !File.Exists(Path.Combine(s.Dir, n)))) errs.Add($"{where}：有圖檔唔見咗，請重新截圖");
+        if (names.Count == 0) errs.Add(Lang.F("{0}：未截圖 / 揀圖", where));
+        else if (names.Any(n => !File.Exists(Path.Combine(s.Dir, n)))) errs.Add(Lang.F("{0}：有圖檔唔見咗，請重新截圖", where));
     }
 
     private static void CheckCond(Script s, IfBlock b, string where, List<string> errs)
     {
-        if (b.Kind is CondKind.ImageFound or CondKind.ImageNotFound) CheckImages(s, b.Image, where + " 條件", errs);
+        if (b.Kind is CondKind.ImageFound or CondKind.ImageNotFound) CheckImages(s, b.Image, where + Lang.T(" 條件"), errs);
         if (b.Kind == CondKind.Time && !TimeSpan.TryParse(b.Time, CultureInfo.InvariantCulture, out _))
-            errs.Add($"{where} 條件：時間格式唔啱");
+            errs.Add(Lang.F("{0} 條件：時間格式唔啱", where));
     }
 
     private static void CheckSteps(Script s, List<Step> steps, string path, List<string> errs)
@@ -497,21 +502,21 @@ public static class ScriptRunner
         for (int i = 0; i < steps.Count; i++)
         {
             var st = steps[i];
-            string where = $"{path} › 第 {i + 1} 步（{Step.KindName(st.Kind)}）";
+            string where = Lang.F("{0} › 第 {1} 步（{2}）", path, i + 1, Step.KindName(st.Kind));
             switch (st.Kind)
             {
                 case StepKind.Key:
-                    if (st.Vk == 0) errs.Add($"{where}：未設定按鍵");
+                    if (st.Vk == 0) errs.Add(Lang.F("{0}：未設定按鍵", where));
                     break;
                 case StepKind.Image:
                     CheckImages(s, st.Image, where, errs);
                     break;
                 case StepKind.Loop:
-                    if (st.Body.Count == 0) errs.Add($"{where}：循環入面冇步驟");
+                    if (st.Body.Count == 0) errs.Add(Lang.F("{0}：循環入面冇步驟", where));
                     CheckSteps(s, st.Body, where, errs);
                     break;
                 case StepKind.If:
-                    if (st.Sub == null) { errs.Add($"{where}：條件唔見咗"); break; }
+                    if (st.Sub == null) { errs.Add(Lang.F("{0}：條件唔見咗", where)); break; }
                     CheckCond(s, st.Sub, $"{where}「{st.Sub.Name}」", errs);
                     CheckSteps(s, st.Sub.Steps, where, errs);
                     break;
@@ -519,11 +524,11 @@ public static class ScriptRunner
         }
     }
 
-    public static void Stop(Script s, string text = "已停止")
+    public static void Stop(Script s, string? text = null)
     {
         if (!Running.Remove(s.Id, out var cts)) return;
         try { cts.Cancel(); } catch { }
-        Status?.Invoke(s.Id, text);
+        Status?.Invoke(s.Id, text ?? Lang.T("已停止"));
         Changed?.Invoke();
     }
 
@@ -577,7 +582,7 @@ public static class ScriptRunner
         var (bg, proc, title) = OnUi(() => (s.Background, s.TargetProcess, s.TargetTitle));
         if (!bg) return new RunCtx(OwnWindow(), 0);
         var h = Win.Find(proc, title);
-        if (h == 0) throw new InvalidOperationException($"搵唔到背景程式視窗（{proc} - {title}），佢係咪閂咗？");
+        if (h == 0) throw new InvalidOperationException(Lang.F("搵唔到背景程式視窗（{0} - {1}），佢係咪閂咗？", proc, title));
         return new RunCtx(null, h);
     }
 
@@ -587,8 +592,21 @@ public static class ScriptRunner
         return f != null && f.Visible && f.WindowState != FormWindowState.Minimized ? f.Bounds : (Rectangle?)null;
     });
 
+    // 而家行緊邊個腳本（跟住 async 流程走，IF 框嗰啲 Task 都會帶埋），用嚟攞運行速度
+    private static readonly AsyncLocal<Script?> Current = new();
+
+    /// <summary>按腳本嘅運行速度調整時間：2.0x = 時間減半；0.5x = 時間加倍。運行中改速度即時生效。</summary>
+    private static TimeSpan Scaled(double seconds)
+    {
+        double speed = Math.Clamp(Current.Value?.Speed ?? 1.0, 0.5, 3.0);
+        return TimeSpan.FromSeconds(Math.Max(0, seconds / speed));
+    }
+
+    private static double SpeedNow => Math.Clamp(Current.Value?.Speed ?? 1.0, 0.5, 3.0);
+
     private static async Task RunAsync(Script s, CancellationToken ct)
     {
+        Current.Value = s;
         int round = 0;
         var held = new Held();
         // 每個 IF 框自己一條線
@@ -599,7 +617,7 @@ public static class ScriptRunner
             if (OnUi(() => s.Steps.Count) == 0)
             {
                 // 冇主步驟：淨係行 IF 框，直到撳停止
-                Report(s, "監察緊 IF 條件…");
+                Report(s, Lang.T("監察緊 IF 條件…"));
                 await Task.Delay(Timeout.Infinite, ct);
             }
             do
@@ -612,20 +630,20 @@ public static class ScriptRunner
                 for (int i = 0; i < steps.Count; i++)
                 {
                     ct.ThrowIfCancellationRequested();
-                    Report(s, $"{(loop ? $"第 {round} 輪 · " : "")}步驟 {i + 1}/{steps.Count}：{Step.KindName(steps[i].Kind)}");
+                    Report(s, Lang.F("{0}步驟 {1}/{2}：{3}", (loop ? Lang.F("第 {0} 輪 · ", round) : ""), i + 1, steps.Count, Step.KindName(steps[i].Kind)));
                     try { await RunStep(steps[i], dir, exclude, held, ct); }
                     catch (LoopBreak) { } // 唔喺循環入面嘅中斷：當冇事
                 }
                 if (!loop) break;
                 await Task.Delay(50, ct); // 一直行時唔好食晒 CPU
             } while (!ct.IsCancellationRequested);
-            Post(() => { if (IsRunning(s)) Stop(s, $"{DateTime.Now:HH:mm:ss} 完成"); });
+            Post(() => { if (IsRunning(s)) Stop(s, Lang.F("{0:HH:mm:ss} 完成", DateTime.Now)); });
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             AppPaths.LogError("運行腳本 " + s.Name, ex);
-            Post(() => Stop(s, "出錯：" + ex.Message));
+            Post(() => Stop(s, Lang.T("出錯：") + ex.Message));
         }
         finally
         {
@@ -666,6 +684,7 @@ public static class ScriptRunner
     /// <summary>一個 IF 框：一直檢查條件，成立就行佢入面嘅步驟。</summary>
     private static async Task RunIfAsync(Script s, string ifId, CancellationToken ct)
     {
+        Current.Value = s;
         var held = new Held();
         string key = s.Id + "/" + ifId;
         int fired = 0;
@@ -702,14 +721,14 @@ public static class ScriptRunner
                             nextTime = nextTime.Value.AddDays(1);
                         }
                         else if (nextTime != null && fired == 0)
-                            Report(key, $"等緊 {nextTime:MM-dd HH:mm:ss}");
+                            Report(key, Lang.F("等緊 {0:MM-dd HH:mm:ss}", nextTime));
                         break;
                     }
                     case CondKind.Countdown:
                     {
-                        double left = (double)b.Seconds - (DateTime.Now - countdownStart).TotalSeconds;
+                        double left = ((double)b.Seconds - (DateTime.Now - countdownStart).TotalSeconds * SpeedNow) / SpeedNow; // 倒數都跟速度
                         if (left <= 0) ok = true;
-                        else Report(key, $"倒數 {Math.Ceiling(left)} 秒" + (fired > 0 ? $"（已觸發 {fired} 次）" : ""));
+                        else Report(key, Lang.F("倒數 {0} 秒", Math.Ceiling(left)) + (fired > 0 ? Lang.F("（已觸發 {0} 次）", fired) : ""));
                         break;
                     }
                 }
@@ -717,7 +736,7 @@ public static class ScriptRunner
                 if (ok)
                 {
                     fired++;
-                    Report(key, $"{DateTime.Now:HH:mm:ss} 觸發第 {fired} 次");
+                    Report(key, Lang.F("{0:HH:mm:ss} 觸發第 {1} 次", DateTime.Now, fired));
                     var excl = MakeCtx(s);
                     held.Ctx = excl;
                     for (int i = 0; i < b.Steps.Count; i++)
@@ -729,14 +748,14 @@ public static class ScriptRunner
                     countdownStart = DateTime.Now;
                 }
                 double wait = b.UsesInterval ? Math.Max(0.1, (double)b.Interval) : 0.2;
-                await Task.Delay(TimeSpan.FromSeconds(wait), ct);
+                await Task.Delay(b.UsesInterval ? Scaled(wait) : TimeSpan.FromSeconds(wait), ct);
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             AppPaths.LogError("IF 條件", ex);
-            Report(key, "出錯：" + ex.Message);
+            Report(key, Lang.T("出錯：") + ex.Message);
         }
         finally
         {
@@ -759,7 +778,7 @@ public static class ScriptRunner
                 {
                     foreach (var vk in all) { exclude.KeyDown(vk, (st.Mods & Keys.Alt) != 0); held.Keys.Add(vk); Thread.Sleep(15); }
                 }
-                if (st.Mode == PressMode.Hold) await Task.Delay(TimeSpan.FromSeconds((double)st.Hold), ct);
+                if (st.Mode == PressMode.Hold) await Task.Delay(Scaled((double)st.Hold), ct);
                 if (st.Mode != PressMode.Down)
                 {
                     foreach (var vk in all.Reverse()) { exclude.KeyUp(vk, (st.Mods & Keys.Alt) != 0); held.Keys.Remove(vk); Thread.Sleep(15); }
@@ -773,7 +792,7 @@ public static class ScriptRunner
             }
                 break;
             case StepKind.Wait:
-                await Task.Delay(TimeSpan.FromSeconds((double)st.Seconds), ct);
+                await Task.Delay(Scaled((double)st.Seconds), ct);
                 break;
             case StepKind.If:
                 // IF 入面嘅 IF：行到呢步就檢查一次，成立先行入面嘅步驟
@@ -819,7 +838,7 @@ public static class ScriptRunner
             ctx.MouseDown(x, y, right);
             if (right) held.Right = true; else held.Left = true;
         }
-        if (mode == PressMode.Hold) await Task.Delay(TimeSpan.FromSeconds((double)hold), ct);
+        if (mode == PressMode.Hold) await Task.Delay(Scaled((double)hold), ct);
         if (mode != PressMode.Down)
         {
             ctx.MouseUp(x, y, right, move: mode == PressMode.Up);
@@ -936,7 +955,7 @@ public sealed class ScriptsPage : Panel
         };
         _grid.DeleteRequested += sc =>
         {
-            if (MessageBox.Show(FindForm(), $"刪除腳本「{sc.Name}」？", "我的腳本", MessageBoxButtons.YesNo,
+            if (MessageBox.Show(FindForm(), Lang.F("刪除腳本「{0}」？", sc.Name), Lang.T("我的腳本"), MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question) != DialogResult.Yes) return;
             ScriptRunner.Stop(sc);
             try { Directory.Delete(sc.Dir, true); } catch (Exception ex) { AppPaths.LogError("刪除腳本", ex); }
@@ -947,8 +966,8 @@ public sealed class ScriptsPage : Panel
         {
             var copy = new Script
             {
-                Name = sc.Name + " (副本)", Loop = sc.Loop, Steps = sc.Steps.Select(x => x.Clone()).ToList(),
-                Background = sc.Background, TargetProcess = sc.TargetProcess, TargetTitle = sc.TargetTitle,
+                Name = sc.Name + Lang.T(" (副本)"), Loop = sc.Loop, Steps = sc.Steps.Select(x => x.Clone()).ToList(),
+                Background = sc.Background, TargetProcess = sc.TargetProcess, TargetTitle = sc.TargetTitle, Speed = sc.Speed,
                 Ifs = sc.Ifs.Select(x => x.Clone()).ToList()
             };
             try
@@ -963,7 +982,7 @@ public sealed class ScriptsPage : Panel
             _grid.Refresh2();
         };
 
-        var card = new CardPanel { Title = "我的腳本", Hint = "撳「+」新增腳本；撳腳本睇預覽，再撳「修改」入去改；右鍵可以複製 / 刪除。入咗預覽頁先可以用快捷鍵開始 / 停止。" };
+        var card = new CardPanel { Title = Lang.T("我的腳本"), Hint = Lang.T("撳「+」新增腳本；撳腳本睇預覽，再撳「修改」入去改；右鍵可以複製 / 刪除。入咗預覽頁先可以用快捷鍵開始 / 停止。") };
         card.SetContent(_grid);
         _listView.AddRow(card);
         _listView.Dock = DockStyle.Fill;
@@ -1003,7 +1022,7 @@ public sealed class ScriptsPage : Panel
     {
         for (int i = 1; ; i++)
         {
-            string n = "腳本 " + i;
+            string n = Lang.T("腳本 ") + i;
             if (_scripts.All(s => s.Name != n)) return n;
         }
     }
@@ -1068,10 +1087,10 @@ internal sealed class ScriptGrid : Control
         try { _menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
         _menu.BackColor = Ui.CardHi;
         _menu.ForeColor = Ui.Text;
-        _menu.Items.Add("預覽", null, (_, _) => { if (Valid(_menuIndex)) PreviewRequested?.Invoke(_scripts[_menuIndex]); });
-        _menu.Items.Add("修改", null, (_, _) => { if (Valid(_menuIndex)) EditRequested?.Invoke(_scripts[_menuIndex]); });
-        _menu.Items.Add("複製", null, (_, _) => { if (Valid(_menuIndex)) CopyRequested?.Invoke(_scripts[_menuIndex]); });
-        _menu.Items.Add("刪除", null, (_, _) => { if (Valid(_menuIndex)) DeleteRequested?.Invoke(_scripts[_menuIndex]); });
+        _menu.Items.Add(Lang.T("預覽"), null, (_, _) => { if (Valid(_menuIndex)) PreviewRequested?.Invoke(_scripts[_menuIndex]); });
+        _menu.Items.Add(Lang.T("修改"), null, (_, _) => { if (Valid(_menuIndex)) EditRequested?.Invoke(_scripts[_menuIndex]); });
+        _menu.Items.Add(Lang.T("複製"), null, (_, _) => { if (Valid(_menuIndex)) CopyRequested?.Invoke(_scripts[_menuIndex]); });
+        _menu.Items.Add(Lang.T("刪除"), null, (_, _) => { if (Valid(_menuIndex)) DeleteRequested?.Invoke(_scripts[_menuIndex]); });
         ScriptRunner.Status += (_, _) => Invalidate();
     }
 
@@ -1130,7 +1149,7 @@ internal sealed class ScriptGrid : Control
                 int top = r.Y + (r.Height - ph - lh - Ui.S(2)) / 2;
                 TextRenderer.DrawText(g, "+", pf, new Rectangle(r.X, top, r.Width, ph),
                     hover ? Ui.Accent : Ui.TextFaint, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
-                TextRenderer.DrawText(g, "新增腳本", lf, new Rectangle(r.X, top + ph + Ui.S(2), r.Width, lh),
+                TextRenderer.DrawText(g, Lang.T("新增腳本"), lf, new Rectangle(r.X, top + ph + Ui.S(2), r.Width, lh),
                     hover ? Ui.Accent : Ui.TextFaint, TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
                 continue;
             }
@@ -1140,10 +1159,10 @@ internal sealed class ScriptGrid : Control
             int pad = Ui.S(12);
             TextRenderer.DrawText(g, sc.Name, Ui.F(10.5f, FontStyle.Bold), new Rectangle(r.X + pad, r.Y + pad, r.Width - pad * 2 - Ui.S(14), Ui.S(22)),
                 Ui.Text, TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
-            string info = $"{sc.Steps.Count} 個步驟" + (sc.Ifs.Count > 0 ? $" · {sc.Ifs.Count} 個 IF" : "") + $" · {(sc.Loop ? "一直行" : "行一次")}";
+            string info = Lang.F("{0} 個步驟", sc.Steps.Count) + (sc.Ifs.Count > 0 ? Lang.F(" · {0} 個 IF", sc.Ifs.Count) : "") + " · " + (sc.Loop ? Lang.T("一直行") : Lang.T("行一次"));
             TextRenderer.DrawText(g, info, Ui.F(8.75f), new Point(r.X + pad, r.Y + pad + Ui.S(26)), Ui.TextDim, TextFormatFlags.NoPadding);
-            string hk = sc.Hotkey.IsEmpty ? "冇快捷鍵" : "快捷鍵 " + sc.Hotkey;
-            TextRenderer.DrawText(g, run ? "● 運行中" : hk, Ui.F(8.75f), new Point(r.X + pad, r.Bottom - pad - Ui.S(16)),
+            string hk = sc.Hotkey.IsEmpty ? Lang.T("冇快捷鍵") : Lang.T("快捷鍵 ") + sc.Hotkey;
+            TextRenderer.DrawText(g, run ? Lang.T("● 運行中") : hk, Ui.F(8.75f), new Point(r.X + pad, r.Bottom - pad - Ui.S(16)),
                 run ? Ui.Success : Ui.TextFaint, TextFormatFlags.NoPadding);
         }
     }
@@ -1211,7 +1230,7 @@ internal sealed class ScriptEditor : Panel
         _stack.Dock = DockStyle.Fill;
 
         // ---- 頂行：返回、名、運行方式、快捷鍵、開始 ----
-        var back = new FancyButton { Text = "← 返回", Kind = BtnKind.Ghost, Font = Ui.F(9.75f) };
+        var back = new FancyButton { Text = Lang.T("← 返回"), Kind = BtnKind.Ghost, Font = Ui.F(9.75f) };
         back.Size = new Size(Ui.S(84), Ui.S(34));
         back.Click += (_, _) => { if (ScriptRunner.IsRunning(_sc)) return; Commit(); Back?.Invoke(); };
         _back = back;
@@ -1221,14 +1240,14 @@ internal sealed class ScriptEditor : Panel
         nameBox.Leave += (_, _) => Commit(); // 改完名離開格仔就順手改資料夾名
         nameBox.TextChanged += (_, _) =>
         {
-            _sc.Name = string.IsNullOrWhiteSpace(nameBox.Text) ? "未命名" : nameBox.Text.Trim();
+            _sc.Name = string.IsNullOrWhiteSpace(nameBox.Text) ? Lang.T("未命名") : nameBox.Text.Trim();
             _sc.Save();
         };
 
         _mode = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(96), Ui.S(34)) };
         _mode.Click += (_, _) => { _sc.Loop = !_sc.Loop; _sc.Save(); UpdateButtons(); };
 
-        var hkLabel = Ui.Text_("快捷鍵", Ui.TextDim, Ui.F(9.75f), new Padding(0));
+        var hkLabel = Ui.Text_(Lang.T("快捷鍵"), Ui.TextDim, Ui.F(9.75f), new Padding(0));
         var hkBox = new HotkeyBox { Hotkey = sc.Hotkey };
         hkBox.Changed += () => { _sc.Hotkey = hkBox.Hotkey; _sc.Save(); };
         var hkHost = new InputHost(hkBox, Ui.S(130));
@@ -1242,7 +1261,7 @@ internal sealed class ScriptEditor : Panel
 
         // ---- 步驟 ----
         _steps = new StepList(sc, sc.Steps, AddIf, nestedIf: true);
-        _stepsCard = new CardPanel { Title = "主線程", Hint = "由上至下逐步做；「循環」可以將幾步重複 N 次；IF 框同主線程同時行。「一直行」全部一直 loop；「行一次」主線程完咗 IF 都停。" };
+        _stepsCard = new CardPanel { Title = Lang.T("主線程"), Hint = Lang.T("由上至下逐步做；「循環」可以將幾步重複 N 次；IF 框同主線程同時行。「一直行」全部一直 loop；「行一次」主線程完咗 IF 都停。") };
         _stepsCard.SetContent(_steps);
 
         _stack.AddRow(top);
@@ -1278,14 +1297,14 @@ internal sealed class ScriptEditor : Panel
         _sc.Ifs.Add(b);
         _sc.Save();
         AddIfCard(b);
-        if (ScriptRunner.IsRunning(_sc)) _steps.SetStatus("新加嘅 IF 框要停咗再開始先會行");
+        if (ScriptRunner.IsRunning(_sc)) _steps.SetStatus(Lang.T("新加嘅 IF 框要停咗再開始先會行"));
     }
 
     private string NextIfName()
     {
         for (int i = 1; ; i++)
         {
-            string n = "IF 條件 " + i;
+            string n = Lang.T("IF 條件 ") + i;
             if (_sc.Ifs.All(x => x.Name != n)) return n;
         }
     }
@@ -1299,7 +1318,7 @@ internal sealed class ScriptEditor : Panel
         _ifPanels[b.Id] = panel;
         panel.DeleteRequested += () =>
         {
-            if (MessageBox.Show(FindForm(), "刪除呢個 IF 框同入面嘅步驟？", "我的腳本", MessageBoxButtons.YesNo,
+            if (MessageBox.Show(FindForm(), Lang.T("刪除呢個 IF 框同入面嘅步驟？"), Lang.T("我的腳本"), MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question) != DialogResult.Yes) return;
             var images = new[] { b.Image }.Concat(b.Steps.Select(x => x.Image)).SelectMany(ImageList.Split).Distinct().ToList();
             _sc.Ifs.Remove(b);
@@ -1315,9 +1334,9 @@ internal sealed class ScriptEditor : Panel
     private void UpdateButtons()
     {
         bool run = ScriptRunner.IsRunning(_sc);
-        _start.Text = run ? "停止" : "開始";
+        _start.Text = run ? Lang.T("停止") : Lang.T("開始");
         _start.Kind = run ? BtnKind.Danger : BtnKind.Success;
-        _mode.Text = _sc.Loop ? "一直行" : "行一次";
+        _mode.Text = _sc.Loop ? Lang.T("一直行") : Lang.T("行一次");
         if (_back != null) _back.Enabled = !run;
         _start.Invalidate();
         _mode.Invalidate();
@@ -1414,7 +1433,7 @@ internal sealed class StepList : Panel
         }
         if (inLoop)
         {
-            var b = new FancyButton { Text = "+ 中斷循環", Kind = BtnKind.Ghost, Dashed = true, Font = Ui.F(9.5f) };
+            var b = new FancyButton { Text = Lang.T("+ 中斷循環"), Kind = BtnKind.Ghost, Dashed = true, Font = Ui.F(9.5f) };
             b.Size = new Size(Ui.S(116), Ui.S(34));
             b.Click += (_, _) => AddStep(StepKind.Break);
             _addButtons.Add(b);
@@ -1423,9 +1442,9 @@ internal sealed class StepList : Panel
         if (nestedIf)
         {
             // IF 判斷：行到呢步檢查一次
-            var b = new FancyButton { Text = "+ IF 條件", Kind = BtnKind.Ghost, Dashed = true, Font = Ui.F(9.5f, FontStyle.Bold) };
+            var b = new FancyButton { Text = Lang.T("+ IF 條件"), Kind = BtnKind.Ghost, Dashed = true, Font = Ui.F(9.5f, FontStyle.Bold) };
             b.Size = new Size(Ui.S(116), Ui.S(34));
-            _tip.SetToolTip(b, "行到呢步就檢查一次，成立先做入面嘅步驟");
+            _tip.SetToolTip(b, Lang.T("行到呢步就檢查一次，成立先做入面嘅步驟"));
             b.Click += (_, _) => AddStep(StepKind.If);
             _addButtons.Add(b);
             Controls.Add(b);
@@ -1433,15 +1452,15 @@ internal sealed class StepList : Panel
         if (parallelIf != null)
         {
             // IF 框：同主線程同時行，一直監察
-            var b = new FancyButton { Text = "+ IF 框（同時行）", Kind = BtnKind.Ghost, Dashed = true, Font = Ui.F(9.5f, FontStyle.Bold) };
+            var b = new FancyButton { Text = Lang.T("+ IF 框（同時行）"), Kind = BtnKind.Ghost, Dashed = true, Font = Ui.F(9.5f, FontStyle.Bold) };
             b.Size = new Size(Ui.S(150), Ui.S(34));
-            _tip.SetToolTip(b, "開一個同主線程同時行嘅 IF 框，一直監察條件");
+            _tip.SetToolTip(b, Lang.T("開一個同主線程同時行嘅 IF 框，一直監察條件"));
             b.Click += (_, _) => parallelIf();
             _addButtons.Add(b);
             Controls.Add(b);
         }
         _status = Ui.Text_("", Ui.Text, Ui.F(9f), new Padding(0));
-        _empty = Ui.Text_("未有步驟，撳下面嘅掣加。", Ui.TextFaint, Ui.F(9.5f), new Padding(0));
+        _empty = Ui.Text_(Lang.T("未有步驟，撳下面嘅掣加。"), Ui.TextFaint, Ui.F(9.5f), new Padding(0));
         Controls.Add(_status);
         Controls.Add(_empty);
         Rebuild();
@@ -1507,7 +1526,7 @@ internal sealed class StepList : Panel
     private void AddStep(StepKind kind)
     {
         var st = new Step { Kind = kind };
-        if (kind == StepKind.If) st.Sub = new IfBlock { Name = "IF 條件" };
+        if (kind == StepKind.If) st.Sub = new IfBlock { Name = Lang.T("IF 條件") };
         if (kind == StepKind.Click)
         {
             var p = Cursor.Position;
@@ -1579,7 +1598,7 @@ internal sealed class StepList : Panel
             {
                 // 一格搞掂：撳一下，再撳鍵（可以組合鍵，例如 Shift + Alt + T）
                 var keyBox = new KeyCaptureBox(Ui.S(190)) { Vk = st.Vk, Mods = st.Mods };
-                _tip.SetToolTip(keyBox, "撳一下，再撳要按嘅鍵或者組合鍵（例如 Shift + Alt + T）。右鍵可以清除。");
+                _tip.SetToolTip(keyBox, Lang.T("撳一下，再撳要按嘅鍵或者組合鍵（例如 Shift + Alt + T）。右鍵可以清除。"));
                 keyBox.Changed += () => { st.Vk = keyBox.Vk; st.Mods = keyBox.Mods; Changed(false); };
                 list.Add(keyBox);
                 AddModeControls(list, st);
@@ -1587,16 +1606,16 @@ internal sealed class StepList : Panel
             }
             case StepKind.Click:
             {
-                var btn = new FancyButton { Text = st.Right ? "右鍵" : "左鍵", Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(58), Ui.S(34)) };
-                btn.Click += (_, _) => { st.Right = !st.Right; btn.Text = st.Right ? "右鍵" : "左鍵"; Changed(false); };
+                var btn = new FancyButton { Text = st.Right ? Lang.T("右鍵") : Lang.T("左鍵"), Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(58), Ui.S(34)) };
+                btn.Click += (_, _) => { st.Right = !st.Right; btn.Text = st.Right ? Lang.T("右鍵") : Lang.T("左鍵"); Changed(false); };
                 var x = new NumberBox(Ui.S(82)) { Minimum = -10000, Maximum = 20000 };
                 x.Value = st.X;
                 x.ValueChanged += (_, _) => { st.X = (int)x.Value; Changed(false); };
                 var y = new NumberBox(Ui.S(82)) { Minimum = -10000, Maximum = 20000 };
                 y.Value = st.Y;
                 y.ValueChanged += (_, _) => { st.Y = (int)y.Value; Changed(false); };
-                var pickPos = new FancyButton { Text = "座標", Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(58), Ui.S(34)) };
-                _tip.SetToolTip(pickPos, "撳完 3 秒內將滑鼠移去目標位置");
+                var pickPos = new FancyButton { Text = Lang.T("座標"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(58), Ui.S(34)) };
+                _tip.SetToolTip(pickPos, Lang.T("撳完 3 秒內將滑鼠移去目標位置"));
                 pickPos.Click += (_, _) => PickPosition(pickPos, x, y);
                 list.AddRange(new Control[] { btn, L("X"), x, L("Y"), y, pickPos });
                 AddModeControls(list, st);
@@ -1607,28 +1626,29 @@ internal sealed class StepList : Panel
                 var count = new NumberBox(Ui.S(90)) { Minimum = 0, Maximum = 99999, Increment = 1 };
                 count.Value = st.Count;
                 count.ValueChanged += (_, _) => { st.Count = (int)count.Value; Changed(false); };
-                _tip.SetToolTip(count, "0 = 一直重複，直到撳停止");
-                list.AddRange(new Control[] { L("重複"), count, L("次（0 = 一直重複）", Ui.TextFaint), new LoopBlock(_sc, st.Body) });
+                _tip.SetToolTip(count, Lang.T("0 = 一直重複，直到撳停止"));
+                list.AddRange(new Control[] { L(Lang.T("重複")), count, L(Lang.T("次（0 = 一直重複）"), Ui.TextFaint), new LoopBlock(_sc, st.Body) });
                 break;
             }
             case StepKind.Break:
             {
-                list.Add(L("跳出最近嗰個循環，做循環之後嘅步驟", Ui.TextFaint));
+                list.Add(L(Lang.T("跳出最近嗰個循環，做循環之後嘅步驟"), Ui.TextFaint));
                 break;
             }
             case StepKind.If:
             {
-                st.Sub ??= new IfBlock { Name = "IF 條件" };
+                st.Sub ??= new IfBlock { Name = Lang.T("IF 條件") };
                 var panel = new IfPanel(_sc, st.Sub, nested: true, inLoop: _inLoop);
                 list.Add(panel);
                 break;
             }
             case StepKind.Wait:
             {
-                var sec = new NumberBox(Ui.S(100)) { Minimum = 0.1m, Maximum = 3600m, DecimalPlaces = 1, Increment = 0.1m };
-                sec.Value = st.Seconds;
-                sec.ValueChanged += (_, _) => { st.Seconds = sec.Value; Changed(false); };
-                list.AddRange(new Control[] { sec, L("秒") });
+                // 介面用 ms，內部照存秒（舊腳本唔使轉換）
+                var ms = new NumberBox(Ui.S(110)) { Minimum = 1m, Maximum = 3_600_000m, DecimalPlaces = 0, Increment = 100m };
+                ms.Value = Math.Round(st.Seconds * 1000m);
+                ms.ValueChanged += (_, _) => { st.Seconds = ms.Value / 1000m; Changed(false); };
+                list.AddRange(new Control[] { ms, L("ms") });
                 break;
             }
             case StepKind.Image:
@@ -1637,13 +1657,13 @@ internal sealed class StepList : Panel
                 var sim = new NumberBox(Ui.S(90)) { Minimum = 10, Maximum = 100, Increment = 1 };
                 sim.Value = st.Similarity;
                 sim.ValueChanged += (_, _) => { st.Similarity = (int)sim.Value; Changed(false); };
-                list.AddRange(new Control[] { tile, L("相似度"), sim, L("%"), L("搵唔到就跳過", Ui.TextFaint) });
+                list.AddRange(new Control[] { tile, L(Lang.T("相似度")), sim, L("%"), L(Lang.T("搵唔到就跳過"), Ui.TextFaint) });
                 break;
             }
         }
-        var up = SmallButton("↑", "向上移", () => MoveStep(i, -1));
-        var down = SmallButton("↓", "向下移", () => MoveStep(i, 1));
-        var del = SmallButton("✕", "刪除呢個步驟", () => Delete(i));
+        var up = SmallButton("↑", Lang.T("向上移"), () => MoveStep(i, -1));
+        var down = SmallButton("↓", Lang.T("向下移"), () => MoveStep(i, 1));
+        var del = SmallButton("✕", Lang.T("刪除呢個步驟"), () => Delete(i));
         up.Enabled = i > 0;
         down.Enabled = i < _steps.Count - 1;
         list.Add(del);
@@ -1656,7 +1676,7 @@ internal sealed class StepList : Panel
     private void AddModeControls(List<Control> list, Step st)
     {
         var mode = new FancyButton { Text = Step.ModeName(st.Mode), Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(58), Ui.S(34)) };
-        _tip.SetToolTip(mode, "撳住：按下 → 等 → 彈起\n按下：淨係按落去（之後用「彈起」放開）\n彈起：淨係放開");
+        _tip.SetToolTip(mode, Lang.T("撳住：按下 → 等 → 彈起\n按下：淨係按落去（之後用「彈起」放開）\n彈起：淨係放開"));
         mode.Click += (_, _) => BeginInvoke(() =>
         {
             st.Mode = st.Mode switch { PressMode.Hold => PressMode.Down, PressMode.Down => PressMode.Up, _ => PressMode.Hold };
@@ -1665,11 +1685,11 @@ internal sealed class StepList : Panel
         list.Add(mode);
         if (st.Mode == PressMode.Hold)
         {
-            var hold = new NumberBox(Ui.S(78)) { Minimum = 0.01m, Maximum = 60m, DecimalPlaces = 2, Increment = 0.05m };
-            hold.Value = st.Hold;
-            hold.ValueChanged += (_, _) => { st.Hold = hold.Value; Changed(false); };
+            var hold = new NumberBox(Ui.S(90)) { Minimum = 10m, Maximum = 60_000m, DecimalPlaces = 0, Increment = 50m };
+            hold.Value = Math.Round(st.Hold * 1000m);
+            hold.ValueChanged += (_, _) => { st.Hold = hold.Value / 1000m; Changed(false); };
             list.Add(hold);
-            list.Add(L("秒"));
+            list.Add(L("ms"));
         }
     }
 
@@ -1700,7 +1720,7 @@ internal sealed class StepList : Panel
             var p = Cursor.Position;
             x.Value = p.X;
             y.Value = p.Y;
-            btn.Text = "座標";
+            btn.Text = Lang.T("座標");
             btn.Enabled = true;
         };
         t.Start();
@@ -1867,7 +1887,7 @@ internal sealed class ImageTile : Control
         {
             using var pen = new Pen(_hover ? Ui.Accent : Ui.BorderHi, Ui.S(1.2f)) { DashStyle = DashStyle.Dash };
             g.DrawPath(pen, path);
-            TextRenderer.DrawText(g, "截圖", Ui.F(9f), Rectangle.Round(r), _hover ? Ui.Accent : Ui.TextFaint,
+            TextRenderer.DrawText(g, Lang.T("截圖"), Ui.F(9f), Rectangle.Round(r), _hover ? Ui.Accent : Ui.TextFaint,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
     }
@@ -1889,8 +1909,8 @@ internal sealed class ImageTile : Control
                 try { _menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
                 _menu.BackColor = Ui.CardHi;
                 _menu.ForeColor = Ui.Text;
-                _menu.Items.Add("截圖框圖", null, (_, _) => Snip());
-                _menu.Items.Add("從檔案揀…", null, (_, _) => PickFile());
+                _menu.Items.Add(Lang.T("截圖框圖"), null, (_, _) => Snip());
+                _menu.Items.Add(Lang.T("從檔案揀…"), null, (_, _) => PickFile());
             }
             _menu.Show(this, e.Location);
         }
@@ -1915,7 +1935,7 @@ internal sealed class ImageTile : Control
 
     private void PickFile()
     {
-        using var dlg = new OpenFileDialog { Title = "揀圖片", Filter = "圖片|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有檔案|*.*" };
+        using var dlg = new OpenFileDialog { Title = Lang.T("揀圖片"), Filter = Lang.T("圖片|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有檔案|*.*") };
         if (dlg.ShowDialog(FindForm()) == DialogResult.OK) Picked?.Invoke(dlg.FileName);
     }
 
@@ -2026,7 +2046,7 @@ internal sealed class KeyCaptureBox : Control
         try { _menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
         _menu.BackColor = Ui.CardHi;
         _menu.ForeColor = Ui.Text;
-        _menu.Items.Add("清除", null, (_, _) => Set(0, Keys.None));
+        _menu.Items.Add(Lang.T("清除"), null, (_, _) => Set(0, Keys.None));
     }
 
     public int Vk { get => _vk; set { _vk = value; Invalidate(); } }
@@ -2034,7 +2054,7 @@ internal sealed class KeyCaptureBox : Control
 
     public static string Format(Keys mods, int vk)
     {
-        if (vk == 0) return "（無）";
+        if (vk == 0) return Lang.T("（無）");
         var parts = new List<string>();
         if (mods.HasFlag(Keys.Control)) parts.Add("Ctrl");
         if (mods.HasFlag(Keys.Shift)) parts.Add("Shift");
@@ -2119,7 +2139,7 @@ internal sealed class KeyCaptureBox : Control
         base.OnGotFocus(e);
         _mainPressed = false;
         _pendingMods = Keys.None;
-        _preview = "請撳鍵…";
+        _preview = Lang.T("請撳鍵…");
         Invalidate();
     }
 
@@ -2203,22 +2223,22 @@ internal sealed class IfPanel : TintPanel
             });
         }
 
-        _delete = new FancyButton { Text = "刪除 IF", Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(78), Ui.S(34)) };
+        _delete = new FancyButton { Text = Lang.T("刪除 IF"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(78), Ui.S(34)) };
         _delete.Click += (_, _) => DeleteRequested?.Invoke();
         Controls.Add(_delete);
         _delete.Visible = !nested; // IF 步驟用嗰行嘅 ✕ 刪
 
         // 標題列：摺埋掣 + 可改嘅名 + 摘要
         _fold = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9f), Size = new Size(Ui.S(34), Ui.S(34)) };
-        _tip.SetToolTip(_fold, "摺埋 / 打開");
+        _tip.SetToolTip(_fold, Lang.T("摺埋 / 打開"));
         _fold.Click += (_, _) => { _b.Collapsed = !_b.Collapsed; Save(); ApplyFold(); };
         var nameBox = new TextBox { Text = b.Name, MaxLength = 40 };
         _nameHost = new InputHost(nameBox, Ui.S(220));
         nameBox.Font = Ui.F(10.5f, FontStyle.Bold);
-        _tip.SetToolTip(nameBox, "撳入去改名");
+        _tip.SetToolTip(nameBox, Lang.T("撳入去改名"));
         nameBox.TextChanged += (_, _) =>
         {
-            _b.Name = string.IsNullOrWhiteSpace(nameBox.Text) ? "IF 條件" : nameBox.Text.Trim();
+            _b.Name = string.IsNullOrWhiteSpace(nameBox.Text) ? Lang.T("IF 條件") : nameBox.Text.Trim();
             Save();
         };
         _summary = Ui.Text_("", Ui.TextFaint, Ui.F(9f), new Padding(0));
@@ -2248,7 +2268,7 @@ internal sealed class IfPanel : TintPanel
     /// <summary>摺埋時喺標題旁邊顯示：條件 · 步驟數 · 最新狀態。</summary>
     private void UpdateSummary()
     {
-        string t = $"如果{IfBlock.KindName(_b.Kind)} · {_b.Steps.Count} 個步驟";
+        string t = Lang.F("如果{0} · {1} 個步驟", IfBlock.KindName(_b.Kind), _b.Steps.Count);
         if (_lastStatus.Length > 0) t += " · " + _lastStatus;
         _summary.Text = _b.Collapsed ? t : "";
     }
@@ -2284,7 +2304,7 @@ internal sealed class IfPanel : TintPanel
         _opts.Clear();
 
         if (_nested && _b.Kind == CondKind.Countdown) _b.Kind = CondKind.ImageFound;
-        _cond.Add(L("如果", Ui.Text));
+        _cond.Add(L(Lang.T("如果"), Ui.Text));
         var kindBtn = new FancyButton { Text = IfBlock.KindName(_b.Kind) + "  ▾", Kind = BtnKind.Ghost, Font = Ui.F(9.75f) };
         kindBtn.Size = new Size(Ui.S(150), Ui.S(34));
         kindBtn.Click += (_, _) => _kindMenu.Show(kindBtn, new Point(0, kindBtn.Height + Ui.S(2)));
@@ -2297,14 +2317,14 @@ internal sealed class IfPanel : TintPanel
             {
                 var tile = new ImageStrip(_sc, () => _b.Image, v => { _b.Image = v; Save(); });
                 _cond.Add(tile);
-                _cond.Add(L("相似度"));
+                _cond.Add(L(Lang.T("相似度")));
                 _cond.Add(Num(Ui.S(84), 10, 100, _b.Similarity, 0, 1, v => _b.Similarity = (int)v));
                 _cond.Add(L("%"));
                 if (_b.Kind == CondKind.ImageFound)
                 {
-                    var chip = new ToggleChip("搵到就點擊") { Checked = _b.ClickFound };
+                    var chip = new ToggleChip(Lang.T("搵到就點擊")) { Checked = _b.ClickFound };
                     chip.Size = new Size(chip.Width, Ui.S(30));
-                    _tip.SetToolTip(chip, "搵到嗰陣順手喺圖片中心左鍵點一下，再做「然後做」嘅步驟");
+                    _tip.SetToolTip(chip, Lang.T("搵到嗰陣順手喺圖片中心左鍵點一下，再做「然後做」嘅步驟"));
                     chip.CheckedChanged += () => { _b.ClickFound = chip.Checked; Save(); };
                     _cond.Add(chip);
                 }
@@ -2315,11 +2335,11 @@ internal sealed class IfPanel : TintPanel
                 var x = Num(Ui.S(82), -10000, 20000, _b.X, 0, 1, v => _b.X = (int)v);
                 var y = Num(Ui.S(82), -10000, 20000, _b.Y, 0, 1, v => _b.Y = (int)v);
                 var swatch = new ColorSwatch(_b.Color);
-                _tip.SetToolTip(swatch, "撳一下自己揀顏色");
+                _tip.SetToolTip(swatch, Lang.T("撳一下自己揀顏色"));
                 swatch.ColorChanged += c => { _b.Color = c; Save(); };
-                var pick = new FancyButton { Text = "座標", Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(58), Ui.S(34)) };
-                _tip.SetToolTip(pick, "撳完 3 秒內將滑鼠移去目標位置，會一齊記低嗰點嘅顏色");
-                pick.Click += (_, _) => Countdown(pick, "座標", () =>
+                var pick = new FancyButton { Text = Lang.T("座標"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(58), Ui.S(34)) };
+                _tip.SetToolTip(pick, Lang.T("撳完 3 秒內將滑鼠移去目標位置，會一齊記低嗰點嘅顏色"));
+                pick.Click += (_, _) => Countdown(pick, Lang.T("座標"), () =>
                 {
                     var p = Cursor.Position;
                     x.Value = p.X;
@@ -2327,7 +2347,7 @@ internal sealed class IfPanel : TintPanel
                     var c = ScreenSearch.PixelAt(p.X, p.Y);
                     swatch.Value = (c.R << 16) | (c.G << 8) | c.B;
                 });
-                _cond.AddRange(new Control[] { L("X"), x, L("Y"), y, pick, L("顏色"), swatch, L("容差"),
+                _cond.AddRange(new Control[] { L("X"), x, L("Y"), y, pick, L(Lang.T("顏色")), swatch, L(Lang.T("容差")),
                     Num(Ui.S(78), 0, 255, _b.Tolerance, 0, 1, v => _b.Tolerance = (int)v) });
                 break;
             }
@@ -2338,18 +2358,18 @@ internal sealed class IfPanel : TintPanel
                 void SetTime() { _b.Time = $"{hh:00}:{mm:00}:{ss:00}"; }
                 _cond.AddRange(new Control[]
                 {
-                    Num(Ui.S(70), 0, 23, hh, 0, 1, v => { hh = (int)v; SetTime(); }), L("時"),
-                    Num(Ui.S(70), 0, 59, mm, 0, 1, v => { mm = (int)v; SetTime(); }), L("分"),
-                    Num(Ui.S(70), 0, 59, ss, 0, 1, v => { ss = (int)v; SetTime(); }), L("秒"),
-                    L(_nested ? "（行到呢步時已經過咗呢個時間）" : "（每日嗰個時間觸發）", Ui.TextFaint)
+                    Num(Ui.S(70), 0, 23, hh, 0, 1, v => { hh = (int)v; SetTime(); }), L(Lang.T("時")),
+                    Num(Ui.S(70), 0, 59, mm, 0, 1, v => { mm = (int)v; SetTime(); }), L(Lang.T("分")),
+                    Num(Ui.S(70), 0, 59, ss, 0, 1, v => { ss = (int)v; SetTime(); }), L(Lang.T("秒")),
+                    L(_nested ? Lang.T("（行到呢步時已經過咗呢個時間）") : Lang.T("（每日嗰個時間觸發）"), Ui.TextFaint)
                 });
                 break;
             }
             case CondKind.Countdown:
                 _cond.AddRange(new Control[]
                 {
-                    Num(Ui.S(100), 1, 86400, _b.Seconds, 1, 1, v => _b.Seconds = v), L("秒"),
-                    L("（由開始 / 上次觸發計起）", Ui.TextFaint)
+                    Num(Ui.S(100), 1, 86400, _b.Seconds, 1, 1, v => _b.Seconds = v), L(Lang.T("秒")),
+                    L(Lang.T("（由開始 / 上次觸發計起）"), Ui.TextFaint)
                 });
                 break;
         }
@@ -2357,11 +2377,11 @@ internal sealed class IfPanel : TintPanel
         // 第二行：檢查間隔、觸發後
         if (_b.UsesInterval && !_nested)
         {
-            _opts.Add(L("每"));
+            _opts.Add(L(Lang.T("每")));
             _opts.Add(Num(Ui.S(84), 0.1m, 60m, _b.Interval, 1, 0.1m, v => _b.Interval = v));
-            _opts.Add(L("秒檢查一次"));
+            _opts.Add(L(Lang.T("秒檢查一次")));
         }
-        _opts.Add(L("然後做：", Ui.Text));
+        _opts.Add(L(Lang.T("然後做："), Ui.Text));
 
         foreach (var c in _cond.Concat(_opts))
         {
@@ -2664,7 +2684,7 @@ internal sealed class SnipOverlay : Form
         // 提示（喺滑鼠所在嗰個螢幕頂中間）
         var screen = Screen.FromPoint(PointToScreen(_cur)).Bounds;
         screen.Offset(-_vs.X, -_vs.Y);
-        string hint = "拖一個框，框住要搵嘅圖片　·　Esc / 右鍵取消";
+        string hint = Lang.T("拖一個框，框住要搵嘅圖片　·　Esc / 右鍵取消");
         var hf = Ui.F(10.5f, FontStyle.Bold);
         var hs = TextRenderer.MeasureText(hint, hf);
         var hr = new Rectangle(screen.X + (screen.Width - hs.Width) / 2 - 16, screen.Y + 24, hs.Width + 32, hs.Height + 16);
@@ -2725,36 +2745,36 @@ internal static class Describe
 
     private static string Mode(PressMode m, decimal hold) => m switch
     {
-        PressMode.Down => "（按下）",
-        PressMode.Up => "（彈起）",
-        _ => $"（撳住 {D(hold)} 秒）"
+        PressMode.Down => Lang.T("（按下）"),
+        PressMode.Up => Lang.T("（彈起）"),
+        _ => Lang.F("（撳住 {0} ms）", Math.Round(hold * 1000m))
     };
 
     public static string Step(Step st) => st.Kind switch
     {
-        StepKind.Key => (st.Vk == 0 ? "（未設定）" : KeyCaptureBox.Format(st.Mods, st.Vk)) + " " + Mode(st.Mode, st.Hold),
-        StepKind.Click => $"{(st.Right ? "右鍵" : "左鍵")} ({st.X}, {st.Y}) {Mode(st.Mode, st.Hold)}",
-        StepKind.Wait => $"{D(st.Seconds)} 秒",
-        StepKind.Image => st.Image.Length == 0 ? "（未揀圖）" : $"{Count(st.Image)}相似度 {st.Similarity}%，搵到最似嗰張就點",
-        StepKind.Loop => st.Count == 0 ? "一直重複" : $"重複 {st.Count} 次",
-        StepKind.Break => "跳出最近嗰個循環",
-        StepKind.If => st.Sub == null ? "" : $"{st.Sub.Name}：如果{Cond(st.Sub, true)}",
+        StepKind.Key => (st.Vk == 0 ? Lang.T("（未設定）") : KeyCaptureBox.Format(st.Mods, st.Vk)) + " " + Mode(st.Mode, st.Hold),
+        StepKind.Click => $"{(st.Right ? Lang.T("右鍵") : Lang.T("左鍵"))} ({st.X}, {st.Y}) {Mode(st.Mode, st.Hold)}",
+        StepKind.Wait => $"{Math.Round(st.Seconds * 1000m)} ms",
+        StepKind.Image => st.Image.Length == 0 ? Lang.T("（未揀圖）") : Lang.F("{0}相似度 {1}%，搵到最似嗰張就點", Count(st.Image), st.Similarity),
+        StepKind.Loop => st.Count == 0 ? Lang.T("一直重複") : Lang.F("重複 {0} 次", st.Count),
+        StepKind.Break => Lang.T("跳出最近嗰個循環"),
+        StepKind.If => st.Sub == null ? "" : Lang.F("{0}：如果{1}", st.Sub.Name, Cond(st.Sub, true)),
         _ => ""
     };
 
     private static string Count(string images)
     {
         int n = ImageList.Split(images).Count;
-        return n > 1 ? $"{n} 張圖 · " : "";
+        return n > 1 ? Lang.F("{0} 張圖 · ", n) : "";
     }
 
     public static string Cond(IfBlock b, bool nested) => b.Kind switch
     {
-        CondKind.ImageFound => b.Image.Length == 0 ? "畫面搵到圖（未揀圖）" : $"畫面搵到圖（{Count(b.Image)}相似度 {b.Similarity}%{(b.ClickFound ? "，搵到就點擊" : "")}）",
-        CondKind.ImageNotFound => b.Image.Length == 0 ? "畫面搵唔到圖（未揀圖）" : $"畫面搵唔到圖（{Count(b.Image)}全部都搵唔到，相似度 {b.Similarity}%）",
-        CondKind.PixelColor => $"({b.X}, {b.Y}) 係 #{b.Color:X6}（容差 {b.Tolerance}）",
-        CondKind.Time => nested ? $"已經過咗 {b.Time}" : $"時間到 {b.Time}（每日）",
-        _ => $"倒數 {D(b.Seconds)} 秒"
+        CondKind.ImageFound => b.Image.Length == 0 ? Lang.T("畫面搵到圖（未揀圖）") : Lang.F("畫面搵到圖（{0}相似度 {1}%{2}）", Count(b.Image), b.Similarity, (b.ClickFound ? Lang.T("，搵到就點擊") : "")),
+        CondKind.ImageNotFound => b.Image.Length == 0 ? Lang.T("畫面搵唔到圖（未揀圖）") : Lang.F("畫面搵唔到圖（{0}全部都搵唔到，相似度 {1}%）", Count(b.Image), b.Similarity),
+        CondKind.PixelColor => Lang.F("({0}, {1}) 係 #{2:X6}（容差 {3}）", b.X, b.Y, b.Color, b.Tolerance),
+        CondKind.Time => nested ? Lang.F("已經過咗 {0}", b.Time) : Lang.F("時間到 {0}（每日）", b.Time),
+        _ => Lang.F("倒數 {0} 秒", D(b.Seconds))
     };
 
     /// <summary>步驟有冇圖（預覽顯示縮圖用）。</summary>
@@ -2825,7 +2845,7 @@ internal sealed class PreviewList : Control
         Ui.Smooth(g);
         if (_lines.Count == 0)
         {
-            TextRenderer.DrawText(g, "未有步驟", Ui.F(9.5f), new Point(0, Ui.S(6)), Ui.TextFaint, TextFormatFlags.NoPadding);
+            TextRenderer.DrawText(g, Lang.T("未有步驟"), Ui.F(9.5f), new Point(0, Ui.S(6)), Ui.TextFaint, TextFormatFlags.NoPadding);
             return;
         }
         var nf = Ui.F(9.5f, FontStyle.Bold);
@@ -2889,9 +2909,9 @@ internal sealed class ScriptViewer : Panel
     {
         _bgPick.Tag = _sc.Background ? null : "hidden";
         _bgPick.Visible = _sc.Background;
-        string label = _sc.TargetProcess.Length == 0 ? "揀程式…" : $"{_sc.TargetProcess} - {_sc.TargetTitle}";
+        string label = _sc.TargetProcess.Length == 0 ? Lang.T("揀程式…") : $"{_sc.TargetProcess} - {_sc.TargetTitle}";
         _bgPick.Text = label + "  ▾";
-        _tip.SetToolTip(_bgPick, _sc.TargetProcess.Length == 0 ? "揀要喺邊個程式入面運行" : label);
+        _tip.SetToolTip(_bgPick, _sc.TargetProcess.Length == 0 ? Lang.T("揀要喺邊個程式入面運行") : label);
         _flow?.PerformLayout();
     }
 
@@ -2903,7 +2923,7 @@ internal sealed class ScriptViewer : Panel
         _winMenu.BackColor = Ui.CardHi;
         _winMenu.ForeColor = Ui.Text;
         var wins = Win.List();
-        if (wins.Count == 0) _winMenu.Items.Add("（冇搵到視窗）").Enabled = false;
+        if (wins.Count == 0) _winMenu.Items.Add(Lang.T("（冇搵到視窗）")).Enabled = false;
         foreach (var w in wins)
         {
             var item = new ToolStripMenuItem(w.ToString().Length > 70 ? w.ToString()[..70] + "…" : w.ToString())
@@ -2938,24 +2958,24 @@ internal sealed class ScriptViewer : Panel
         BackColor = Ui.Bg;
         _stack.Dock = DockStyle.Fill;
 
-        var back = new FancyButton { Text = "← 返回", Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(84), Ui.S(34)) };
+        var back = new FancyButton { Text = Lang.T("← 返回"), Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(84), Ui.S(34)) };
         back.Click += (_, _) => { if (!ScriptRunner.IsRunning(_sc)) BeginInvoke(() => Back?.Invoke()); };
         _back = back;
         var title = Ui.Text_(sc.Name, Ui.Text, Ui.F(12f, FontStyle.Bold), new Padding(0));
-        string info = (sc.Loop ? "一直行" : "行一次") + (sc.Hotkey.IsEmpty ? "" : " · 快捷鍵 " + sc.Hotkey);
+        string info = (sc.Loop ? Lang.T("一直行") : Lang.T("行一次")) + (sc.Hotkey.IsEmpty ? "" : Lang.T(" · 快捷鍵 ") + sc.Hotkey);
         _sc = sc;
         var infoLabel = Ui.Text_(info, Ui.TextDim, Ui.F(9.5f), new Padding(0));
-        var edit = new FancyButton { Text = "修改", Kind = BtnKind.Primary, Size = new Size(Ui.S(96), Ui.S(34)) };
+        var edit = new FancyButton { Text = Lang.T("修改"), Kind = BtnKind.Primary, Size = new Size(Ui.S(96), Ui.S(34)) };
         edit.Click += (_, _) => BeginInvoke(() => Edit?.Invoke());
         _start = new FancyButton { Kind = BtnKind.Success, Size = new Size(Ui.S(96), Ui.S(34)) };
         _start.Click += (_, _) => ScriptRunner.Toggle(_sc);
 
         var top = new BareRow();
         // 背景執行：開咗就要揀程式，腳本淨係喺嗰個視窗入面截圖 / 點擊 / 按鍵
-        _bgToggle = new ToggleChip("背景執行") { Checked = sc.Background };
+        _bgToggle = new ToggleChip(Lang.T("背景執行")) { Checked = sc.Background };
         _bgToggle.Size = new Size(_bgToggle.Width + Ui.S(8), Ui.S(34));
-        _tip.SetToolTip(_bgToggle, "開咗之後，腳本淨係喺揀咗嘅程式視窗入面運行，你切去其他視窗都照行。\n" +
-                                   "注意：部分遊戲唔收背景點擊 / 按鍵；程式視窗唔可以縮細。");
+        _tip.SetToolTip(_bgToggle, Lang.T("開咗之後，腳本淨係喺揀咗嘅程式視窗入面運行，你切去其他視窗都照行。\n") +
+                                   Lang.T("注意：部分遊戲唔收背景點擊 / 按鍵；程式視窗唔可以縮細。"));
         _bgPick = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(190), Ui.S(34)) };
         _bgPick.Click += (_, _) => ShowWindowMenu();
         _bgToggle.CheckedChanged += () =>
@@ -2964,14 +2984,22 @@ internal sealed class ScriptViewer : Panel
             _sc.Save();
             UpdateBg();
         };
-        _flow = new FlowRow(new Control[] { back, title }, new Control[] { _start, edit, _bgToggle, _bgPick });
+        // 運行速度：0.5x（慢一倍）– 3.0x（快三倍），運行中改都即時生效
+        var speedLabel = Ui.Text_(Lang.T("運行速度"), Ui.TextDim, Ui.F(9.5f), new Padding(0));
+        var speedBox = new NumberBox(Ui.S(70)) { Minimum = 0.5m, Maximum = 3.0m, DecimalPlaces = 1, Increment = 0.1m };
+        speedBox.Value = (decimal)Math.Clamp(sc.Speed, 0.5, 3.0);
+        speedBox.ValueChanged += (_, _) => { _sc.Speed = (double)speedBox.Value; _sc.Save(); };
+        var speedHost = new InputHost(speedBox, Ui.S(70));
+        var speedX = Ui.Text_("x", Ui.TextDim, Ui.F(9.5f), new Padding(0));
+        _tip.SetToolTip(speedBox, Lang.T("腳本運行速度倍率：1.0x 正常、2.0x 快一倍、0.5x 慢一倍（等待、撳住、檢查間隔都會跟住變）"));
+        _flow = new FlowRow(new Control[] { back, title, speedLabel, speedHost, speedX }, new Control[] { _start, edit, _bgToggle, _bgPick });
         top.SetContent(_flow);
         UpdateBg();
         top.Padding = new Padding(0);
         _stack.AddRow(top);
 
         // 主線程
-        var main = new CardPanel { Title = "主線程", Hint = $"{sc.Steps.Count} 個步驟 · {info}" };
+        var main = new CardPanel { Title = Lang.T("主線程"), Hint = Lang.F("{0} 個步驟 · {1}", sc.Steps.Count, info) };
         var mainPanel = new StatusWrap(new PreviewList(sc, sc.Steps), out _status);
         main.SetContent(mainPanel);
         _stack.AddRow(main);
@@ -2979,8 +3007,8 @@ internal sealed class ScriptViewer : Panel
         // IF 框
         foreach (var b in sc.Ifs)
         {
-            string every = b.UsesInterval ? $" · 每 {b.Interval.ToString("0.##", CultureInfo.InvariantCulture)} 秒檢查" : "";
-            var card = new CardPanel { Title = "IF：" + b.Name, Hint = $"如果{Describe.Cond(b, false)}{every}（同主線程同時行）" };
+            string every = b.UsesInterval ? Lang.F(" · 每 {0} 秒檢查", b.Interval.ToString("0.##", CultureInfo.InvariantCulture)) : "";
+            var card = new CardPanel { Title = "IF：" + b.Name, Hint = Lang.F("如果{0}{1}（同主線程同時行）", Describe.Cond(b, false), every) };
             var content = new PreviewList(sc, b.Steps);
             card.SetContent(content);
             _stack.AddRow(card);
@@ -2997,7 +3025,7 @@ internal sealed class ScriptViewer : Panel
     private void UpdateButtons()
     {
         bool run = ScriptRunner.IsRunning(_sc);
-        _start.Text = run ? "停止" : "開始";
+        _start.Text = run ? Lang.T("停止") : Lang.T("開始");
         _start.Kind = run ? BtnKind.Danger : BtnKind.Success;
         // 運行緊唔可以返上一頁（要先停止），亦唔可以轉背景設定
         if (_back != null) _back.Enabled = !run;
@@ -3075,9 +3103,9 @@ internal sealed class ImageStrip : Control
         try { _menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
         _menu.BackColor = Ui.CardHi;
         _menu.ForeColor = Ui.Text;
-        _menu.Items.Add("重新截圖", null, (_, _) => Snip(_menuIndex));
-        _menu.Items.Add("從檔案揀…", null, (_, _) => PickFile(_menuIndex));
-        _menu.Items.Add("移除", null, (_, _) => Remove(_menuIndex));
+        _menu.Items.Add(Lang.T("重新截圖"), null, (_, _) => Snip(_menuIndex));
+        _menu.Items.Add(Lang.T("從檔案揀…"), null, (_, _) => PickFile(_menuIndex));
+        _menu.Items.Add(Lang.T("移除"), null, (_, _) => Remove(_menuIndex));
         UpdateSize();
     }
 
@@ -3090,7 +3118,7 @@ internal sealed class ImageStrip : Control
     private void UpdateSize()
     {
         Size = new Size(Tiles * (TileW + Gap) - Gap, Ui.S(34));
-        _tip.SetToolTip(this, $"最多 {ImageList.Max} 張，搵到最似嗰張。撳「+」截圖加；撳圖重新截；右鍵從檔案揀 / 移除");
+        _tip.SetToolTip(this, Lang.F("最多 {0} 張，搵到最似嗰張。撳「+」截圖加；撳圖重新截；右鍵從檔案揀 / 移除", ImageList.Max));
     }
 
     /// <summary>張數變咗：格仔數目變，叫成行重新排位。</summary>
@@ -3140,7 +3168,7 @@ internal sealed class ImageStrip : Control
             {
                 using var pen = new Pen(hover ? Ui.Accent : Ui.BorderHi, Ui.S(1.2f)) { DashStyle = DashStyle.Dash };
                 g.DrawPath(pen, path);
-                TextRenderer.DrawText(g, names.Count == 0 ? "截圖" : "+", Ui.F(names.Count == 0 ? 8.5f : 12f), r,
+                TextRenderer.DrawText(g, names.Count == 0 ? Lang.T("截圖") : "+", Ui.F(names.Count == 0 ? 8.5f : 12f), r,
                     hover ? Ui.Accent : Ui.TextFaint, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 continue;
             }
@@ -3201,7 +3229,7 @@ internal sealed class ImageStrip : Control
 
     private void PickFile(int i)
     {
-        using var dlg = new OpenFileDialog { Title = "揀圖片", Filter = "圖片|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有檔案|*.*" };
+        using var dlg = new OpenFileDialog { Title = Lang.T("揀圖片"), Filter = Lang.T("圖片|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有檔案|*.*") };
         if (dlg.ShowDialog(FindForm()) == DialogResult.OK) Put(i, dlg.FileName);
     }
 
@@ -3223,7 +3251,7 @@ internal sealed class ImageStrip : Control
             Changed(names);
             if (old != null && !_sc.UsesImage(old)) try { File.Delete(Path.Combine(_sc.Dir, old)); } catch { }
         }
-        catch (Exception ex) { MessageBox.Show(FindForm(), "揀圖失敗：" + ex.Message, "我的腳本"); }
+        catch (Exception ex) { MessageBox.Show(FindForm(), Lang.T("揀圖失敗：") + ex.Message, Lang.T("我的腳本")); }
     }
 
     private void Remove(int i)

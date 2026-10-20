@@ -136,9 +136,9 @@ internal static class ScriptJson
         var warn = new List<string>();
         var have = new HashSet<string>(ExistingImages(sc), StringComparer.OrdinalIgnoreCase);
         var root = JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true })
-                   as JsonObject ?? throw new FormatException("唔係 JSON object");
+                   as JsonObject ?? throw new FormatException(Lang.T("唔係 JSON object"));
         bool loop = Str(root, "mode") == "loop";
-        var steps = ParseSteps(root["steps"] as JsonArray, "主線程", false, false, have, warn);
+        var steps = ParseSteps(root["steps"] as JsonArray, Lang.T("主線程"), false, false, have, warn);
         var ifs = new List<IfBlock>();
         if (root["ifs"] is JsonArray arr)
         {
@@ -147,9 +147,9 @@ internal static class ScriptJson
             {
                 n++;
                 if (node is not JsonObject o) continue;
-                var b = ParseCond(o["condition"] as JsonObject, true, $"IF 框 {n}", have, warn);
-                b.Name = Str(o, "name") is { Length: > 0 } nm ? nm : $"IF 條件 {n}";
-                b.Steps = ParseSteps(o["steps"] as JsonArray, $"IF 框「{b.Name}」", false, true, have, warn);
+                var b = ParseCond(o["condition"] as JsonObject, true, Lang.F("IF 框 {0}", n), have, warn);
+                b.Name = Str(o, "name") is { Length: > 0 } nm ? nm : Lang.F("IF 條件 {0}", n);
+                b.Steps = ParseSteps(o["steps"] as JsonArray, Lang.F("IF 框「{0}」", b.Name), false, true, have, warn);
                 ifs.Add(b);
             }
         }
@@ -208,8 +208,8 @@ internal static class ScriptJson
         else if (Str(o, "image") is { Length: > 0 } one) names.Add(one);
         var ok = names.Where(have.Contains).Distinct().Take(ImageList.Max).ToList();
         var missing = names.Where(n => n.Length > 0 && !have.Contains(n)).ToList();
-        if (missing.Count > 0) warn.Add($"{where}：冇呢啲圖（{string.Join("、", missing)}），要自己截圖");
-        else if (ok.Count == 0) warn.Add($"{where}：未有圖，要自己截圖");
+        if (missing.Count > 0) warn.Add(Lang.F("{0}：冇呢啲圖（{1}），要自己截圖", where, string.Join("、", missing)));
+        else if (ok.Count == 0) warn.Add(Lang.F("{0}：未有圖，要自己截圖", where));
         return ImageList.Join(ok);
     }
 
@@ -241,14 +241,14 @@ internal static class ScriptJson
         {
             i++;
             if (node is not JsonObject o) continue;
-            string where = $"{path} 第 {i} 步";
+            string where = Lang.F("{0} 第 {1} 步", path, i);
             string type = Str(o, "type").ToLowerInvariant();
             switch (type)
             {
                 case "key":
                 {
                     int vk = ParseKey(Str(o, "key"));
-                    if (vk == 0) warn.Add($"{where}：唔識呢個鍵「{Str(o, "key")}」，要自己揀");
+                    if (vk == 0) warn.Add(Lang.F("{0}：唔識呢個鍵「{1}」，要自己揀", where, Str(o, "key")));
                     var mods = Keys.None;
                     if (Bool(o, "ctrl")) mods |= Keys.Control;
                     if (Bool(o, "shift")) mods |= Keys.Shift;
@@ -263,7 +263,7 @@ internal static class ScriptJson
                         Kind = StepKind.Click, Right = Str(o, "button").ToLowerInvariant() == "right",
                         X = Int(o, "x", 0), Y = Int(o, "y", 0), Mode = Mode(o), Hold = Math.Max(0, Dec(o, "hold", 0.1m))
                     };
-                    if (st.X == 0 && st.Y == 0) warn.Add($"{where}：座標未揀");
+                    if (st.X == 0 && st.Y == 0) warn.Add(Lang.F("{0}：座標未揀", where));
                     list.Add(st);
                     break;
                 }
@@ -277,11 +277,11 @@ internal static class ScriptJson
                     list.Add(new Step
                     {
                         Kind = StepKind.Loop, Count = Math.Max(0, Int(o, "count", 0)),
-                        Body = ParseSteps(o["steps"] as JsonArray, where + " 循環", true, false, have, warn)
+                        Body = ParseSteps(o["steps"] as JsonArray, where + Lang.T(" 循環"), true, false, have, warn)
                     });
                     break;
                 case "break":
-                    if (!inLoop) { warn.Add($"{where}：中斷循環唔喺循環入面，已略過"); break; }
+                    if (!inLoop) { warn.Add(Lang.F("{0}：中斷循環唔喺循環入面，已略過", where)); break; }
                     list.Add(new Step { Kind = StepKind.Break });
                     break;
                 case "if":
@@ -293,7 +293,7 @@ internal static class ScriptJson
                     break;
                 }
                 default:
-                    warn.Add($"{where}：唔識「{type}」，已略過");
+                    warn.Add(Lang.F("{0}：唔識「{1}」，已略過", where, type));
                     break;
             }
         }
@@ -303,12 +303,12 @@ internal static class ScriptJson
     private static IfBlock ParseCond(JsonObject? o, bool top, string where, HashSet<string> have, List<string> warn)
     {
         var b = new IfBlock();
-        if (o == null) { warn.Add($"{where}：冇條件，用咗「搵到圖」"); b.Image = ""; return b; }
+        if (o == null) { warn.Add(Lang.F("{0}：冇條件，用咗「搵到圖」", where)); b.Image = ""; return b; }
         switch (Str(o, "kind").ToLowerInvariant())
         {
             case "image_not_found":
                 b.Kind = CondKind.ImageNotFound;
-                b.Image = Images(o, where + " 條件", have, warn);
+                b.Image = Images(o, where + Lang.T(" 條件"), have, warn);
                 b.Similarity = Math.Clamp(Int(o, "similarity", 80), 1, 100);
                 break;
             case "color":
@@ -318,20 +318,20 @@ internal static class ScriptJson
                 string c = Str(o, "color").TrimStart('#');
                 b.Color = int.TryParse(c, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var col) ? col & 0xFFFFFF : 0xFF0000;
                 b.Tolerance = Math.Clamp(Int(o, "tolerance", 10), 0, 255);
-                if (b.X == 0 && b.Y == 0) warn.Add($"{where} 條件：顏色位置未揀");
+                if (b.X == 0 && b.Y == 0) warn.Add(Lang.F("{0} 條件：顏色位置未揀", where));
                 break;
             case "time":
                 b.Kind = CondKind.Time;
                 b.Time = Str(o, "time") is { Length: > 0 } t ? t : "12:00:00";
                 break;
             case "countdown":
-                if (!top) { warn.Add($"{where}：倒數只可以用喺 IF 框，改咗做「搵到圖」"); goto default; }
+                if (!top) { warn.Add(Lang.F("{0}：倒數只可以用喺 IF 框，改咗做「搵到圖」", where)); goto default; }
                 b.Kind = CondKind.Countdown;
                 b.Seconds = Math.Max(0, Dec(o, "seconds", 60m));
                 break;
             default:
                 b.Kind = CondKind.ImageFound;
-                b.Image = Images(o, where + " 條件", have, warn);
+                b.Image = Images(o, where + Lang.T(" 條件"), have, warn);
                 b.Similarity = Math.Clamp(Int(o, "similarity", 80), 1, 100);
                 b.ClickFound = Bool(o, "click_found");
                 break;
@@ -401,7 +401,7 @@ internal sealed class ScriptAssist
         if (a.LoggedIn != true || _host.IsDisposed) return;
         _prov = p;
         if (_st.ProviderKey != p.Key) { _st.Session = null; _st.ProviderKey = p.Key; }
-        _panel.SetTitle($"AI 助手 · {p.Name}");
+        _panel.SetTitle(Lang.F("AI 助手 · {0}", p.Name));
         _panel.Render(_st, p.Name);
         _cloud.Visible = true;
         Layout();
@@ -494,12 +494,12 @@ internal sealed class ScriptAssist
         string q = _panel.TakeInput();
         if (q.Length == 0) return;
         string? exe = _prov.Find();
-        if (exe == null) { _panel.System($"搵唔到 {_prov.ToolName}。"); return; }
+        if (exe == null) { _panel.System(Lang.F("搵唔到 {0}。", _prov.ToolName)); return; }
 
         _stopped = false;
         _st.Msgs.Add(("user", q));
         _panel.Render(_st, _prov.Name);
-        _panel.Thinking($"{_prov.Name} 諗緊…");
+        _panel.Thinking(Lang.F("{0} 諗緊…", _prov.Name));
         _panel.SetBusy(true);
 
         AiProvider.Answer ans;
@@ -512,13 +512,13 @@ internal sealed class ScriptAssist
                 ans = await _prov.AskAsync(exe, BuildPrompt(q, true), null, p => _running = p);
             }
         }
-        catch (Exception ex) { ans = new AiProvider.Answer("出錯：" + ex.Message, null, true); }
+        catch (Exception ex) { ans = new AiProvider.Answer(Lang.T("出錯：") + ex.Message, null, true); }
         _running = null;
         if (_host.IsDisposed) return;
         _panel.SetBusy(false);
 
         if (ans.SessionId != null) _st.Session = ans.SessionId;
-        if (_stopped) _st.Msgs.Add(("system", "已停止。"));
+        if (_stopped) _st.Msgs.Add(("system", Lang.T("已停止。")));
         else if (ans.IsError) _st.Msgs.Add(("error", ans.Text));
         else
         {
@@ -526,7 +526,7 @@ internal sealed class ScriptAssist
             if (json != null)
             {
                 _st.Pending = json;
-                text = (text.Length > 0 ? text + "\n\n" : "") + "（已經寫好新腳本，撳下面「套用到腳本」就會換上）";
+                text = (text.Length > 0 ? text + "\n\n" : "") + Lang.T("（已經寫好新腳本，撳下面「套用到腳本」就會換上）");
             }
             _st.Msgs.Add(("ai", text));
         }
@@ -537,12 +537,12 @@ internal sealed class ScriptAssist
     private void Apply()
     {
         if (_st.Pending == null) return;
-        if (ScriptRunner.IsRunning(_sc)) { _panel.System("腳本行緊，停咗先再套用。"); return; }
+        if (ScriptRunner.IsRunning(_sc)) { _panel.System(Lang.T("腳本行緊，停咗先再套用。")); return; }
         ScriptJson.Parsed p;
         try { p = ScriptJson.FromJson(_st.Pending, _sc); }
         catch (Exception ex)
         {
-            _st.Msgs.Add(("error", "AI 俾嘅腳本格式唔啱，套用唔到：" + ex.Message));
+            _st.Msgs.Add(("error", Lang.T("AI 俾嘅腳本格式唔啱，套用唔到：") + ex.Message));
             _st.Pending = null;
             _panel.Render(_st, _prov?.Name ?? "AI");
             return;
@@ -556,8 +556,8 @@ internal sealed class ScriptAssist
         _sc.Ifs.AddRange(p.Ifs);
         _sc.Save();
         _st.Pending = null;
-        string msg = "已套用新腳本。";
-        if (p.Warnings.Count > 0) msg += "\n要你自己補嘅地方：\n• " + string.Join("\n• ", p.Warnings.Take(12));
+        string msg = Lang.T("已套用新腳本。");
+        if (p.Warnings.Count > 0) msg += Lang.T("\n要你自己補嘅地方：\n• ") + string.Join("\n• ", p.Warnings.Take(12));
         _st.Msgs.Add(("system", msg));
         _st.Open = true;
         _reload();
@@ -566,7 +566,7 @@ internal sealed class ScriptAssist
     private void Undo()
     {
         if (_st.Undo is not { } u) return;
-        if (ScriptRunner.IsRunning(_sc)) { _panel.System("腳本行緊，停咗先再復原。"); return; }
+        if (ScriptRunner.IsRunning(_sc)) { _panel.System(Lang.T("腳本行緊，停咗先再復原。")); return; }
         _sc.Loop = u.Loop;
         _sc.Steps.Clear();
         _sc.Steps.AddRange(u.Steps);
@@ -574,7 +574,7 @@ internal sealed class ScriptAssist
         _sc.Ifs.AddRange(u.Ifs);
         _sc.Save();
         _st.Undo = null;
-        _st.Msgs.Add(("system", "已復原返套用之前嘅腳本。"));
+        _st.Msgs.Add(("system", Lang.T("已復原返套用之前嘅腳本。")));
         _reload();
     }
 }
@@ -640,10 +640,10 @@ internal sealed class AssistPanel : Panel
         Controls.Add(inner);
 
         var head = new Panel { Dock = DockStyle.Top, Height = Ui.S(34), BackColor = Ui.Card };
-        _title = new Label { Text = "AI 助手", Font = Ui.F(10.5f, FontStyle.Bold), ForeColor = Ui.Text, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
+        _title = new Label { Text = Lang.T("AI 助手"), Font = Ui.F(10.5f, FontStyle.Bold), ForeColor = Ui.Text, AutoSize = false, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
         var close = new FancyButton { Text = "✕", Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(32), Ui.S(30)), Dock = DockStyle.Right };
         close.Click += (_, _) => CloseRequested?.Invoke();
-        _clear = new FancyButton { Text = "清除", Kind = BtnKind.Ghost, Font = Ui.F(9f), Size = new Size(Ui.S(56), Ui.S(30)), Dock = DockStyle.Right };
+        _clear = new FancyButton { Text = Lang.T("清除"), Kind = BtnKind.Ghost, Font = Ui.F(9f), Size = new Size(Ui.S(56), Ui.S(30)), Dock = DockStyle.Right };
         _clear.Click += (_, _) => ClearRequested?.Invoke();
         head.Controls.Add(_title);
         head.Controls.Add(_clear);
@@ -656,9 +656,9 @@ internal sealed class AssistPanel : Panel
         };
 
         _actions = new Panel { Dock = DockStyle.Bottom, Height = Ui.S(42), BackColor = Ui.Card, Visible = false, Padding = new Padding(0, Ui.S(6), 0, 0) };
-        _apply = new FancyButton { Text = "套用到腳本", Kind = BtnKind.Success, Font = Ui.F(9.5f), Size = new Size(Ui.S(110), Ui.S(34)), Dock = DockStyle.Left };
+        _apply = new FancyButton { Text = Lang.T("套用到腳本"), Kind = BtnKind.Success, Font = Ui.F(9.5f), Size = new Size(Ui.S(110), Ui.S(34)), Dock = DockStyle.Left };
         _apply.Click += (_, _) => ApplyRequested?.Invoke();
-        _undo = new FancyButton { Text = "復原", Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(72), Ui.S(34)), Dock = DockStyle.Right };
+        _undo = new FancyButton { Text = Lang.T("復原"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(72), Ui.S(34)), Dock = DockStyle.Right };
         _undo.Click += (_, _) => UndoRequested?.Invoke();
         _actions.Controls.Add(_apply);
         _actions.Controls.Add(_undo);
@@ -667,7 +667,7 @@ internal sealed class AssistPanel : Panel
         var inputHost = new Panel { Dock = DockStyle.Fill, BackColor = Ui.Input, Padding = new Padding(Ui.S(8)) };
         _input = new TextBox { Multiline = true, BorderStyle = BorderStyle.None, BackColor = Ui.Input, ForeColor = Ui.Text, Font = Ui.F(9.75f), Dock = DockStyle.Fill };
         inputHost.Controls.Add(_input);
-        _send = new FancyButton { Text = "傳送", Kind = BtnKind.Primary, Font = Ui.F(9.5f), Size = new Size(Ui.S(64), Ui.S(66)), Dock = DockStyle.Right };
+        _send = new FancyButton { Text = Lang.T("傳送"), Kind = BtnKind.Primary, Font = Ui.F(9.5f), Size = new Size(Ui.S(64), Ui.S(66)), Dock = DockStyle.Right };
         _send.Click += (_, _) => SendRequested?.Invoke();
         var gap = new Panel { Dock = DockStyle.Right, Width = Ui.S(8), BackColor = Ui.Card };
         bottom.Controls.Add(inputHost);
@@ -696,7 +696,7 @@ internal sealed class AssistPanel : Panel
 
     public void SetBusy(bool busy)
     {
-        _send.Text = busy ? "停止" : "傳送";
+        _send.Text = busy ? Lang.T("停止") : Lang.T("傳送");
         _send.Kind = busy ? BtnKind.Danger : BtnKind.Primary;
         _input.ReadOnly = busy;
         _apply.Enabled = _undo.Enabled = _clear.Enabled = !busy;
@@ -707,15 +707,15 @@ internal sealed class AssistPanel : Panel
     {
         _log.Clear();
         if (st.Msgs.Count == 0)
-            Line(null, "話我知你想個腳本做啲咩，例如：「每 5 秒撳一下 F1，搵到怪物圖就點佢」。\n" +
-                       "我會睇住你而家個腳本幫你改，寫好之後撳「套用到腳本」就會換上（可以復原）。", Ui.TextFaint, 9f);
+            Line(null, Lang.T("話我知你想個腳本做啲咩，例如：「每 5 秒撳一下 F1，搵到怪物圖就點佢」。\n") +
+                       Lang.T("我會睇住你而家個腳本幫你改，寫好之後撳「套用到腳本」就會換上（可以復原）。"), Ui.TextFaint, 9f);
         foreach (var (role, text) in st.Msgs)
         {
             switch (role)
             {
-                case "user": Line("你", text, Ui.Accent); break;
+                case "user": Line(Lang.T("你"), text, Ui.Accent); break;
                 case "ai": Line(aiName, text, Ui.Success); break;
-                case "error": Line("錯誤", text, Ui.Danger); break;
+                case "error": Line(Lang.T("錯誤"), text, Ui.Danger); break;
                 default: Line(null, text, Ui.TextFaint, 9f); break;
             }
         }

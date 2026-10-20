@@ -89,14 +89,14 @@ internal static class Updater
             catch (Exception ex)
             {
                 if (!silent)
-                    MessageBox.Show(owner, "連唔到 GitHub 檢查更新：\n" + ex.Message, Program.AppName,
+                    MessageBox.Show(owner, Lang.T("連唔到 GitHub 檢查更新：\n") + ex.Message, Program.AppName,
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             if (rel == null || ParseVersion(rel.Tag) <= ParseVersion(Program.Version))
             {
                 if (!silent)
-                    MessageBox.Show(owner, $"已經係最新版本（{Program.Version}）。", Program.AppName,
+                    MessageBox.Show(owner, Lang.F("已經係最新版本（{0}）。", Program.Version), Program.AppName,
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -104,9 +104,9 @@ internal static class Updater
             string notes = rel.Notes.Trim();
             if (notes.Length > 800) notes = notes[..800] + "…";
             var ans = MessageBox.Show(owner,
-                $"發現新版本 {rel.Tag}（而家用緊 {Program.Version}）。\n\n{(notes.Length > 0 ? notes + "\n\n" : "")}" +
-                "要唔要而家更新？更新完會自動重開，你嘅腳本同設定唔會受影響。",
-                "有新版本", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                Lang.F("發現新版本 {0}（而家用緊 {1}）。\n\n{2}", rel.Tag, Program.Version, (notes.Length > 0 ? notes + "\n\n" : "")) +
+                Lang.T("要唔要而家更新？更新完會自動重開，你嘅腳本同設定唔會受影響。"),
+                Lang.T("有新版本"), MessageBoxButtons.YesNo, MessageBoxIcon.Information);
             if (ans != DialogResult.Yes) return;
 
             await DownloadAndRestartAsync(owner, rel);
@@ -121,7 +121,7 @@ internal static class Updater
         string newExe = Path.Combine(dir, "MultiTool.update.exe");
         string tmp = Path.Combine(Path.GetTempPath(), "MultiTool_" + Guid.NewGuid().ToString("N")[..8] + Path.GetExtension(rel.AssetName));
 
-        using var progress = new ProgressForm($"下載緊 {rel.Tag}…");
+        using var progress = new ProgressForm(Lang.F("下載緊 {0}…", rel.Tag));
         progress.Show(owner);
         try
         {
@@ -149,7 +149,7 @@ internal static class Updater
                 using var zip = ZipFile.OpenRead(tmp);
                 var entry = zip.Entries.FirstOrDefault(e => e.Name.Equals("MultiTool.exe", StringComparison.OrdinalIgnoreCase))
                             ?? zip.Entries.FirstOrDefault(e => e.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
-                if (entry == null) throw new InvalidOperationException("zip 入面搵唔到 exe");
+                if (entry == null) throw new InvalidOperationException(Lang.T("zip 入面搵唔到 exe"));
                 entry.ExtractToFile(newExe, true);
             }
             else File.Copy(tmp, newExe, true);
@@ -158,7 +158,7 @@ internal static class Updater
         {
             progress.Close();
             AppPaths.LogError("下載更新", ex);
-            MessageBox.Show(owner, "下載更新失敗：\n" + ex.Message, Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(owner, Lang.T("下載更新失敗：\n") + ex.Message, Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             try { File.Delete(newExe); } catch { }
             return;
         }
@@ -188,7 +188,7 @@ internal static class Updater
         catch (Exception ex)
         {
             AppPaths.LogError("啟動更新", ex);
-            MessageBox.Show(owner, $"自動換檔失敗，請手動將\n{newExe}\n改名做 MultiTool.exe。", Program.AppName);
+            MessageBox.Show(owner, Lang.F("自動換檔失敗，請手動將\n{0}\n改名做 MultiTool.exe。", newExe), Program.AppName);
             return;
         }
         Application.Exit();
@@ -228,9 +228,9 @@ internal static class Updater
                 {
                     _bar.Style = ProgressBarStyle.Continuous;
                     _bar.Value = (int)Math.Clamp(done * 100 / total, 0, 100);
-                    _label.Text = $"下載緊… {done / 1048576.0:0.0} / {total / 1048576.0:0.0} MB";
+                    _label.Text = Lang.F("下載緊… {0:0.0} / {1:0.0} MB", done / 1048576.0, total / 1048576.0);
                 }
-                else _label.Text = $"下載緊… {done / 1048576.0:0.0} MB";
+                else _label.Text = Lang.F("下載緊… {0:0.0} MB", done / 1048576.0);
             }
             if (InvokeRequired) BeginInvoke(Do); else Do();
         }

@@ -48,7 +48,12 @@ namespace UI
         public static readonly Color Success = Hex(0x2BB673);
         public static readonly Color Danger = Hex(0xE5484D);
 
-        public const string UiFamily = "Microsoft JhengHei UI";
+        public static string UiFamily => Lang.Current switch
+        {
+            Language.ZhHans => "Microsoft YaHei UI",
+            Language.En => "Segoe UI",
+            _ => "Microsoft JhengHei UI"
+        };
         public const string MonoFamily = "Consolas";
 
         public static readonly float Scale = GetScale();

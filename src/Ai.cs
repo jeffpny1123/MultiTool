@@ -23,9 +23,9 @@ internal abstract class AiProvider
     public abstract string ToolName { get; }     // Claude Code / Codex CLI / Gemini CLI
     public abstract string InstallUrl { get; }
     protected abstract string Command { get; }   // claude / codex / gemini
-    public virtual string LoginHint => "瀏覽器會彈出嚟俾你登入（如果冇彈，跟視窗入面嘅指示做）。";
+    public virtual string LoginHint => Lang.T("瀏覽器會彈出嚟俾你登入（如果冇彈，跟視窗入面嘅指示做）。");
 
-    public static readonly AiProvider[] All = { new ClaudeProvider(), new CodexProvider(), new GeminiProvider() };
+    public static readonly AiProvider[] All = { new ClaudeProvider(), new CodexProvider(), new GeminiProvider(), new LocalProvider() };
     public static AiProvider Get(string? key) => All.FirstOrDefault(p => p.Key == key) ?? All[0];
     public static AiProvider? TryGet(string? key) => All.FirstOrDefault(p => p.Key == key);
 
@@ -41,7 +41,7 @@ internal abstract class AiProvider
     public sealed record Answer(string Text, string? SessionId, bool IsError);
 
     /// <summary>搵執行檔；搵唔到就 null。</summary>
-    public string? Find()
+    public virtual string? Find()
     {
         var candidates = new List<string>();
         foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
@@ -121,7 +121,7 @@ internal abstract class AiProvider
     protected static Answer Fail(int code, string output, string err, string? sid)
     {
         string msg = (output + "\n" + err).Trim();
-        return new Answer(msg.Length > 0 ? msg : $"程式結束咗（代碼 {code}），冇回覆。", sid, true);
+        return new Answer(msg.Length > 0 ? msg : Lang.F("程式結束咗（代碼 {0}），冇回覆。", code), sid, true);
     }
 
     protected static IEnumerable<JsonProperty> Walk(JsonElement e)
@@ -138,7 +138,8 @@ internal abstract class AiProvider
 
     public abstract Task<Auth> AuthAsync(string exe);
     public abstract Task<bool> LogoutAsync(string exe);
-    public abstract Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started);
+    /// <param name="quick">語音對話：用快啲嘅設定、唔留對話紀錄。</param>
+    public abstract Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false);
     protected abstract string LoginArgs { get; }
 
     /// <summary>開一個終端機視窗做登入，等用戶自己喺瀏覽器登入。</summary>
@@ -205,12 +206,14 @@ internal sealed class ClaudeProvider : AiProvider
 
     public override async Task<bool> LogoutAsync(string exe) => (await RunAsync(exe, "auth logout")).Code == 0;
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false)
     {
         // 日常問答：唔俾佢改檔案 / 行指令
         string args = "-p --output-format json" +
                       (sessionId != null ? $" --resume {sessionId}" : "") +
-                      " --disallowedTools Bash Edit Write NotebookEdit";
+                      (quick ? " --model haiku --no-session-persistence" : "") +
+                      " --disallowedTools Bash Edit Write NotebookEdit" +
+                      " --allowedTools WebSearch WebFetch"; // 可以上網搵資料
         var (code, output, err) = await RunPromptAsync(exe, args, prompt, started);
         // {"type":"result","result":"...","session_id":"...","is_error":false}
         try
@@ -223,7 +226,7 @@ internal sealed class ClaudeProvider : AiProvider
                 string text = r.TryGetProperty("result", out var t) ? t.GetString() ?? "" : "";
                 string? sid = r.TryGetProperty("session_id", out var s) ? s.GetString() : null;
                 bool isErr = r.TryGetProperty("is_error", out var e) && e.ValueKind == JsonValueKind.True;
-                return new Answer(text.Length > 0 ? text : "(冇回覆)", sid, isErr);
+                return new Answer(text.Length > 0 ? text : Lang.T("(冇回覆)"), sid, isErr);
             }
         }
         catch { }
@@ -240,7 +243,7 @@ internal sealed class CodexProvider : AiProvider
     public override string InstallUrl => "https://github.com/openai/codex";
     protected override string Command => "codex";
     protected override string LoginArgs => "login";
-    public override string LoginHint => "瀏覽器會彈出嚟俾你用 ChatGPT 帳號登入（如果冇彈，跟視窗入面嘅指示做）。";
+    public override string LoginHint => Lang.T("瀏覽器會彈出嚟俾你用 ChatGPT 帳號登入（如果冇彈，跟視窗入面嘅指示做）。");
 
     public override async Task<Auth> AuthAsync(string exe)
     {
@@ -277,12 +280,13 @@ internal sealed class CodexProvider : AiProvider
 
     public override async Task<bool> LogoutAsync(string exe) => (await RunAsync(exe, "logout")).Code == 0;
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false)
     {
         string outFile = Path.Combine(WorkDir, "codex_" + Guid.NewGuid().ToString("N")[..8] + ".txt");
         // 唯讀 sandbox：唔俾佢改檔案
-        string common = $"--json --skip-git-repo-check -c sandbox_mode=read-only -o \"{outFile}\"";
-        string args = sessionId != null ? $"exec resume {common} {sessionId} -" : $"exec {common} -";
+        string common = $"--json --skip-git-repo-check -c sandbox_mode=read-only -o \"{outFile}\"" + (quick ? " --ephemeral" : "");
+        // --search：俾佢上網搵資料（唔使逐次批准）
+        string args = sessionId != null ? $"--search exec resume {common} {sessionId} -" : $"--search exec {common} -";
         try
         {
             var (code, output, err) = await RunPromptAsync(exe, args, prompt, started);
@@ -323,7 +327,7 @@ internal sealed class GeminiProvider : AiProvider
     public override string InstallUrl => "https://github.com/google-gemini/gemini-cli";
     protected override string Command => "gemini";
     protected override string LoginArgs => "";
-    public override string LoginHint => "喺彈出視窗揀「Sign in with Google」，瀏覽器會彈出嚟俾你登入。登入完可以閂咗嗰個視窗。";
+    public override string LoginHint => Lang.T("喺彈出視窗揀「Sign in with Google」，瀏覽器會彈出嚟俾你登入。登入完可以閂咗嗰個視窗。");
 
     private static string GeminiDir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gemini");
     private static string CredFile => Path.Combine(GeminiDir, "oauth_creds.json");
@@ -343,7 +347,7 @@ internal sealed class GeminiProvider : AiProvider
         catch { return Task.FromResult(false); }
     }
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false)
     {
         // 新對話自己定 session id，之後用佢接返上文
         string sid = sessionId ?? Guid.NewGuid().ToString();
@@ -374,7 +378,9 @@ internal sealed class GeminiProvider : AiProvider
 internal sealed class AiPage : Panel
 {
     private readonly Label _status;
-    private readonly FancyButton _detect, _login, _newChat, _send;
+    private readonly FancyButton _detect, _login, _newChat, _send, _settings;
+    private readonly System.Windows.Forms.Timer _voiceKey = new() { Interval = 30 };
+    private bool _voiceWasDown;
     private readonly RichTextBox _log;
     private readonly TextBox _input;
     private readonly Panel _top, _bottom, _logHost, _side;
@@ -401,17 +407,22 @@ internal sealed class AiPage : Panel
 
         // ---- 頂行：狀態 + 掣 ----
         _top = new Panel { Dock = DockStyle.Top, Height = Ui.S(44), BackColor = Ui.Bg };
-        var title = Ui.Text_("AI 助手", Ui.Text, Ui.F(12f, FontStyle.Bold), new Padding(0));
+        var title = Ui.Text_(Lang.T("AI 助手"), Ui.Text, Ui.F(12f, FontStyle.Bold), new Padding(0));
         title.Location = new Point(0, Ui.S(8));
-        _status = Ui.Text_("偵測緊…", Ui.TextDim, Ui.F(9.5f), new Padding(0));
-        _detect = Btn("重新偵測", BtnKind.Ghost, async () => await RefreshStatusAsync());
-        _login = Btn("登入", BtnKind.Ghost, ShowPicker);
-        _top.Controls.AddRange(new Control[] { title, _status, _detect, _login });
+        _status = Ui.Text_(Lang.T("偵測緊…"), Ui.TextDim, Ui.F(9.5f), new Padding(0));
+        _detect = Btn(Lang.T("重新偵測"), BtnKind.Ghost, async () => await RefreshStatusAsync());
+        _login = Btn(Lang.T("帳號"), BtnKind.Ghost, ShowPicker);
+        _settings = Btn(Lang.T("語音設定"), BtnKind.Ghost, () =>
+        {
+            using var dlg = new AiSettingsDialog();
+            dlg.ShowDialog(FindForm());
+        });
+        _top.Controls.AddRange(new Control[] { title, _status, _detect, _login, _settings });
         _top.Layout += (_, _) =>
         {
             _status.Location = new Point(title.Right + Ui.S(14), Ui.S(13));
             int x = _top.ClientSize.Width;
-            foreach (var b in new[] { _login, _detect })
+            foreach (var b in new[] { _settings, _login, _detect })
             {
                 x -= b.Width;
                 b.Location = new Point(x, Ui.S(4));
@@ -452,7 +463,7 @@ internal sealed class AiPage : Panel
         var inputHost = new Panel { BackColor = Ui.Input, Padding = new Padding(Ui.S(10)) };
         inputHost.Controls.Add(_input);
         _input.Dock = DockStyle.Fill;
-        _send = Btn("傳送", BtnKind.Primary, async () => await SendAsync());
+        _send = Btn(Lang.T("傳送"), BtnKind.Primary, async () => await SendAsync());
         _send.Size = new Size(Ui.S(96), Ui.S(80));
         _bottom.Controls.Add(inputHost);
         _bottom.Controls.Add(_send);
@@ -474,11 +485,11 @@ internal sealed class AiPage : Panel
 
         // ---- 左邊：歷史對話 ----
         _side = new Panel { Dock = DockStyle.Left, Width = Ui.S(230), BackColor = Ui.Panel, Padding = new Padding(Ui.S(10)) };
-        _newChat = Btn("＋ 新對話", BtnKind.Primary, NewChat);
+        _newChat = Btn(Lang.T("＋ 新對話"), BtnKind.Primary, NewChat);
         _newChat.Dock = DockStyle.Top;
         var histLabel = new Label
         {
-            Text = "歷史對話", Dock = DockStyle.Top, Height = Ui.S(34), ForeColor = Ui.TextFaint, Font = Ui.F(9f),
+            Text = Lang.T("歷史對話"), Dock = DockStyle.Top, Height = Ui.S(34), ForeColor = Ui.TextFaint, Font = Ui.F(9f),
             TextAlign = ContentAlignment.BottomLeft, Padding = new Padding(Ui.S(4), 0, 0, Ui.S(6))
         };
         _list = new ChatList { Dock = DockStyle.Fill };
@@ -499,11 +510,23 @@ internal sealed class AiPage : Panel
 
         Intro();
         HandleCreated += async (_, _) => await RefreshStatusAsync();
+
+        // 語音對話快捷鍵（喺邊度都用得）
+        _voiceKey.Tick += (_, _) =>
+        {
+            bool down = VoiceSettings.Enabled && VoiceSettings.Hotkey.IsDown();
+            bool was = _voiceWasDown;
+            _voiceWasDown = down;
+            if (!down || was || MultiTool.Common.Keyboard.RecentlyInjected) return;
+            if (Form.ActiveForm is AiSettingsDialog) return; // 設定緊快捷鍵
+            VoiceChat.Begin();
+        };
+        _voiceKey.Start();
     }
 
     private void Intro() =>
-        AppendSystem("呢度會用你自己部電腦已安裝、已登入嘅 AI（Claude Code / Codex CLI / Gemini CLI）回答問題，" +
-                     "用嘅係你自己帳號嘅額度。本工具唔會接觸你嘅帳號或密碼。撳右上角「登入」揀用邊個。");
+        AppendSystem(Lang.T("呢度會用你自己部電腦已安裝、已登入嘅 AI（Claude Code / Codex CLI / Gemini CLI）回答問題，") +
+                     Lang.T("用嘅係你自己帳號嘅額度。本工具唔會接觸你嘅帳號或密碼。撳右上角「登入」揀用邊個。"));
 
     private FancyButton Btn(string text, BtnKind kind, Action click)
     {
@@ -519,18 +542,18 @@ internal sealed class AiPage : Panel
         var prov = _provider;
         if (prov == null)
         {
-            _status.Text = "未登入";
+            _status.Text = Lang.T("未登入");
             _status.ForeColor = Ui.Danger;
             UpdateButtons();
             return;
         }
-        _status.Text = $"偵測緊 {prov.ToolName}…";
+        _status.Text = Lang.F("偵測緊 {0}…", prov.ToolName);
         _status.ForeColor = Ui.TextDim;
         string? exe = await Task.Run(prov.Find);
         if (prov != _provider) return;
         if (exe == null)
         {
-            _status.Text = $"未安裝 {prov.ToolName}";
+            _status.Text = Lang.F("未安裝 {0}", prov.ToolName);
             _status.ForeColor = Ui.Danger;
             UpdateButtons();
             return;
@@ -539,17 +562,17 @@ internal sealed class AiPage : Panel
         if (prov != _provider) return;
         if (a.LoggedIn == true)
         {
-            _status.Text = $"已登入 {prov.Name}" + (a.Plan is { Length: > 0 } pl ? " - " + pl : "");
+            _status.Text = Lang.F("已登入 {0}", prov.Name) + (a.Plan is { Length: > 0 } pl ? " - " + pl : "");
             _status.ForeColor = Ui.Success;
         }
         else if (a.LoggedIn == false)
         {
-            _status.Text = $"未登入 {prov.Name}";
+            _status.Text = Lang.F("未登入 {0}", prov.Name);
             _status.ForeColor = Ui.Danger;
         }
         else
         {
-            _status.Text = $"睇唔到 {prov.Name} 登入狀態";
+            _status.Text = Lang.F("睇唔到 {0} 登入狀態", prov.Name);
             _status.ForeColor = Ui.TextDim;
         }
         UpdateButtons();
@@ -572,6 +595,7 @@ internal sealed class AiPage : Panel
         {
             SetProvider(p);
             if (_current != null && _current.Provider != p.Key) NewChat();
+            _ = RefreshStatusAsync();
         };
         dlg.LoginRequested += (p, exe) =>
         {
@@ -579,13 +603,13 @@ internal sealed class AiPage : Panel
             {
                 p.OpenLoginTerminal(exe);
                 StartLoginPoll(p, exe);
-                AppendSystem($"已經開咗 {p.ToolName} 嘅登入視窗。{p.LoginHint}登入完呢度會自動更新。");
+                AppendSystem(Lang.F("已經開咗 {0} 嘅登入視窗。{1}登入完呢度會自動更新。", p.ToolName, p.LoginHint));
             }
-            catch (Exception ex) { AppendSystem("開唔到終端機：" + ex.Message); }
+            catch (Exception ex) { AppendSystem(Lang.T("開唔到終端機：") + ex.Message); }
         };
         dlg.LoggedOut += p =>
         {
-            AppendSystem($"已登出 {p.Name}。");
+            AppendSystem(Lang.F("已登出 {0}。", p.Name));
             if (p == _provider) _ = RefreshStatusAsync();
         };
         dlg.ShowDialog(FindForm());
@@ -615,7 +639,7 @@ internal sealed class AiPage : Panel
                         _pollProvider = null;
                         SetProvider(prov);
                         await RefreshStatusAsync();
-                        AppendSystem($"{prov.Name} 登入成功，可以開始問嘢喇。嗰個終端機視窗可以閂咗。");
+                        AppendSystem(Lang.F("{0} 登入成功，可以開始問嘢喇。嗰個終端機視窗可以閂咗。", prov.Name));
                     }
                     else if (DateTime.Now > _pollUntil) _poll!.Stop();
                 }
@@ -632,7 +656,7 @@ internal sealed class AiPage : Panel
         _session = null;
         _list.Select(null);
         _log.Clear();
-        AppendSystem(_provider != null ? $"新對話開始（用 {_provider.Name}）。" : "新對話開始。");
+        AppendSystem(_provider != null ? Lang.F("新對話開始（用 {0}）。", _provider.Name) : Lang.T("新對話開始。"));
         _input.Focus();
     }
 
@@ -651,7 +675,7 @@ internal sealed class AiPage : Panel
     private void DeleteChat(ChatRecord rec)
     {
         if (_running != null && rec == _current) return;
-        if (MessageBox.Show(FindForm(), $"刪除對話「{rec.Title}」？", Program.AppName,
+        if (MessageBox.Show(FindForm(), Lang.F("刪除對話「{0}」？", rec.Title), Program.AppName,
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
         ChatStore.Delete(rec);
         _list.Remove(rec);
@@ -672,8 +696,8 @@ internal sealed class AiPage : Panel
     {
         switch (m.Role)
         {
-            case "user": AppendMessage("你", m.Text, Ui.Accent); break;
-            case "error": AppendMessage("錯誤", m.Text, Ui.Danger); break;
+            case "user": AppendMessage(Lang.T("你"), m.Text, Ui.Accent); break;
+            case "error": AppendMessage(Lang.T("錯誤"), m.Text, Ui.Danger); break;
             default: AppendMessage(p.Name, m.Text, Ui.Success); break;
         }
     }
@@ -681,7 +705,7 @@ internal sealed class AiPage : Panel
     private void UpdateButtons()
     {
         bool busy = _running != null;
-        _send.Text = busy ? "停止" : "傳送";
+        _send.Text = busy ? Lang.T("停止") : Lang.T("傳送");
         _send.Kind = busy ? BtnKind.Danger : BtnKind.Primary;
         _send.Enabled = true;
         _newChat.Enabled = !busy;
@@ -690,6 +714,24 @@ internal sealed class AiPage : Panel
         _input.ReadOnly = busy;
         _send.Invalidate();
         _top.PerformLayout();
+    }
+
+    /// <summary>問 AI 一條獨立問題（冇上文、唔記錄），用嚟問網址。</summary>
+    private async Task<string?> AskOnceAsync(AiProvider prov, string exe, string prompt)
+    {
+        var a = await prov.AskAsync(exe, prompt, null, x => { _running = x; BeginInvoke(UpdateButtons); }, quick: true);
+        return a.IsError ? null : a.Text;
+    }
+
+    /// <summary>唔使問 AI 就答到（時間 / 開嘢）：顯示 + 記錄。</summary>
+    private void FinishLocal(ChatRecord chat, AiProvider prov, string reply, List<string> done)
+    {
+        chat.Messages.Add(new ChatMsg { Role = "ai", Text = reply });
+        chat.Updated = DateTime.Now;
+        ChatStore.Save(chat);
+        AppendMessage(prov.Name, reply, Ui.Success);
+        if (done.Count > 0) AppendSystem(string.Join("　", done));
+        _input.Focus();
     }
 
     private async Task SendAsync()
@@ -703,13 +745,13 @@ internal sealed class AiPage : Panel
         var prov = _current != null ? AiProvider.Get(_current.Provider) : _provider;
         if (prov == null)
         {
-            AppendSystem("未揀用邊個 AI：撳右上角「登入」揀 Claude / ChatGPT / Gemini。");
+            AppendSystem(Lang.T("未揀用邊個 AI：撳右上角「登入」揀 Claude / ChatGPT / Gemini。"));
             return;
         }
         string? exe = prov.Find();
         if (exe == null)
         {
-            AppendSystem($"搵唔到 {prov.ToolName}。撳右上角「登入」睇安裝方法，安裝完撳「重新偵測」。");
+            AppendSystem(Lang.F("搵唔到 {0}。撳右上角「登入」睇安裝方法，安裝完撳「重新偵測」。", prov.ToolName));
             return;
         }
         string q = _input.Text.Trim();
@@ -726,26 +768,49 @@ internal sealed class AiPage : Panel
         chat.Updated = DateTime.Now;
         ChatStore.Save(chat);
         _list.Touch(chat);
-        AppendMessage("你", q, Ui.Accent);
+        AppendMessage(Lang.T("你"), q, Ui.Accent);
+
+        // 問時間：程式直接答
+        if (PcActions.TryTime(q, out var timeReply))
+        {
+            FinishLocal(chat, prov, timeReply, new List<string>());
+            return;
+        }
+        // 「開 X」：打字冇錯字，直接掃程式 / 問 AI 網址（網址靠 AI 記得）
+        if (PcActions.OpenTarget(q) is { } openTarget)
+        {
+            var r = await PcActions.OpenAsync(openTarget, p => AskOnceAsync(prov, exe, p), PcActions.WantsSite(q));
+            _running = null;
+            UpdateButtons();
+            if (r.Ok)
+            {
+                FinishLocal(chat, prov, PcActions.OpenedReply(q, openTarget), r.Done);
+                return;
+            }
+        }
         int thinkingStart = _log.TextLength;
-        AppendSystem($"{prov.Name} 諗緊…");
+        AppendSystem(Lang.F("{0} 諗緊…", prov.Name));
         int thinkingEnd = _log.TextLength;
 
         AiProvider.Answer ans;
         try
         {
-            ans = await prov.AskAsync(exe, q, _session, p => { _running = p; BeginInvoke(UpdateButtons); });
+            // 每句附上系統時間；新對話第一句再講明可以開網頁 / 程式
+            string Wrap(bool first) => (first ? PcActions.Rules + "\n\n" : "") + PcActions.NowTag + "\n" + q;
+            string prompt = await Task.Run(() => Wrap(_session == null));
+            ans = await prov.AskAsync(exe, prompt, _session, p => { _running = p; BeginInvoke(UpdateButtons); });
             // 舊對話喺工具嗰邊已經清咗，就當新對話再問一次
             if (ans.IsError && !_stopped && _session != null && AiProvider.IsSessionGone(ans.Text))
             {
                 _session = null;
-                ans = await prov.AskAsync(exe, q, null, p => { _running = p; BeginInvoke(UpdateButtons); });
-                if (!ans.IsError) ans = ans with { Text = "（舊對話嘅上文已過期，呢個回答唔記得之前講過乜）\n\n" + ans.Text };
+                string prompt2 = await Task.Run(() => Wrap(true));
+                ans = await prov.AskAsync(exe, prompt2, null, p => { _running = p; BeginInvoke(UpdateButtons); });
+                if (!ans.IsError) ans = ans with { Text = Lang.T("（舊對話嘅上文已過期，呢個回答唔記得之前講過乜）\n\n") + ans.Text };
             }
         }
         catch (Exception ex)
         {
-            ans = new AiProvider.Answer("出錯：" + ex.Message, null, true);
+            ans = new AiProvider.Answer(Lang.T("出錯：") + ex.Message, null, true);
         }
         _running = null;
         UpdateButtons();
@@ -762,6 +827,16 @@ internal sealed class AiPage : Panel
 
         if (ans.SessionId != null) _session = ans.SessionId;
         chat.SessionId = _session;
+        List<string> done = new();
+        if (!ans.IsError && !_stopped)
+        {
+            var (clean, acts) = PcActions.Run(ans.Text);
+            // 冇標籤但 AI 講「幫你開咗 X」：照開 X
+            if (acts.Count == 0 && PcActions.ReplyTarget(clean) is { } rt)
+                acts = (await PcActions.OpenAsync(rt, p => AskOnceAsync(prov, exe, p), PcActions.WantsSite(clean + q))).Done;
+            done = acts;
+            ans = ans with { Text = clean.Length > 0 ? clean : string.Join("、", acts) };
+        }
         if (!_stopped)
         {
             chat.Messages.Add(new ChatMsg { Role = ans.IsError ? "error" : "ai", Text = ans.Text });
@@ -770,17 +845,21 @@ internal sealed class AiPage : Panel
         ChatStore.Save(chat);
         _list.Touch(chat);
         if (chat != _current) return;
-        if (_stopped) AppendSystem("已停止。");
+        if (_stopped) AppendSystem(Lang.T("已停止。"));
         else if (ans.IsError)
         {
             string hint = ans.Text.Contains("login", StringComparison.OrdinalIgnoreCase) ||
                           ans.Text.Contains("auth", StringComparison.OrdinalIgnoreCase)
-                ? "\n（未登入或者登入過期：撳右上角「登入」）"
+                ? Lang.T("\n（未登入或者登入過期：撳右上角「登入」）")
                 : "";
-            AppendMessage("錯誤", ans.Text + hint, Ui.Danger);
+            AppendMessage(Lang.T("錯誤"), ans.Text + hint, Ui.Danger);
             _ = RefreshStatusAsync();
         }
-        else AppendMessage(prov.Name, ans.Text, Ui.Success);
+        else
+        {
+            AppendMessage(prov.Name, ans.Text, Ui.Success);
+            if (done.Count > 0) AppendSystem(string.Join("　", done));
+        }
         _input.Focus();
     }
 
@@ -809,7 +888,7 @@ internal sealed class AiPage : Panel
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { _poll?.Dispose(); try { _running?.Kill(true); } catch { } }
+        if (disposing) { _poll?.Dispose(); _voiceKey.Dispose(); try { _running?.Kill(true); } catch { } }
         base.Dispose(disposing);
     }
 }
@@ -824,7 +903,7 @@ internal sealed class ProviderPicker : Form
     public ProviderPicker(AiProvider? active)
     {
         _active = active;
-        Text = "登入";
+        Text = Lang.T("帳號");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = MinimizeBox = false;
@@ -836,7 +915,7 @@ internal sealed class ProviderPicker : Form
         ClientSize = new Size(Ui.S(440), Ui.S(52) + rowH * AiProvider.All.Length + Ui.S(12));
         Controls.Add(new Label
         {
-            Text = "揀要用嘅 AI（用你自己部電腦安裝咗嘅工具同帳號）",
+            Text = Lang.T("揀要用嘅 AI（用你自己部電腦安裝咗嘅工具同帳號）"),
             ForeColor = Ui.TextDim, Font = Ui.F(9.5f), AutoSize = false,
             Bounds = new Rectangle(Ui.S(16), Ui.S(14), Ui.S(408), Ui.S(24))
         });
@@ -865,18 +944,18 @@ internal sealed class ProviderPicker : Form
             BackColor = Ui.CardHi;
             _name = new Label
             {
-                Text = p.Name + (p == owner._active ? "（使用中）" : ""), Font = Ui.F(10.5f, FontStyle.Bold), ForeColor = Ui.Text,
-                AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(8), Ui.S(200), Ui.S(22))
+                Text = p.Name + (p == owner._active ? Lang.T("（使用中）") : ""), Font = Ui.F(10.5f, FontStyle.Bold), ForeColor = Ui.Text,
+                AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(8), Ui.S(184), Ui.S(22))
             };
             _state = new Label
             {
-                Text = $"{p.ToolName} · 檢查緊…", Font = Ui.F(8.75f), ForeColor = Ui.TextFaint,
-                AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(31), Ui.S(220), Ui.S(18))
+                Text = Lang.F("{0} · 檢查緊…", p.ToolName), Font = Ui.F(8.75f), ForeColor = Ui.TextFaint,
+                AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(31), Ui.S(184), Ui.S(18))
             };
             _main = new FancyButton { Text = "…", Kind = BtnKind.Primary, Font = Ui.F(9.5f), Enabled = false };
-            _logout = new FancyButton { Text = "登出", Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Visible = false };
-            _main.SetBounds(bounds.Width - Ui.S(96), Ui.S(12), Ui.S(84), Ui.S(32));
-            _logout.SetBounds(bounds.Width - Ui.S(188), Ui.S(12), Ui.S(84), Ui.S(32));
+            _logout = new FancyButton { Text = Lang.T("登出"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Visible = false };
+            _main.SetBounds(bounds.Width - Ui.S(116), Ui.S(12), Ui.S(104), Ui.S(32));
+            _logout.SetBounds(bounds.Width - Ui.S(208), Ui.S(12), Ui.S(84), Ui.S(32));
             _main.Click += (_, _) => Main();
             _logout.Click += async (_, _) => await LogoutAsync();
             Controls.AddRange(new Control[] { _name, _state, _main, _logout });
@@ -887,11 +966,27 @@ internal sealed class ProviderPicker : Form
         {
             _exe = await Task.Run(_p.Find);
             if (IsDisposed) return;
+            if (_p is LocalProvider)
+            {
+                // 本地 AI：冇登入，只分「未下載 / 已下載」
+                var cur = LocalAi.Current;
+                _loggedIn = cur != null;
+                _state.Text = cur != null ? Lang.T("已下載") + " - " + cur.Label : Lang.T("未下載（免費）");
+                _state.ForeColor = cur != null ? Ui.Success : Ui.TextDim;
+                _main.Text = cur == null ? Lang.T("下載") : Lang.T("使用");
+                _main.Kind = BtnKind.Primary;
+                _main.Enabled = cur == null || _p != _owner._active;
+                _logout.Text = Lang.T("模型");
+                _logout.Visible = cur != null;
+                _main.Invalidate();
+                _logout.Invalidate();
+                return;
+            }
             if (_exe == null)
             {
-                _state.Text = $"未安裝 {_p.ToolName}";
+                _state.Text = Lang.F("未安裝 {0}", _p.ToolName);
                 _state.ForeColor = Ui.Danger;
-                _main.Text = "安裝方法";
+                _main.Text = Lang.T("安裝方法");
                 _main.Kind = BtnKind.Ghost;
                 _main.Enabled = true;
                 _main.Invalidate();
@@ -902,25 +997,40 @@ internal sealed class ProviderPicker : Form
             _loggedIn = a.LoggedIn == true;
             if (_loggedIn)
             {
-                _state.Text = "已登入" + (a.Plan is { Length: > 0 } pl ? " - " + pl : "");
+                _state.Text = Lang.T("已登入") + (a.Plan is { Length: > 0 } pl ? " - " + pl : "");
                 _state.ForeColor = Ui.Success;
-                _main.Text = "使用";
+                _main.Text = Lang.T("使用");
                 _main.Enabled = _p != _owner._active;
                 _logout.Visible = true;
             }
             else
             {
-                _state.Text = a.LoggedIn == false ? "未登入" : "睇唔到登入狀態";
+                _state.Text = a.LoggedIn == false ? Lang.T("未登入") : Lang.T("睇唔到登入狀態");
                 _state.ForeColor = a.LoggedIn == false ? Ui.TextDim : Ui.TextFaint;
-                _main.Text = "登入";
+                _main.Text = Lang.T("登入");
                 _main.Enabled = true;
                 _logout.Visible = false;
             }
             _main.Invalidate();
         }
 
+        private void ShowLocal()
+        {
+            using var dlg = new LocalAiDialog();
+            dlg.Changed += () => { if (LocalAi.Current != null) _owner.UseRequested?.Invoke(_p); };
+            dlg.ShowDialog(_owner);
+            _ = RefreshAsync();
+        }
+
         private void Main()
         {
+            if (_p is LocalProvider)
+            {
+                if (LocalAi.Current == null) { ShowLocal(); return; }
+                _owner.UseRequested?.Invoke(_p);
+                _owner.Close();
+                return;
+            }
             if (_exe == null)
             {
                 try { Process.Start(new ProcessStartInfo(_p.InstallUrl) { UseShellExecute = true }); } catch { }
@@ -933,15 +1043,16 @@ internal sealed class ProviderPicker : Form
 
         private async Task LogoutAsync()
         {
+            if (_p is LocalProvider) { ShowLocal(); return; }
             if (_exe == null) return;
-            if (MessageBox.Show(_owner, $"確定要登出 {_p.Name}？\n（{_p.ToolName} 本身都會一齊登出）", Program.AppName,
+            if (MessageBox.Show(_owner, Lang.F("確定要登出 {0}？\n（{1} 本身都會一齊登出）", _p.Name, _p.ToolName), Program.AppName,
                     MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             _logout.Enabled = false;
             bool ok = await _p.LogoutAsync(_exe);
             _logout.Enabled = true;
             if (!ok)
             {
-                MessageBox.Show(_owner, "登出失敗。", Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(_owner, Lang.T("登出失敗。"), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             _owner.LoggedOut?.Invoke(_p);
@@ -1055,8 +1166,8 @@ internal sealed class ChatList : ListBox
         try { _menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
         _menu.BackColor = Ui.CardHi;
         _menu.ForeColor = Ui.Text;
-        _menu.Items.Add("重新命名", null, (_, _) => { if (_menuItem != null) RenameRequested?.Invoke(_menuItem); });
-        _menu.Items.Add("刪除", null, (_, _) => { if (_menuItem != null) DeleteRequested?.Invoke(_menuItem); });
+        _menu.Items.Add(Lang.T("重新命名"), null, (_, _) => { if (_menuItem != null) RenameRequested?.Invoke(_menuItem); });
+        _menu.Items.Add(Lang.T("刪除"), null, (_, _) => { if (_menuItem != null) DeleteRequested?.Invoke(_menuItem); });
     }
 
     public void SetItems(IEnumerable<ChatRecord> items)
@@ -1170,7 +1281,7 @@ internal sealed class RenameDialog : Form
 
     private RenameDialog(string current)
     {
-        Text = "重新命名";
+        Text = Lang.T("重新命名");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = MinimizeBox = false;
@@ -1184,9 +1295,9 @@ internal sealed class RenameDialog : Form
             Text = current, Font = Ui.F(10.5f), BackColor = Ui.Input, ForeColor = Ui.Text, BorderStyle = BorderStyle.FixedSingle,
             Bounds = new Rectangle(Ui.S(16), Ui.S(16), Ui.S(328), Ui.S(30))
         };
-        var ok = new FancyButton { Text = "確定", Kind = BtnKind.Primary, Font = Ui.F(9.75f),
+        var ok = new FancyButton { Text = Lang.T("確定"), Kind = BtnKind.Primary, Font = Ui.F(9.75f),
             Bounds = new Rectangle(Ui.S(164), Ui.S(66), Ui.S(84), Ui.S(34)) };
-        var cancel = new FancyButton { Text = "取消", Kind = BtnKind.Ghost, Font = Ui.F(9.75f),
+        var cancel = new FancyButton { Text = Lang.T("取消"), Kind = BtnKind.Ghost, Font = Ui.F(9.75f),
             Bounds = new Rectangle(Ui.S(260), Ui.S(66), Ui.S(84), Ui.S(34)) };
         ok.Click += (_, _) => { DialogResult = DialogResult.OK; Close(); };
         cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };

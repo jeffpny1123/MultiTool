@@ -24,7 +24,7 @@ public static class KeyList
 
     public static List<Item> Build()
     {
-        var l = new List<Item> { new("（無）", 0) };
+        var l = new List<Item> { new(Lang.T("（無）"), 0) };
         for (char c = 'A'; c <= 'Z'; c++) l.Add(new(c.ToString(), c));
         for (char c = '0'; c <= '9'; c++) l.Add(new(c.ToString(), c));
         for (int f = 1; f <= 12; f++) l.Add(new("F" + f, 0x6F + f));
@@ -418,7 +418,7 @@ public readonly record struct Hotkey(Keys Modifier, int Vk)
 
     public override string ToString()
     {
-        if (IsEmpty) return "（無）";
+        if (IsEmpty) return Lang.T("（無）");
         string mod = Modifier switch { Keys.Control => "Ctrl + ", Keys.Shift => "Shift + ", Keys.Alt => "Alt + ", _ => "" };
         return mod + KeyName(Vk);
     }
@@ -444,7 +444,7 @@ internal sealed class HotkeyBox : TextBox
         Cursor = Cursors.Hand;
         Load();
         Text = _hotkey.ToString();
-        _tip.SetToolTip(this, "撳一下，再撳快捷鍵（最多 2 個鍵，例如 Ctrl + F1）。Backspace / Delete 清除。");
+        _tip.SetToolTip(this, Lang.T("撳一下，再撳快捷鍵（最多 2 個鍵，例如 Ctrl + F1）。Backspace / Delete 清除。"));
     }
 
     public Hotkey Hotkey
@@ -456,7 +456,7 @@ internal sealed class HotkeyBox : TextBox
     protected override void OnGotFocus(EventArgs e)
     {
         base.OnGotFocus(e);
-        Text = "請撳快捷鍵…";
+        Text = Lang.T("請撳快捷鍵…");
     }
 
     protected override void OnLostFocus(EventArgs e)
@@ -488,7 +488,7 @@ internal sealed class HotkeyBox : TextBox
         int modCount = (mods.HasFlag(Keys.Control) ? 1 : 0) + (mods.HasFlag(Keys.Shift) ? 1 : 0) + (mods.HasFlag(Keys.Alt) ? 1 : 0);
         if (modCount > 1)
         {
-            Text = "最多 2 個鍵";
+            Text = Lang.T("最多 2 個鍵");
             return true;
         }
         Set(new Hotkey(mods, (int)code));

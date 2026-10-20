@@ -9,8 +9,8 @@ namespace MultiTool;
 
 internal static class Program
 {
-    public const string AppName = "多功能工具";
-    public const string Version = "v1.1";
+    public static string AppName => Lang.T("多功能工具");
+    public const string Version = "v1.2";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -23,7 +23,7 @@ internal static class Program
         Application.ThreadException += (_, e) =>
         {
             AppPaths.LogError("UI", e.Exception);
-            MessageBox.Show("出錯：" + e.Exception.Message + "\n\n詳情已寫入 data\\error.log", AppName,
+            MessageBox.Show(Lang.T("出錯：") + e.Exception.Message + Lang.T("\n\n詳情已寫入 data\\error.log"), AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         };
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -69,17 +69,41 @@ internal sealed class MainForm : Form
         _sidebar.Controls.Add(ver);
 
         // 左下角：開發者
-        var by = Ui.Text_("開發者：" + Program.Author, Ui.TextFaint, Ui.F(9f), new Padding(0));
+        var by = Ui.Text_(Lang.T("開發者：") + Program.Author, Ui.TextFaint, Ui.F(9f), new Padding(0));
         _sidebar.Controls.Add(by);
-        void PlaceBy() => by.Location = new Point(Ui.S(22), _sidebar.ClientSize.Height - by.PreferredHeight - Ui.S(16));
+        // 左下角：切換語言（喺「開發者」上面）
+        var lang = new Label
+        {
+            Text = "🌐 " + Lang.DisplayName(Lang.Current) + " ▾", AutoSize = true, ForeColor = Ui.TextDim, Font = Ui.F(9f),
+            Cursor = Cursors.Hand, BackColor = Ui.Panel
+        };
+        var langMenu = new ContextMenuStrip();
+        try { langMenu.Renderer = DarkTheme.MenuRenderer(); } catch { }
+        langMenu.BackColor = Ui.CardHi;
+        langMenu.ForeColor = Ui.Text;
+        foreach (Language l in Enum.GetValues(typeof(Language)))
+        {
+            var item = new ToolStripMenuItem(Lang.DisplayName(l)) { Checked = l == Lang.Current, ForeColor = Ui.Text };
+            item.Click += (_, _) => SwitchLanguage(l);
+            langMenu.Items.Add(item);
+        }
+        lang.Click += (_, _) => langMenu.Show(lang, new Point(0, -langMenu.PreferredSize.Height));
+        lang.MouseEnter += (_, _) => lang.ForeColor = Ui.Text;
+        lang.MouseLeave += (_, _) => lang.ForeColor = Ui.TextDim;
+        _sidebar.Controls.Add(lang);
+        void PlaceBy()
+        {
+            by.Location = new Point(Ui.S(22), _sidebar.ClientSize.Height - by.PreferredHeight - Ui.S(16));
+            lang.Location = new Point(Ui.S(20), by.Top - lang.PreferredHeight - Ui.S(8));
+        }
         _sidebar.Resize += (_, _) => PlaceBy();
         PlaceBy();
 
         // ---- 功能清單（以後喺度加）----
-        AddPage("首頁", BuildHomePage);
-        AddPage("我的腳本", Scripts.ScriptsPage.Build);
-        AddPage("AI 助手", Ai.AiPage.Build);
-        AddPage("關於", BuildAboutPage);
+        AddPage(Lang.T("首頁"), BuildHomePage);
+        AddPage(Lang.T("我的腳本"), Scripts.ScriptsPage.Build);
+        AddPage(Lang.T("AI 助手"), Ai.AiPage.Build);
+        AddPage(Lang.T("關於"), BuildAboutPage);
 
         Controls.Add(_content);
         Controls.Add(_sidebar);
@@ -136,6 +160,22 @@ internal sealed class MainForm : Form
         _ = Updater.CheckAsync(this, silent: true);
     }
 
+    /// <summary>換語言：記低，再重新啟動程式（介面全部重新整過）。</summary>
+    private void SwitchLanguage(Language l)
+    {
+        if (l == Lang.Current) return;
+        if (MessageBox.Show(this, Lang.T("切換語言需要重新啟動程式，運行中嘅腳本會停止。而家重新啟動？"), Program.AppName,
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        Lang.Save(l);
+        try
+        {
+            string exe = Environment.ProcessPath ?? Application.ExecutablePath;
+            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" });
+        }
+        catch (Exception ex) { AppPaths.LogError("重新啟動", ex); }
+        Application.Exit();
+    }
+
     private void AddPage(string name, Func<Control> build)
     {
         var nav = new NavItem(name);
@@ -158,7 +198,7 @@ internal sealed class MainForm : Form
             catch (Exception ex)
             {
                 AppPaths.LogError("Build page " + p.Nav.Text, ex);
-                page = new Label { Text = "載入失敗：" + ex.Message, ForeColor = Ui.Danger, Dock = DockStyle.Fill, Padding = new Padding(Ui.S(24)) };
+                page = new Label { Text = Lang.T("載入失敗：") + ex.Message, ForeColor = Ui.Danger, Dock = DockStyle.Fill, Padding = new Padding(Ui.S(24)) };
             }
             page.Dock = DockStyle.Fill;
             page.Visible = false;
@@ -179,28 +219,28 @@ internal sealed class MainForm : Form
     {
         var stack = new CardStack();
 
-        var welcome = new CardPanel { Title = "歡迎使用 " + Program.AppName, Hint = Program.Version + " · 開發者：" + Program.Author };
+        var welcome = new CardPanel { Title = Lang.T("歡迎使用 ") + Program.AppName, Hint = Program.Version + Lang.T(" · 開發者：") + Program.Author };
         welcome.SetContent(new WrapText(
-            "一個自用嘅 Windows 小工具，將平時重複嘅滑鼠同鍵盤動作自動化。左邊揀功能；" +
-            "所有設定同圖片會自動儲存喺 exe 隔籬嘅 data 資料夾，重開都仲喺度。"));
+            Lang.T("一個自用嘅 Windows 小工具，將平時重複嘅滑鼠同鍵盤動作自動化。左邊揀功能；") +
+            Lang.T("所有設定同圖片會自動儲存喺 exe 隔籬嘅 data 資料夾，重開都仲喺度。")));
         stack.AddRow(welcome);
 
-        stack.AddRow(Feature("我的腳本", 1,
-            "好似按鍵精靈咁自己砌腳本：按鍵（可組合鍵、撳住 / 按下 / 彈起）、滑鼠點擊、等待、" +
-            "截圖搵圖點擊、循環同中斷循環、IF 條件（搵到圖 / 搵唔到圖 / 某點顏色 / 時間 / 倒數，可以一層層 nest）。" +
-            "IF 框同主線程同時行；每個腳本可以揀「行一次」或者「一直行」，亦可以設自己嘅快捷鍵（入咗嗰個腳本嘅預覽頁先用得）。\n\n" +
-            "已經幫你寫好一個「自動點擊」腳本：截圖搵怪物 → 搵到就點擊 → 喺點選CD 期間循環按鍵 → 再搵。" +
-            "入去截好怪物圖、設好按鍵就用得。"));
+        stack.AddRow(Feature(Lang.T("我的腳本"), 1,
+            Lang.T("好似按鍵精靈咁自己砌腳本：按鍵（可組合鍵、撳住 / 按下 / 彈起）、滑鼠點擊、等待、") +
+            Lang.T("截圖搵圖點擊、循環同中斷循環、IF 條件（搵到圖 / 搵唔到圖 / 某點顏色 / 時間 / 倒數，可以一層層 nest）。") +
+            Lang.T("IF 框同主線程同時行；每個腳本可以揀「行一次」或者「一直行」，亦可以設自己嘅快捷鍵（入咗嗰個腳本嘅預覽頁先用得）。\n\n") +
+            Lang.T("已經幫你寫好一個「自動點擊」腳本：截圖搵怪物 → 搵到就點擊 → 喺點選CD 期間循環按鍵 → 再搵。") +
+            Lang.T("入去截好怪物圖、設好按鍵就用得。")));
 
-        stack.AddRow(Feature("AI 助手", 2,
-            "用你部機已經安裝同登入咗嘅 Claude Code、Codex CLI（ChatGPT）或者 Gemini CLI 嚟問嘢，做基本日常問答，對話會自動儲存。" +
-            "唔使喺呢度輸入任何帳號密碼；撳右上角「登入」揀用邊個，未登入就喺彈出嘅視窗登入一次。"));
+        stack.AddRow(Feature(Lang.T("AI 助手"), 2,
+            Lang.T("用你部機已經安裝同登入咗嘅 Claude Code、Codex CLI（ChatGPT）或者 Gemini CLI 嚟問嘢，做基本日常問答，對話會自動儲存。") +
+            Lang.T("唔使喺呢度輸入任何帳號密碼；撳右上角「登入」揀用邊個，未登入就喺彈出嘅視窗登入一次。")));
 
-        var tips = new CardPanel { Title = "小貼士" };
+        var tips = new CardPanel { Title = Lang.T("小貼士") };
         tips.SetContent(new WrapText(
-            "• 搵圖用嘅圖片最好直接喺遊戲畫面截，唔好縮放過，配對會準好多。\n" +
-            "• 如果遊戲用管理員權限開，呢個工具都要用管理員權限開，否則點擊同按鍵會被 Windows 擋住。\n" +
-            "• 出錯會寫入 data\\error.log。"));
+            Lang.T("• 搵圖用嘅圖片最好直接喺遊戲畫面截，唔好縮放過，配對會準好多。\n") +
+            Lang.T("• 如果遊戲用管理員權限開，呢個工具都要用管理員權限開，否則點擊同按鍵會被 Windows 擋住。\n") +
+            Lang.T("• 出錯會寫入 data\\error.log。")));
         stack.AddRow(tips);
         return stack;
     }
@@ -208,7 +248,7 @@ internal sealed class MainForm : Form
     private CardPanel Feature(string name, int pageIndex, string text)
     {
         var card = new CardPanel { Title = name };
-        var go = new FancyButton { Text = "前往 →", Kind = BtnKind.Primary, Font = Ui.F(9.75f, FontStyle.Bold) };
+        var go = new FancyButton { Text = Lang.T("前往 →"), Kind = BtnKind.Primary, Font = Ui.F(9.75f, FontStyle.Bold) };
         go.Size = new Size(Ui.S(96), Ui.S(34));
         go.Click += (_, _) => BeginInvoke(() => Show(pageIndex));
         card.SetContent(new WrapText(text, go));
@@ -218,9 +258,9 @@ internal sealed class MainForm : Form
     private Control BuildAboutPage()
     {
         var stack = new CardStack();
-        var card = new CardPanel { Title = Program.AppName + " " + Program.Version, Hint = "開發者：" + Program.Author + "。設定同圖片全部存喺 exe 隔籬嘅 data 資料夾。" };
+        var card = new CardPanel { Title = Program.AppName + " " + Program.Version, Hint = Lang.T("開發者：") + Program.Author + Lang.T("。設定同圖片全部存喺 exe 隔籬嘅 data 資料夾。") };
         var row = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, WrapContents = false };
-        var update = new FancyButton { Text = "檢查更新", Kind = BtnKind.Primary };
+        var update = new FancyButton { Text = Lang.T("檢查更新"), Kind = BtnKind.Primary };
         update.Size = update.GetPreferredSize(Size.Empty);
         update.Click += (_, _) => _ = Updater.CheckAsync(this, silent: false);
         row.Controls.Add(update);
@@ -232,7 +272,7 @@ internal sealed class MainForm : Form
             catch (Exception ex) { MessageBox.Show(ex.Message, Program.AppName); }
         };
         row.Controls.Add(gh);
-        var open = new FancyButton { Text = "開啟 data 資料夾", Kind = BtnKind.Default };
+        var open = new FancyButton { Text = Lang.T("開啟 data 資料夾"), Kind = BtnKind.Default };
         open.Size = open.GetPreferredSize(Size.Empty);
         open.Click += (_, _) =>
         {
@@ -247,10 +287,10 @@ internal sealed class MainForm : Form
         card.SetContent(row);
         stack.AddRow(card);
 
-        var lic = new CardPanel { Title = "授權" };
+        var lic = new CardPanel { Title = Lang.T("授權") };
         lic.SetContent(new WrapText(
-            "© " + Program.Author + "。本軟件按 PolyForm Noncommercial License 1.0.0 授權：" +
-            "可以免費使用、修改同分享，但禁止轉售或任何商業用途。\n" +
+            "© " + Program.Author + Lang.T("。本軟件按 PolyForm Noncommercial License 1.0.0 授權：") +
+            Lang.T("可以免費使用、修改同分享，但禁止轉售或任何商業用途。\n") +
             "https://polyformproject.org/licenses/noncommercial/1.0.0"));
         stack.AddRow(lic);
         return stack;
