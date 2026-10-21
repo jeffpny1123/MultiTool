@@ -576,11 +576,37 @@ internal sealed class HotkeyBox : TextBox
     /// <summary>撳咗個格仔、等緊撳快捷鍵（淨係攞到焦點唔算，例如切返入嚟個視窗）。</summary>
     public bool Capturing { get; private set; }
 
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vk);
+    private static HotkeyBox? _capturingBox;
+    private static int _heldVk;
+
+    /// <summary>有快捷鍵格仔等緊撳鍵，或者啱啱設定完嗰粒鍵仲未放手：所有快捷鍵暫停，費事一設定就觸發。</summary>
+    public static bool Busy
+    {
+        get
+        {
+            if (_capturingBox is { } b && b.Capturing && b.Visible && b.Focused && !b.IsDisposed) return true;
+            if (_heldVk != 0)
+            {
+                if ((GetAsyncKeyState(_heldVk) & 0x8000) != 0) return true;
+                _heldVk = 0;
+            }
+            return false;
+        }
+    }
+
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        if (!Visible && Capturing) { Capturing = false; Text = _hotkey.ToString(); }
+    }
+
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
         if (e.Button != MouseButtons.Left) return;
         Capturing = true;
+        _capturingBox = this;
         Text = Lang.T("請撳快捷鍵…");
     }
 
@@ -627,6 +653,8 @@ internal sealed class HotkeyBox : TextBox
     private void Set(Hotkey hk)
     {
         _hotkey = hk;
+        Capturing = false; // 設定完：再撳就係用快捷鍵，唔係再設定
+        _heldVk = hk.IsEmpty ? 0 : hk.Vk; // 等放手先生效
         Text = hk.ToString();
         if (_file != null)
         {

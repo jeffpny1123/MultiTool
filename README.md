@@ -59,6 +59,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 **Script library 腳本庫** — share scripts peer-to-peer, no server / 點對點分享腳本，無須伺服器
 
+- Open it with **Script library →** at the bottom-right of **My Scripts**.
+  於**我的腳本**右下角按 **腳本庫 →** 開啟。
 - Search and download scripts shared by users who currently have MultiTool open; files come directly from their PC. If they are offline or unreachable, the download fails.
   搜尋及下載目前開啟 MultiTool 的用戶所公開的腳本，檔案直接從對方電腦傳送；對方離線或無法連線則無法下載。
 - Share your own: turn on sharing in **Script library → Sharing settings**, then right-click a script → **Share to library**. Your IP address is visible to other users while sharing; window handles, hotkeys and your user folder path are not shared.
@@ -66,10 +68,32 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - Before adding a downloaded script, its system actions and typed text are listed for you to confirm. Downloaded scripts never start automatically.
   加入下載的腳本前，會列出其中的系統動作及輸入文字供你確認；下載的腳本不會自動開始。
 
+**Tool library 工具庫** — choose which tools appear in the sidebar / 選擇側欄顯示的工具
+
+- Tools are shown as tiles with a search box. **Install** adds a tool to the sidebar and **Remove** hides it again; your scripts and videos are kept. **My Scripts** is installed by default.
+  工具以方格排列，並設有搜尋欄。按**安裝**會在側欄加入該工具，按**移除**則會隱藏；你的腳本及影片會保留。**我的腳本**預設已安裝。
+- Tools that need extra files download them when installed (e.g. the recorder downloads FFmpeg, about 100 MB). No server of our own is involved.
+  需要額外檔案的工具會於安裝時下載（例如錄影工具會下載約 100 MB 的 FFmpeg），不經任何自設伺服器。
+
+**Screen recorder 錄影工具** — install it from the Tool library / 於工具庫安裝
+
+- Record the full screen, a region or a window, with system audio and / or microphone, each with its own volume (0–300%).
+  錄製全螢幕、指定範圍或指定視窗，可同時錄製電腦聲音及／或咪高峰，兩者可分別調整音量（0–300%）。
+- Frame rate 15–144 FPS; resolution Original / 720P / 1080P / 2K / 4K (never upscales); show or hide the mouse cursor.
+  幀率 15–144 FPS；解像度可選原始／720P／1080P／2K／4K（不會放大）；可選擇是否錄製滑鼠游標。
+- Codec H.264 / H.265 (HEVC) / AV1 with GPU encoding (NVIDIA / Intel / AMD, auto-detected) or CPU only; quality Highest / High / Medium / Low; output MP4, MKV or AVI.
+  編碼器 H.264／H.265（HEVC）／AV1，可用顯示卡編碼（自動偵測 NVIDIA／Intel／AMD）或只用 CPU；品質分最高／高／中／低；輸出 MP4、MKV 或 AVI。
+- Start / stop with a hotkey from anywhere. A small timer appears at the top-right while recording and is not captured in the video.
+  可於任何地方以快捷鍵開始／停止。錄影期間右上角會顯示計時器，計時器不會被錄入影片。
+- **Recent recording** shows the latest video with **Play** and **Delete** (moves it to the Recycle Bin).
+  **最近錄影**顯示最新的影片，可**播放**或**刪除**（移至資源回收筒）。
+
 **Settings 設定**
 
 - Start with Windows, minimize to the system tray on close (asked the first time you close), check for updates. Light / dark theme and language are at the bottom-left.
   開機時啟動、關閉時最少化至系統匣（首次關閉時會詢問）、檢查更新。日光／夜間主題及語言於左下角切換。
+- **Sidebar order**: drag items in the sidebar up or down, or right-click for Move up / Move down / Reset order.
+  **側欄排序**：可直接拖曳側欄項目上下移動，或右鍵選擇上移／下移／重設排序。
 
 **AI Assistant AI 助手** — uses the AI command-line tool already installed and signed in on your computer / 使用你電腦上已安裝並已登入的 AI 命令列工具
 
@@ -107,6 +131,22 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v1.7
+- **New: Tool library** (replaces the fixed sidebar) — install or remove tools as tiles, with search. Tools that need extra files download them on install.
+  **新增：工具庫**——以方格安裝或移除工具，並可搜尋；需要額外檔案的工具會於安裝時下載。
+- **New: Screen recorder** — full screen / region / window, system audio and microphone with separate volume, 15–144 FPS, 720P–4K, H.264 / H.265 / AV1 with GPU encoding, quality levels, MP4 / MKV / AVI, cursor on / off, hotkey, on-screen timer that is not recorded.
+  **新增：錄影工具**——全螢幕／範圍／視窗，電腦聲音及咪高峰可分別調整音量，15–144 FPS、720P–4K，H.264／H.265／AV1 顯示卡編碼，品質級別，MP4／MKV／AVI，可開關滑鼠游標，快捷鍵，以及不會被錄入的計時器。
+- **New: Sidebar order** — drag items or right-click to reorder; the order is remembered.
+  **新增：側欄排序**——拖曳或右鍵調整次序，並會記住。
+- **Changed:** the Script library moved into My Scripts (button at the bottom-right).
+  **變更：**腳本庫移至我的腳本內（右下角按鈕）。
+- **Changed:** script hotkeys now start their scripts from any other page or when MultiTool is minimized; on the My Scripts page only the previewed script can be started by hotkey.
+  **變更：**於其他頁面或 MultiTool 最小化時，可用快捷鍵開始任何腳本；在我的腳本頁內，只有預覽中的腳本可用快捷鍵開始。
+- Fixed: setting a hotkey immediately triggered it (e.g. started a recording).
+  修正：設定快捷鍵時會即時觸發（例如開始錄影）。
+- Fixed: all hotkeys stopped working after setting one and switching to another page.
+  修正：設定快捷鍵後切換至其他頁面，所有快捷鍵失效。
 
 ### v1.6
 - **New: Script library** — share and download scripts peer-to-peer, no server.
@@ -245,7 +285,7 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 錄影工具；`P2P.cs` Script library 腳本庫 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
 | `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
 | `release/` | User guide shipped with releases 隨發佈版本附上的使用說明（`使用說明.txt`） |
@@ -291,6 +331,7 @@ Downloaded by the user on demand, not bundled in the executable / 由用戶按�
 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and [OpenAI Whisper](https://github.com/openai/whisper) models — MIT License
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) — MIT License
+- [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the screen recorder as a separate program / GPL 授權，錄影工具以獨立程式方式調用
 - [Qwen3.5](https://huggingface.co/Qwen) models (GGUF by [unsloth](https://huggingface.co/unsloth)) — see each model's license / 請參閱各模型的授權
 
 ---

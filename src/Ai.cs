@@ -525,7 +525,7 @@ internal sealed class AiPage : Panel
         // 語音對話快捷鍵（喺邊度都用得）
         _voiceKey.Tick += (_, _) =>
         {
-            bool down = VoiceSettings.Enabled && VoiceSettings.Hotkey.IsDown();
+            bool down = VoiceSettings.Enabled && !MultiTool.Common.HotkeyBox.Busy && VoiceSettings.Hotkey.IsDown();
             bool was = _voiceWasDown;
             _voiceWasDown = down;
             if (!down || was || MultiTool.Common.Keyboard.RecentlyInjected) return;

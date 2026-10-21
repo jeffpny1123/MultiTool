@@ -1580,8 +1580,46 @@ public sealed class ScriptsPage : Panel
 
     public static Control Build() => new ScriptsPage();
 
+    /// <summary>而家嘅「我的腳本」頁（首頁「腳本庫」前往用）。</summary>
+    public static ScriptsPage? Instance { get; private set; }
+
+    private FancyButton? _libBtn;
+    private Panel? _libView;
+
+    /// <summary>打開腳本庫（喺「我的腳本」頁入面，上面有返回掣）。</summary>
+    public void OpenLibrary()
+    {
+        if (_libView == null || _libView.IsDisposed)
+        {
+            var wrap = new Panel { BackColor = Ui.Bg };
+            var lib = LibraryPage.Build();
+            lib.Dock = DockStyle.Fill;
+            var top = new Panel { Dock = DockStyle.Top, Height = Ui.S(56), BackColor = Ui.Bg };
+            var back = new FancyButton { Text = Lang.T("← 返回我的腳本"), Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Location = new Point(Ui.S(24), Ui.S(16)) };
+            back.Size = new Size(back.GetPreferredSize(Size.Empty).Width, Ui.S(34));
+            back.Click += (_, _) => ShowView(null);
+            var title = Ui.Text_(Lang.T("腳本庫"), Ui.Text, Ui.F(13f, FontStyle.Bold), new Padding(0));
+            title.Location = new Point(back.Right + Ui.S(16), Ui.S(20));
+            top.Controls.Add(back);
+            top.Controls.Add(title);
+            wrap.Controls.Add(lib);
+            wrap.Controls.Add(top);
+            _libView = wrap;
+        }
+        ShowView(_libView);
+    }
+
+    private void PlaceLibButton()
+    {
+        if (_libBtn == null) return;
+        _libBtn.Location = new Point(ClientSize.Width - Ui.S(28) - _libBtn.Width, ClientSize.Height - Ui.S(24) - _libBtn.Height);
+        _libBtn.Visible = _editor == null;
+        if (_libBtn.Visible) _libBtn.BringToFront();
+    }
+
     private ScriptsPage()
     {
+        Instance = this;
         BackColor = Ui.Bg;
         Dock = DockStyle.Fill;
         ScriptRunner.Init(this);
@@ -1654,6 +1692,14 @@ public sealed class ScriptsPage : Panel
         _listView.Dock = DockStyle.Fill;
         Controls.Add(_listView);
 
+        // 右下角：腳本庫（搜尋 / 下載其他人公開嘅腳本）
+        _libBtn = new FancyButton { Text = Lang.T("腳本庫 →"), Kind = BtnKind.Primary, Font = Ui.F(10f, FontStyle.Bold) };
+        _libBtn.Size = new Size(Math.Max(Ui.S(120), _libBtn.GetPreferredSize(Size.Empty).Width), Ui.S(40));
+        _libBtn.Click += (_, _) => OpenLibrary();
+        Controls.Add(_libBtn);
+        Resize += (_, _) => PlaceLibButton();
+        PlaceLibButton();
+
         ScriptRunner.Changed += () => { _grid.Invalidate(); UpdateStopAll(); };
         UpdateStopAll();
 
@@ -1661,8 +1707,9 @@ public sealed class ScriptsPage : Panel
         _poll.Tick += (_, _) =>
         {
             var form = FindForm();
-            bool typing = form != null && Form.ActiveForm == form && form.ActiveControl is HotkeyBox { Capturing: true };
+            bool typing = HotkeyBox.Busy;
             if (_handling) return; // 彈緊提示視窗（modal 期間 timer 照跳）：唔好再觸發
+            if (!MultiTool.Extensions.IsInstalled(MultiTool.Extensions.Scripts)) return; // 「我的腳本」已移除：快捷鍵唔生效
             // 全部停止快捷鍵：喺邊度都用得
             bool stopDown = !typing && !_stopAllKey.Hotkey.IsEmpty && _stopAllKey.Hotkey.IsDown();
             if (stopDown && !_stopWasDown && !Keyboard.RecentlyInjected)
@@ -1679,9 +1726,10 @@ public sealed class ScriptsPage : Panel
             _stopWasDown = stopDown;
             foreach (var sc in _scripts.ToList())
             {
-                // 快捷鍵只喺「入咗呢個腳本嘅預覽頁」先可以開始；行緊嘅腳本喺邊度都可以用快捷鍵停
+                // 喺其他頁（AI 助手、錄影工具…）或者最少化：所有腳本快捷鍵都用得；
+                // 喺「我的腳本」頁入面就淨係預覽緊嗰個可以開始（費事改緊其他腳本時誤觸）；行緊嘅腳本喺邊度都可以停
                 bool viewing = Visible && _editor is ScriptViewer v && v.Script == sc;
-                bool usable = viewing || ScriptRunner.IsRunning(sc);
+                bool usable = viewing || !Visible || ScriptRunner.IsRunning(sc);
                 bool down = usable && !typing && !sc.Hotkey.IsEmpty && sc.Hotkey.IsDown();
                 _wasDown.TryGetValue(sc.Id, out bool was);
                 _wasDown[sc.Id] = down; // 先記低，就算下面彈視窗都唔會當再撳一次
@@ -1779,13 +1827,14 @@ public sealed class ScriptsPage : Panel
         {
             Controls.Remove(_editor);
             var old = _editor;
-            BeginInvoke(() => old.Dispose());
+            if (old != _libView) BeginInvoke(() => old.Dispose()); // 腳本庫留住（搜尋結果唔使重新搵）
             _editor = null;
         }
         if (view == null)
         {
             _listView.Visible = true;
             _grid.Refresh2();
+            PlaceLibButton();
             return;
         }
         view.Dock = DockStyle.Fill;
@@ -1793,6 +1842,7 @@ public sealed class ScriptsPage : Panel
         _listView.Visible = false;
         Controls.Add(view);
         view.BringToFront();
+        PlaceLibButton();
     }
 
     /// <summary>撳腳本：先睇預覽（唔可以改），上面有「修改」同「開始」。</summary>

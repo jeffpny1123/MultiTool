@@ -11,7 +11,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v1.6";
+    public const string Version = "v1.7";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -42,6 +42,7 @@ internal sealed class MainForm : Form
     private readonly Panel _sidebar = new();
     private readonly Panel _content = new();
     private readonly System.Collections.Generic.List<(NavItem Nav, Func<Control> Build, Control? Page)> _pages = new();
+    private readonly System.Collections.Generic.List<(string Key, string? Ext)> _pageKeys = new(); // 同 _pages 一一對應
     private int _current = -1;
 
     private readonly bool _startup;
@@ -129,17 +130,27 @@ internal sealed class MainForm : Form
         PlaceBy();
 
         // ---- 功能清單（以後喺度加）----
-        AddPage(Lang.T("首頁"), BuildHomePage);
-        AddPage(Lang.T("我的腳本"), Scripts.ScriptsPage.Build);
-        AddPage(Lang.T("腳本庫"), Scripts.LibraryPage.Build);
-        AddPage(Lang.T("AI 助手"), Ai.AiPage.Build);
-        AddPage(Lang.T("設定"), BuildAboutPage);
+        AddPage(Lang.T("首頁"), BuildHomePage, "home");
+        AddPage(Lang.T("我的腳本"), Scripts.ScriptsPage.Build, "scripts", Extensions.Scripts);
+        AddPage(Lang.T("錄影工具"), Video.RecordPage.Build, "recorder", Extensions.Recorder);
+        AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");
+        AddPage(Lang.T("工具庫"), () => new ExtensionsPage(), "extensions");
+        AddPage(Lang.T("設定"), BuildAboutPage, "settings");
+        LoadNavOrder();
+        LayoutNav();
+        Extensions.Changed += () => BeginInvoke(() =>
+        {
+            LayoutNav();
+            // 啱啱安裝咗：即刻整好個頁（佢嘅快捷鍵唔使打開過都用得）
+            for (int i = 0; i < _pages.Count; i++)
+                if (PageVisible(i)) EnsureBuilt(i);
+        });
 
         Controls.Add(_content);
         Controls.Add(_sidebar);
         Controls.Add(new TitleBar(this, _sidebar.Width)); // 自己畫嘅標題列（最後加 = 最先 dock，橫跨成個頂）
-        // 開頭就整晒所有頁（咁各頁嘅快捷鍵唔使打開過都用得）
-        for (int i = _pages.Count - 1; i >= 0; i--) Show(i);
+        // 開頭就整晒所有（已安裝嘅）頁（咁各頁嘅快捷鍵唔使打開過都用得）
+        for (int i = _pages.Count - 1; i >= 0; i--) if (PageVisible(i)) Show(i);
     }
 
     // ---------- 系統匣 ----------
@@ -296,15 +307,209 @@ internal sealed class MainForm : Form
         Application.Exit();
     }
 
-    private void AddPage(string name, Func<Control> build)
+    private void AddPage(string name, Func<Control> build, string key, string? ext = null)
     {
         var nav = new NavItem(name);
         int index = _pages.Count;
         nav.SetBounds(0, Ui.S(70) + index * Ui.S(44), _sidebar.Width, Ui.S(40));
         nav.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
-        nav.Click += (_, _) => Show(index);
+        nav.Click += (_, _) =>
+        {
+            if (_navNoClick) { _navNoClick = false; return; }
+            Show(index);
+        };
+        // 拖住上下搬 = 自己排次序
+        nav.MouseDown += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Left) return;
+            _dragNav = index;
+            _dragY = e.Y;
+            _dragging = false;
+        };
+        nav.MouseMove += (_, e) =>
+        {
+            if (_dragNav != index || Control.MouseButtons != MouseButtons.Left) return;
+            if (!_dragging)
+            {
+                if (Math.Abs(e.Y - _dragY) < Ui.S(6)) return;
+                _dragging = true;
+                nav.BringToFront();
+                nav.Cursor = Cursors.SizeNS;
+            }
+            var vis = VisibleOrder();
+            int minTop = Ui.S(70), maxTop = Ui.S(70) + (vis.Count - 1) * Ui.S(44);
+            nav.Top = Math.Max(minTop, Math.Min(maxTop, nav.Top + e.Y - _dragY));
+            PreviewDrag(index, nav.Top + nav.Height / 2);
+        };
+        nav.MouseUp += (_, _) =>
+        {
+            if (_dragNav == index && _dragging)
+            {
+                CommitDrag(index, nav.Top + nav.Height / 2);
+                nav.Cursor = Cursors.Hand;
+                _navNoClick = true;
+                // 部分情況 Click 唔會跟住嚟：之後清返個旗
+                BeginInvoke(() => _navNoClick = false);
+            }
+            _dragNav = -1;
+            _dragging = false;
+        };
+        nav.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Right) ShowNavMenu(index, nav, e.Location);
+        };
         _sidebar.Controls.Add(nav);
         _pages.Add((nav, build, null));
+        _pageKeys.Add((key, ext));
+        _order.Add(index);
+    }
+
+    // ---------- 側欄排序（存喺 data\nav_order.txt）----------
+    private readonly System.Collections.Generic.List<int> _order = new();
+    private int _dragNav = -1, _dragY;
+    private bool _dragging, _navNoClick;
+
+    private static string NavOrderFile => Path.Combine(AppPaths.Data, "nav_order.txt");
+
+    private void LoadNavOrder()
+    {
+        try
+        {
+            if (!File.Exists(NavOrderFile)) return;
+            var order = new System.Collections.Generic.List<int>();
+            foreach (var l in File.ReadAllLines(NavOrderFile))
+            {
+                int i = _pageKeys.FindIndex(k => k.Key == l.Trim());
+                if (i >= 0 && !order.Contains(i)) order.Add(i);
+            }
+            // 新版本加咗嘅頁：放喺佢預設前一頁後面
+            for (int i = 0; i < _pages.Count; i++)
+            {
+                if (order.Contains(i)) continue;
+                int at = i == 0 ? 0 : order.IndexOf(i - 1) + 1;
+                order.Insert(Math.Max(0, Math.Min(at, order.Count)), i);
+            }
+            _order.Clear();
+            _order.AddRange(order);
+        }
+        catch (Exception ex) { AppPaths.LogError("讀側欄排序", ex); }
+    }
+
+    private void SaveNavOrder()
+    {
+        try
+        {
+            Directory.CreateDirectory(AppPaths.Data);
+            File.WriteAllLines(NavOrderFile, _order.Select(i => _pageKeys[i].Key));
+        }
+        catch (Exception ex) { AppPaths.LogError("儲存側欄排序", ex); }
+    }
+
+    private System.Collections.Generic.List<int> VisibleOrder() => _order.Where(PageVisible).ToList();
+
+    /// <summary>拖緊：其他項讓位。</summary>
+    private void PreviewDrag(int dragged, int centerY)
+    {
+        var vis = VisibleOrder();
+        vis.Remove(dragged);
+        int slot = Math.Max(0, Math.Min(vis.Count, (centerY - Ui.S(70)) / Ui.S(44)));
+        int y = Ui.S(70);
+        for (int k = 0; k < vis.Count; k++)
+        {
+            if (k == slot) y += Ui.S(44);
+            var n = _pages[vis[k]].Nav;
+            if (n.Top != y) n.Top = y;
+            y += Ui.S(44);
+        }
+    }
+
+    private void CommitDrag(int dragged, int centerY)
+    {
+        var vis = VisibleOrder();
+        vis.Remove(dragged);
+        int slot = Math.Max(0, Math.Min(vis.Count, (centerY - Ui.S(70)) / Ui.S(44)));
+        MoveNav(dragged, slot < vis.Count ? vis[slot] : -1, slot >= vis.Count && vis.Count > 0 ? vis[^1] : -1);
+    }
+
+    /// <summary>將 page 搬去 before 前面（或者 after 後面）。</summary>
+    private void MoveNav(int page, int before, int after)
+    {
+        _order.Remove(page);
+        if (before >= 0) _order.Insert(_order.IndexOf(before), page);
+        else if (after >= 0) _order.Insert(_order.IndexOf(after) + 1, page);
+        else _order.Add(page);
+        SaveNavOrder();
+        LayoutNav();
+    }
+
+    private void ShowNavMenu(int index, Control nav, Point at)
+    {
+        var vis = VisibleOrder();
+        int pos = vis.IndexOf(index);
+        var menu = new ContextMenuStrip();
+        try { menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
+        menu.BackColor = Ui.CardHi;
+        menu.ForeColor = Ui.Text;
+        ToolStripMenuItem Item(string text, bool enabled, Action act)
+        {
+            var it = new ToolStripMenuItem(text) { Enabled = enabled, ForeColor = Ui.Text };
+            it.Click += (_, _) => act();
+            menu.Items.Add(it);
+            return it;
+        }
+        Item(Lang.T("上移"), pos > 0, () => MoveNav(index, vis[pos - 1], -1));
+        Item(Lang.T("下移"), pos >= 0 && pos < vis.Count - 1, () => MoveNav(index, -1, vis[pos + 1]));
+        menu.Items.Add(new ToolStripSeparator());
+        Item(Lang.T("重設排序"), true, () =>
+        {
+            _order.Clear();
+            for (int i = 0; i < _pages.Count; i++) _order.Add(i);
+            try { File.Delete(NavOrderFile); } catch { }
+            LayoutNav();
+        });
+        var hint = new ToolStripMenuItem(Lang.T("（亦可以直接拖住上下搬）")) { Enabled = false };
+        menu.Items.Add(hint);
+        menu.Closed += (_, _) => BeginInvoke(() => menu.Dispose());
+        menu.Show(nav, at);
+    }
+
+    private bool PageVisible(int i) => _pageKeys[i].Ext is not { } e || Extensions.IsInstalled(e);
+
+    /// <summary>側欄：跟用家排嘅次序，淨係顯示已安裝嘅擴充工具。</summary>
+    private void LayoutNav()
+    {
+        int y = Ui.S(70);
+        foreach (int i in _order)
+        {
+            bool vis = PageVisible(i);
+            _pages[i].Nav.Visible = vis;
+            if (!vis) continue;
+            _pages[i].Nav.SetBounds(0, y, _sidebar.Width, Ui.S(40));
+            y += Ui.S(44);
+        }
+        // 而家顯示緊嘅頁被移除咗：返去首頁
+        if (_current >= 0 && !PageVisible(_current)) Show(0);
+    }
+
+    private void EnsureBuilt(int i)
+    {
+        if (_pages[i].Page != null) return;
+        int cur = _current;
+        Show(i);
+        if (cur >= 0 && cur != i) { _current = -1; Show(cur); }
+    }
+
+    /// <summary>用 key 跳去某一頁（首頁「前往」用）。</summary>
+    internal void ShowKey(string key)
+    {
+        if (key == "library") // 腳本庫喺「我的腳本」入面
+        {
+            ShowKey("scripts");
+            Scripts.ScriptsPage.Instance?.OpenLibrary();
+            return;
+        }
+        int i = _pageKeys.FindIndex(k => k.Key == key);
+        if (i >= 0) Show(i);
     }
 
     private void Show(int index)
@@ -345,21 +550,28 @@ internal sealed class MainForm : Form
             Lang.T("所有腳本、設定同圖片都存喺 exe 隔籬嘅 data 資料夾。")));
         stack.AddRow(welcome);
 
-        stack.AddRow(Feature(Lang.T("我的腳本"), 1,
+        stack.AddRow(Feature(Lang.T("我的腳本"), "scripts", Extensions.Scripts,
             Lang.T("步驟：按鍵、滑鼠（左鍵 / 右鍵 / 滾輪、拖曳）、延遲（可以隨機）、搵圖點擊、輸入文字、循環（次數 / 時限 / 指定時間）、") +
             Lang.T("IF 條件（AND / OR）、同時運行、系統（開關程式、切換視窗、播音效、關機）、停止腳本；仲有新線程同主線程一齊行。\n") +
             Lang.T("可以「● 錄製」你嘅操作自動變成步驟，揀運行次數，揀目標視窗（座標跟視窗位置同大細），或者背景執行。") +
             Lang.T("清單入面撳「▶ 開始」就行，亦可以剔幾個一齊開始。")));
 
-        stack.AddRow(Feature(Lang.T("腳本庫"), 2,
-            Lang.T("搜尋同下載其他用戶公開咗嘅腳本，亦可以公開你自己嘅（喺我的腳本右鍵）。直接由對方部機傳送，唔經伺服器；") +
+        stack.AddRow(Feature(Lang.T("腳本庫"), "library", Extensions.Scripts,
+            Lang.T("喺「我的腳本」右下角打開。搜尋同下載其他用戶公開咗嘅腳本，亦可以公開你自己嘅（喺我的腳本右鍵）。直接由對方部機傳送，唔經伺服器；") +
             Lang.T("下載前會列出腳本入面嘅系統動作，俾你確認。")));
 
-        stack.AddRow(Feature(Lang.T("AI 助手"), 3,
+        stack.AddRow(Feature(Lang.T("錄影工具"), "recorder", Extensions.Recorder,
+            Lang.T("錄低成個螢幕、一個範圍或者一個視窗，可以錄埋電腦聲同咪高峰，用快捷鍵開始 / 停止，輸出 MP4。") +
+            Lang.T("用顯示卡硬件編碼，錄遊戲都唔會太影響效能。要先喺「工具庫」安裝。")));
+
+        stack.AddRow(Feature(Lang.T("AI 助手"), "ai", null,
             Lang.T("用你部機已經登入咗嘅 Claude、ChatGPT（Codex）、Gemini，或者免費本地 AI 嚟問嘢；識講時間、開程式同網頁、上網搵資料。") +
             Lang.T("連接一個資料夾之後，AI 可以喺入面寫程式、執行同 debug。仲有快捷鍵語音對話（支援廣東話），同埋寫腳本時右下角嘅雲朵 AI 幫手。")));
 
-        stack.AddRow(Feature(Lang.T("設定"), 4,
+        stack.AddRow(Feature(Lang.T("工具庫"), "extensions", null,
+            Lang.T("搜尋同揀你想用嘅工具：安裝之後先會喺左邊顯示，唔用可以移除。")));
+
+        stack.AddRow(Feature(Lang.T("設定"), "settings", null,
             Lang.T("開機時啟動、關閉時最少化至系統匣、檢查更新。左下角可以切換日光 / 夜間主題同語言。")));
 
         var tips = new CardPanel { Title = Lang.T("小貼士") };
@@ -374,12 +586,13 @@ internal sealed class MainForm : Form
         return stack;
     }
 
-    private CardPanel Feature(string name, int pageIndex, string text)
+    private CardPanel Feature(string name, string key, string? ext, string text)
     {
         var card = new CardPanel { Title = name };
         var go = new FancyButton { Text = Lang.T("前往 →"), Kind = BtnKind.Primary, Font = Ui.F(9.75f, FontStyle.Bold) };
         go.Size = new Size(Ui.S(96), Ui.S(34));
-        go.Click += (_, _) => BeginInvoke(() => Show(pageIndex));
+        // 未安裝嘅擴充工具：帶去「擴充工具」頁安裝
+        go.Click += (_, _) => BeginInvoke(() => ShowKey(ext != null && !Extensions.IsInstalled(ext) ? "extensions" : key));
         card.SetContent(new WrapText(text, go));
         return card;
     }
