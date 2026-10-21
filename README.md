@@ -42,6 +42,10 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **背景執行**只於目標視窗內擷取畫面、點擊、拖曳及輸入按鍵，即使被其他視窗遮擋亦可運行。部分遊戲（例如不少 DirectX 遊戲）不接受背景輸入；程式視窗不可最小化。
 - **Administrator detection**: if the target program runs as Administrator, MultiTool offers to restart itself as Administrator (otherwise Windows blocks the input).
   **管理員權限偵測**：如目標程式以系統管理員權限執行，MultiTool 會提示以系統管理員身分重新啟動（否則 Windows 會阻擋輸入）。
+- **Script list**: each script has its own **▶ Start / ■ Stop** button and a **run count** (once, N times or forever). Running scripts get a green frame and show their current round and step.
+  **腳本列表**：每個腳本有獨立的 **▶ 開始／■ 停止** 按鈕及**運行次數**（一次、N 次或持續運行）。運行中的腳本會以綠色外框標示，並顯示目前輪數及步驟。
+- **Emergency stop**: while scripts run, press **Esc 3 times** or push the mouse to the **top-left corner** of the screen to stop everything (only your own input counts, not the script's).
+  **緊急停止**：腳本運行時連按 **3 下 Esc**，或將滑鼠移至螢幕**左上角**，即可停止所有腳本（只計你自己的操作，不計腳本模擬的輸入）。
 - **Start several scripts together**: tick scripts in the list and click **Start selected**; **Stop all** stops every running script. One global hotkey does both: it starts the ticked scripts when nothing is running and stops all when something is.
   **多個腳本同時開始**：於列表勾選腳本後按**開始已選**；**全部停止**會停止所有運行中的腳本。同一個全域快捷鍵兼具兩者：沒有腳本運行時開始已選腳本，有腳本運行時全部停止。
 - **Editing**: right-click a step to copy / cut / paste it (loops, IFs and branches are copied with everything inside) or insert a new step above / below. **↶ Undo** at the bottom-right restores the last change. Loops and parallel steps can be collapsed, and the top bar stays visible while scrolling.
@@ -52,6 +56,20 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   執行前會自動檢查腳本（例如缺少圖片、未設定按鍵、空白循環等）。
 - **Auto update** checks GitHub Releases on startup and updates with one click.
   **自動更新**：啟動時檢查 GitHub Releases，一鍵完成更新。
+
+**Script library 腳本庫** — share scripts peer-to-peer, no server / 點對點分享腳本，無須伺服器
+
+- Search and download scripts shared by users who currently have MultiTool open; files come directly from their PC. If they are offline or unreachable, the download fails.
+  搜尋及下載目前開啟 MultiTool 的用戶所公開的腳本，檔案直接從對方電腦傳送；對方離線或無法連線則無法下載。
+- Share your own: turn on sharing in **Script library → Sharing settings**, then right-click a script → **Share to library**. Your IP address is visible to other users while sharing; window handles, hotkeys and your user folder path are not shared.
+  公開自己的腳本：於 **腳本庫 → 分享設定** 開啟分享，再於腳本右鍵選擇 **公開到腳本庫**。分享期間你的 IP 地址會被其他用戶看到；視窗、快捷鍵及用戶資料夾路徑不會被分享。
+- Before adding a downloaded script, its system actions and typed text are listed for you to confirm. Downloaded scripts never start automatically.
+  加入下載的腳本前，會列出其中的系統動作及輸入文字供你確認；下載的腳本不會自動開始。
+
+**Settings 設定**
+
+- Start with Windows, minimize to the system tray on close (asked the first time you close), check for updates. Light / dark theme and language are at the bottom-left.
+  開機時啟動、關閉時最少化至系統匣（首次關閉時會詢問）、檢查更新。日光／夜間主題及語言於左下角切換。
 
 **AI Assistant AI 助手** — uses the AI command-line tool already installed and signed in on your computer / 使用你電腦上已安裝並已登入的 AI 命令列工具
 
@@ -74,8 +92,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **電腦操作**：AI 知道電腦的目前日期及時間，並可**開啟已安裝程式**（每次即時掃描，清單儲存於 `data/ai/keywords.txt`）及以預設瀏覽器**開啟網頁**（網址由 AI 自行提供）。只可開啟 `http/https` 網頁及「開始」選單中的程式。
 - **Web search**: Claude, ChatGPT and Gemini can search the web for news, weather, prices and other current information.
   **網上搜尋**：Claude、ChatGPT 及 Gemini 可上網搜尋新聞、天氣、價格等最新資料。
-- The AI cannot run commands or modify your files.
-  AI 不能執行指令或修改你的檔案。
+- **Folder per chat**: connect a folder to a chat and the AI can write, run and debug code, and create / edit / delete files inside that folder. Without a folder the AI can only chat and cannot run commands or modify your files.
+  **每個對話可連接資料夾**：連接後，AI 可於該資料夾內編寫、執行及除錯程式，並建立／修改／刪除檔案。未連接資料夾時，AI 只可對話，不能執行指令或修改你的檔案。
 
 **Voice chat 語音對話** — set up under **AI Assistant → Voice settings** / 於「AI 助手 → 語音設定」設定
 
@@ -89,6 +107,26 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v1.6
+- **New: Script library** — share and download scripts peer-to-peer, no server.
+  **新增：腳本庫**——點對點分享及下載腳本，無須伺服器。
+- **New: AI folder per chat** — the AI can write, run and debug code inside a connected folder.
+  **新增：AI 對話連接資料夾**——AI 可於連接的資料夾內編寫、執行及除錯程式。
+- **New: Run count** — run a script once, N times or forever, set from the list, preview or editor.
+  **新增：運行次數**——可於列表、預覽頁或修改頁設定運行一次、N 次或持續運行。
+- **New: Start / Stop button per script** in the list; running scripts have a green frame and show their round and step.
+  **新增：列表中每個腳本的開始／停止按鈕**；運行中的腳本以綠色外框標示，並顯示輪數及步驟。
+- **New: Emergency stop** — Esc 3 times or mouse to the top-left corner.
+  **新增：緊急停止**——連按 3 下 Esc 或將滑鼠移至左上角。
+- **New: Settings page** — start with Windows, minimize to tray on close.
+  **新增：設定頁**——開機時啟動、關閉時最少化至系統匣。
+- **New: Light theme**, app icon, and an updated home page.
+  **新增：日光主題**、程式圖示，以及更新後的首頁。
+- Background mode now also tells the game it is focused before sending input, which helps some games.
+  背景執行會在送出輸入前通知遊戲已取得焦點，有助部分遊戲接收輸入。
+- Fixed: overlapping buttons at the top of the preview / editor and on the AI page.
+  修正：預覽頁、修改頁頂部及 AI 頁的按鈕重疊問題。
 
 ### v1.5
 - **New: System step** — open an app, close a program, switch to a window, shut down the PC, or play a sound (once or repeating).
