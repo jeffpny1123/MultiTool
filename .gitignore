@@ -5,6 +5,8 @@ Build/data/
 # 編譯 / 打包產物（exe 放喺 GitHub Release，唔放入 repo）
 MultiTool.dll
 *.exe
+# 帶 MultiTool icon 嘅 app host（編譯要用）
+!tools/apphost.exe
 *.new
 *.tmp
 Build/*.zip

@@ -32,7 +32,8 @@ internal static class ScriptJson
     public const string Spec = """
         腳本 JSON 格式：
         {
-          "mode": "once" | "loop",            // once = 主線程行一次；loop = 一直重複
+          "mode": "once" | "loop",
+          "runs": 1,                           // 運行次數：1 = 一次，N = N 次，0 = 一直運行（有就以呢個為準）            // once = 主線程行一次；loop = 一直重複
           "steps": [ 步驟... ],                // 主線程：由上至下逐步做
           "threads": [                         // 新線程：同主線程同時行（腳本一直行就一直重複）
             { "name": "新線程 1", "steps": [ 步驟... ] }
@@ -77,6 +78,7 @@ internal static class ScriptJson
         var root = new JsonObject
         {
             ["mode"] = sc.Loop ? "loop" : "once",
+            ["runs"] = sc.Runs,
             ["steps"] = StepsArr(sc.Steps),
             ["threads"] = new JsonArray(sc.Threads.Select(t => (JsonNode)new JsonObject { ["name"] = t.Name, ["steps"] = StepsArr(t.Steps) }).ToArray()),
             ["ifs"] = new JsonArray(sc.Ifs.Select(b =>
@@ -191,7 +193,7 @@ internal static class ScriptJson
 
     // ---------------- JSON → 腳本 ----------------
 
-    public sealed record Parsed(bool Loop, List<Step> Steps, List<IfBlock> Ifs, List<string> Warnings, List<ThreadBlock>? Threads = null);
+    public sealed record Parsed(bool Loop, List<Step> Steps, List<IfBlock> Ifs, List<string> Warnings, List<ThreadBlock>? Threads = null, int? Runs = null);
 
     /// <summary>讀 AI 俾嘅 JSON。images 只保留腳本資料夾入面真係有嘅檔。出錯會 throw。</summary>
     public static Parsed FromJson(string json, Script sc)
@@ -230,7 +232,8 @@ internal static class ScriptJson
                 threads.Add(t);
             }
         }
-        return new Parsed(loop, steps, ifs, warn, threads);
+        int? runs = root["runs"] is JsonValue rv && rv.TryGetValue<int>(out var rn) && rn >= 0 ? rn : null;
+        return new Parsed(loop, steps, ifs, warn, threads, runs);
     }
 
     public static List<string> ExistingImages(Script sc)
@@ -688,6 +691,7 @@ internal sealed class ScriptAssist
         _sc.Threads.Clear();
         if (p.Threads != null) _sc.Threads.AddRange(p.Threads);
         _sc.Loop = p.Loop;
+        if (p.Runs is { } pr) _sc.Runs = pr;
         _sc.Steps.Clear();
         _sc.Steps.AddRange(p.Steps);
         _sc.Ifs.Clear();

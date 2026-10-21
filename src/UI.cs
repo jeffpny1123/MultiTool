@@ -33,20 +33,48 @@ namespace UI
     /// <summary>深色主題：顏色、字型、DPI 縮放同繪圖小工具。</summary>
     public static class Ui
     {
-        public static readonly Color Bg = Hex(0x0E1014);
-        public static readonly Color Panel = Hex(0x14171E);
-        public static readonly Color Card = Hex(0x191D26);
-        public static readonly Color CardHi = Hex(0x222836);
-        public static readonly Color Input = Hex(0x11141A);
-        public static readonly Color Border = Hex(0x2A3040);
-        public static readonly Color BorderHi = Hex(0x3B4459);
-        public static readonly Color Text = Hex(0xE7EAF1);
-        public static readonly Color TextDim = Hex(0xA3ABBC);
-        public static readonly Color TextFaint = Hex(0x6C7487);
-        public static readonly Color Accent = Hex(0x4F8CFF);
-        public static readonly Color Accent2 = Hex(0x8C6CFF);
-        public static readonly Color Success = Hex(0x2BB673);
-        public static readonly Color Danger = Hex(0xE5484D);
+        /// <summary>日光主題（data\theme.txt = light）。啟動時讀一次，換主題要重新啟動。</summary>
+        public static readonly bool Light = LoadLight();
+
+        private static bool LoadLight()
+        {
+            try
+            {
+                var f = Path.Combine(AppContext.BaseDirectory, "data", "theme.txt");
+                return File.Exists(f) && File.ReadAllText(f).Trim() == "light";
+            }
+            catch { return false; }
+        }
+
+        public static void SaveTheme(bool light)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "data"));
+                File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "data", "theme.txt"), light ? "light" : "dark");
+            }
+            catch { }
+        }
+
+        private static Color T(int dark, int light) => Hex(Light ? light : dark);
+
+        public static readonly Color Bg = T(0x0E1014, 0xF3F5F9);
+        public static readonly Color Panel = T(0x14171E, 0xE8ECF2);
+        public static readonly Color Card = T(0x191D26, 0xFFFFFF);
+        public static readonly Color CardHi = T(0x222836, 0xEDF0F5);
+        public static readonly Color Input = T(0x11141A, 0xFFFFFF);
+        public static readonly Color Border = T(0x2A3040, 0xD3D9E3);
+        public static readonly Color BorderHi = T(0x3B4459, 0xB6BFCE);
+        public static readonly Color Text = T(0xE7EAF1, 0x1A1F2C);
+        public static readonly Color TextDim = T(0xA3ABBC, 0x4A5468);
+        public static readonly Color TextFaint = T(0x6C7487, 0x858EA0);
+        public static readonly Color Accent = T(0x4F8CFF, 0x2F6FEB);
+        public static readonly Color Accent2 = T(0x8C6CFF, 0x7254E6);
+        public static readonly Color Success = T(0x2BB673, 0x1B9C5F);
+        public static readonly Color Danger = T(0xE5484D, 0xD8383E);
+
+        /// <summary>淺色底上嘅色字：深色主題調光，日光主題調深。</summary>
+        public static Color OnTint(Color hue) => Light ? Mix(hue, Color.Black, 0.3f) : Mix(hue, Color.White, 0.45f);
 
         public static string UiFamily => Lang.Current switch
         {
@@ -157,6 +185,7 @@ namespace UI
         /// <summary>Windows 10/11 深色標題列。</summary>
         public static void DarkTitleBar(Form f)
         {
+            if (Ui.Light) return;
             try
             {
                 int on = 1;
@@ -515,7 +544,9 @@ namespace UI
                 using var pen = new Pen(Ui.Border, 1f);
                 g.DrawPath(pen, path);
             }
-            TextRenderer.DrawText(g, Text, Font, Rectangle.Round(r), Enabled ? ForeColor : Ui.TextFaint,
+            // 灰色底嘅掣用主題文字色（日光主題白字會睇唔到）
+            var fore = _kind is BtnKind.Primary or BtnKind.Success or BtnKind.Danger ? ForeColor : Ui.Text;
+            TextRenderer.DrawText(g, Text, Font, Rectangle.Round(r), Enabled ? fore : Ui.TextFaint,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
     }

@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.png" width="128" alt="MultiTool icon"></p>
+
 # MultiTool 多功能工具
 
 A lightweight Windows automation tool (.NET 9 WinForms, single-file `.exe`). Build your own macros with keyboard and mouse actions, on-screen image matching, loops, conditions and background execution, and chat with your own AI (Claude / ChatGPT / Gemini, or a free local AI) by text or voice to answer questions, open apps and websites, or write scripts for you.
@@ -221,11 +223,14 @@ No Windows Desktop SDK is required. Compile with Roslyn `csc` against the framew
 ```
 python tools/bundle.py Build/MultiTool.exe ref/
 csc -nostdlib -noconfig -target:winexe -langversion:12 -nullable:enable -optimize+ -out:MultiTool.dll -r:ref/*.dll src/*.cs
-python tools/make_exe.py Build/MultiTool.exe MultiTool.dll Build/MultiTool.exe.new
+python tools/make_exe.py Build/MultiTool.exe MultiTool.dll Build/MultiTool.exe.new tools/apphost.exe
 ```
 
-`make_exe.py` uses the previous `Build/MultiTool.exe` as its base (app host and runtime), so keep that file.
-`make_exe.py` 以上一版 `Build/MultiTool.exe` 作為基礎（應用程式主機及執行環境），因此請保留該檔案。
+`make_exe.py` uses the previous `Build/MultiTool.exe` as its base (runtime), so keep that file. The optional last argument `tools/apphost.exe` is the app host with the MultiTool icon.
+`make_exe.py` 以上一版 `Build/MultiTool.exe` 作為基礎（執行環境），因此請保留該檔案。最後一個可選參數 `tools/apphost.exe` 為已加入 MultiTool 圖示的應用程式主機。
+
+The icon is in `assets/` (`icon.png`, `MultiTool.ico`). To change it, edit and run `tools/make_icon.py`, then `python tools/seticon.py tools/apphost.exe assets/MultiTool.ico tools/apphost.exe` (requires `pip install lief`).
+圖示位於 `assets/`（`icon.png`、`MultiTool.ico`）。如需修改，可編輯並執行 `tools/make_icon.py`，再執行上述 `seticon.py` 指令（需要 `pip install lief`）。
 
 ---
 

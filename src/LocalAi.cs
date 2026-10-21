@@ -240,7 +240,7 @@ internal sealed class LocalProvider : AiProvider
 
     public override Task<bool> LogoutAsync(string exe) => Task.FromResult(true);
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null)
     {
         if (!await LocalAi.Server.EnsureAsync())
             return new Answer(Lang.T("本地 AI 開唔到，請喺「帳號 → 本地 AI」重新下載。"), sessionId, true);

@@ -354,7 +354,11 @@ public sealed class Script
     /// <summary>資料夾名：跟腳本名（data\scripts\&lt;腳本名&gt;）。</summary>
     public string Folder = "";
     public string Name = Lang.T("新腳本");
-    public bool Loop;
+    /// <summary>運行次數：1 = 一次，N = N 次，0 = 一直運行。</summary>
+    public int Runs = 1;
+    public bool Loop { get => Runs != 1; set => Runs = value ? 0 : 1; }
+
+    public static string RunsName(int runs) => runs switch { 0 => Lang.T("一直運行"), 1 => Lang.T("運行一次"), _ => Lang.F("運行 {0} 次", runs) };
     public Hotkey Hotkey;
     public List<Step> Steps = new();
     public List<IfBlock> Ifs = new();
@@ -367,6 +371,9 @@ public sealed class Script
     public long TargetHwnd;            // 揀咗嘅視窗（同一個程式開幾個時分得清；重開程式會變，變咗就用 TargetIndex）
     public int TargetIndex;            // 同名視窗入面第幾個
     public int RefW, RefH;             // 記錄座標時個視窗內容區嘅大小：運行時按而家嘅大小比例換算（0 = 未記錄）
+    public bool FakeFocus;             // 背景執行：送輸入前先扮個視窗有焦點（部分遊戲要咁先收背景輸入）
+    public bool Public;                // 公開到腳本庫（P2P）
+    public string Desc = "";           // 腳本庫顯示嘅簡介
 
     public string Dir
     {
@@ -464,6 +471,7 @@ public sealed class Script
             {
                 "name=" + Name.Replace('\n', ' ').Replace('\r', ' '),
                 "mode=" + (Loop ? "loop" : "once"),
+                "runs=" + Runs,
                 "hotkey=" + Hotkey.Serialize(),
                 "bg=" + (Background ? "1" : "0"),
                 "bgproc=" + TargetProcess,
@@ -474,7 +482,10 @@ public sealed class Script
                 "bgidx=" + TargetIndex,
                 "refw=" + RefW,
                 "refh=" + RefH,
-                "win=2"
+                "win=2",
+                "pub=" + (Public ? "1" : "0"),
+                "fakefocus=" + (FakeFocus ? "1" : "0"),
+                "desc=" + Desc.Replace('\n', ' ').Replace('\r', ' ')
             };
             lines.AddRange(Steps.Select(s => "step=" + s.Serialize()));
             foreach (var t in Threads)
@@ -502,7 +513,7 @@ public sealed class Script
         catch (Exception ex) { AppPaths.LogError("讀取腳本", ex); return null; }
     }
 
-    private static Script FromLines(IEnumerable<string> allLines, string folder)
+    internal static Script FromLines(IEnumerable<string> allLines, string folder)
     {
         {
             var sc = new Script { Folder = folder };
@@ -516,6 +527,7 @@ public sealed class Script
                 {
                     case "name": sc.Name = v; break;
                     case "mode": sc.Loop = v == "loop"; break;
+                    case "runs": if (int.TryParse(v, out var rn) && rn >= 0) sc.Runs = rn; break;
                     case "hotkey": sc.Hotkey = Hotkey.Parse(v); break;
                     case "bg": sc.Background = v == "1"; break;
                     case "bgproc": sc.TargetProcess = v; break;
@@ -524,6 +536,9 @@ public sealed class Script
                     case "bghwnd": long.TryParse(v, out sc.TargetHwnd); break;
                     case "bgidx": int.TryParse(v, out sc.TargetIndex); break;
                     case "win": win2 = true; break;
+                    case "pub": sc.Public = v == "1"; break;
+                    case "fakefocus": sc.FakeFocus = v == "1"; break;
+                    case "desc": sc.Desc = v; break;
                     case "refw": int.TryParse(v, out sc.RefW); break;
                     case "refh": int.TryParse(v, out sc.RefH); break;
                     case "speed":
@@ -568,6 +583,20 @@ public sealed class Script
             }
             return sc;
         }
+    }
+
+    /// <summary>淨係讀公開咗嘅腳本（分享伺服器用；唔會改資料夾名，背景 thread 用都安全）。</summary>
+    public static List<Script> LoadPublic()
+    {
+        var list = new List<Script>();
+        try
+        {
+            if (!Directory.Exists(AppPaths.Scripts)) return list;
+            foreach (var d in Directory.GetDirectories(AppPaths.Scripts))
+                if (Load(d) is { Public: true } sc) list.Add(sc);
+        }
+        catch { }
+        return list;
     }
 
     public static List<Script> LoadAll()
@@ -788,6 +817,16 @@ public static class ScriptRunner
         Changed?.Invoke();
     }
 
+    public static bool AnyRunning => Running.Count > 0;
+
+    /// <summary>緊急停止：停晒所有運行緊嘅腳本（會更新狀態同介面）。</summary>
+    public static void StopEverything(string reason)
+    {
+        foreach (var sc in RunningScripts.Values.ToList()) Stop(sc, reason);
+        StopAll();
+        Changed?.Invoke();
+    }
+
     public static void StopAll()
     {
         foreach (var cts in Running.Values) try { cts.Cancel(); } catch { }
@@ -848,7 +887,8 @@ public static class ScriptRunner
         }
         var h = OnUi(() => Win.Find(s));
         if (h == 0) throw new InvalidOperationException(Lang.F("搵唔到背景程式視窗（{0} - {1}），佢係咪閂咗？", proc, title));
-        return new RunCtx(null, h, rel, 0, refSize);
+        // 背景執行一律自動用假焦點：唔理呢啲訊息嘅程式冇影響，要佢先收背景輸入嘅遊戲就會得
+        return new RunCtx(null, h, rel, 0, refSize) { Fake = true };
     }
 
     private static Rectangle? OwnWindow() => OnUi(() =>
@@ -918,17 +958,17 @@ public static class ScriptRunner
             {
                 round++;
                 // 每輪開頭喺 UI thread 抄一份步驟，運行中改都唔會撞
-                var (steps, dir, loop) = OnUi(() => (s.Steps.Select(x => x.Clone()).ToList(), s.Dir, s.Loop));
+                var (steps, dir, runs) = OnUi(() => (s.Steps.Select(x => x.Clone()).ToList(), s.Dir, s.Runs));
                 var exclude = MakeCtx(s);
                 held.Ctx = exclude;
                 for (int i = 0; i < steps.Count; i++)
                 {
                     ct.ThrowIfCancellationRequested();
-                    Report(s, Lang.F("{0}步驟 {1}/{2}：{3}", (loop ? Lang.F("第 {0} 輪 · ", round) : ""), i + 1, steps.Count, Step.KindName(steps[i].Kind)));
+                    Report(s, Lang.F("{0}步驟 {1}/{2}：{3}", RoundText(round, runs), i + 1, steps.Count, Step.KindName(steps[i].Kind)));
                     try { await RunStep(steps[i], dir, exclude, held, ct); }
                     catch (LoopBreak) { } // 唔喺循環入面嘅中斷：當冇事
                 }
-                if (!loop) break;
+                if (runs > 0 && round >= runs) break;
                 await Task.Delay(50, ct); // 一直行時唔好食晒 CPU
             } while (!ct.IsCancellationRequested);
             // 等埋新線程行完
@@ -1005,6 +1045,9 @@ public static class ScriptRunner
         }
     }
 
+    private static string RoundText(int round, int runs) =>
+        runs == 1 ? "" : runs == 0 ? Lang.F("第 {0} 輪 · ", round) : Lang.F("第 {0}/{1} 輪 · ", round, runs);
+
     /// <summary>一條新線程：同主線程同時行；腳本「一直行」就一直重複，「行一次」就行一次。</summary>
     private static async Task RunThreadAsync(Script s, string tid, CancellationToken ct)
     {
@@ -1016,18 +1059,18 @@ public static class ScriptRunner
             do
             {
                 round++;
-                var (steps, dir, loop) = OnUi(() => (s.Threads.FirstOrDefault(x => x.Id == tid)?.Steps.Select(x => x.Clone()).ToList(), s.Dir, s.Loop));
+                var (steps, dir, runs) = OnUi(() => (s.Threads.FirstOrDefault(x => x.Id == tid)?.Steps.Select(x => x.Clone()).ToList(), s.Dir, s.Runs));
                 if (steps == null || steps.Count == 0) return;
                 var ctx = MakeCtx(s);
                 held.Ctx = ctx;
                 for (int i = 0; i < steps.Count; i++)
                 {
                     ct.ThrowIfCancellationRequested();
-                    Report(key, Lang.F("{0}步驟 {1}/{2}：{3}", (loop ? Lang.F("第 {0} 輪 · ", round) : ""), i + 1, steps.Count, Step.KindName(steps[i].Kind)));
+                    Report(key, Lang.F("{0}步驟 {1}/{2}：{3}", RoundText(round, runs), i + 1, steps.Count, Step.KindName(steps[i].Kind)));
                     try { await RunStep(steps[i], dir, ctx, held, ct); }
                     catch (LoopBreak) { }
                 }
-                if (!loop) break;
+                if (runs > 0 && round >= runs) break;
                 await Task.Delay(50, ct);
             } while (!ct.IsCancellationRequested);
             Report(key, Lang.F("{0:HH:mm:ss} 完成", DateTime.Now));
@@ -1542,6 +1585,7 @@ public sealed class ScriptsPage : Panel
         BackColor = Ui.Bg;
         Dock = DockStyle.Fill;
         ScriptRunner.Init(this);
+        EmergencyStop.Init();
 
         _grid = new ScriptGrid(_scripts);
         _grid.OpenRequested += Open;
@@ -1570,7 +1614,7 @@ public sealed class ScriptsPage : Panel
         {
             var copy = new Script
             {
-                Name = sc.Name + Lang.T(" (副本)"), Loop = sc.Loop, Steps = sc.Steps.Select(x => x.Clone()).ToList(),
+                Name = sc.Name + Lang.T(" (副本)"), Runs = sc.Runs, Steps = sc.Steps.Select(x => x.Clone()).ToList(),
                 Background = sc.Background, TargetProcess = sc.TargetProcess, TargetTitle = sc.TargetTitle, Speed = sc.Speed,
                 Relative = sc.Relative, TargetHwnd = sc.TargetHwnd, TargetIndex = sc.TargetIndex, RefW = sc.RefW, RefH = sc.RefH,
                 Ifs = sc.Ifs.Select(x => x.Clone()).ToList(),
@@ -1653,6 +1697,23 @@ public sealed class ScriptsPage : Panel
         };
         _poll.Start();
         HandleDestroyed += (_, _) => { _poll.Stop(); ScriptRunner.StopAll(); };
+        // 由腳本庫下載咗新腳本：返嚟呢頁時加入清單
+        VisibleChanged += (_, _) =>
+        {
+            if (!Visible) return;
+            try
+            {
+                var known = new HashSet<string>(_scripts.Select(x => x.Folder), StringComparer.OrdinalIgnoreCase);
+                bool added = false;
+                foreach (var d in Directory.Exists(AppPaths.Scripts) ? Directory.GetDirectories(AppPaths.Scripts) : Array.Empty<string>())
+                {
+                    if (known.Contains(Path.GetFileName(d))) continue;
+                    if (Script.Load(d) is { } sc) { _scripts.Add(sc); added = true; }
+                }
+                if (added) _grid.Refresh2();
+            }
+            catch { }
+        };
     }
 
     private FancyButton _startSel = null!;
@@ -1778,9 +1839,18 @@ internal sealed class ScriptGrid : Control
         _menu.Items.Add(Lang.T("預覽"), null, (_, _) => { if (Valid(_menuIndex)) PreviewRequested?.Invoke(_scripts[_menuIndex]); });
         _menu.Items.Add(Lang.T("修改"), null, (_, _) => { if (Valid(_menuIndex)) EditRequested?.Invoke(_scripts[_menuIndex]); });
         _menu.Items.Add(Lang.T("複製"), null, (_, _) => { if (Valid(_menuIndex)) CopyRequested?.Invoke(_scripts[_menuIndex]); });
+        _menu.Items.Add(Lang.T("公開到腳本庫…"), null, (_, _) =>
+        {
+            if (!Valid(_menuIndex)) return;
+            using var d = new PublishDialog(_scripts[_menuIndex]);
+            d.ShowDialog(FindForm());
+            Invalidate();
+        });
         _menu.Items.Add(Lang.T("刪除"), null, (_, _) => { if (Valid(_menuIndex)) DeleteRequested?.Invoke(_scripts[_menuIndex]); });
-        ScriptRunner.Status += (_, _) => Invalidate();
+        ScriptRunner.Status += (id, text) => { _status[id] = text; Invalidate(); };
     }
+
+    private readonly Dictionary<string, string> _status = new(); // 每個腳本最新嘅運行狀態（第幾輪 / 第幾步）
 
     private bool Valid(int i) => i >= 0 && i < _scripts.Count;
 
@@ -1802,14 +1872,29 @@ internal sealed class ScriptGrid : Control
         return new Rectangle(0, i * (TileH + Gap), Math.Max(Ui.S(300), Width) - 1, h - 1);
     }
 
-    private int _hoverBg = -1;
+    private int _hoverBg = -1, _hoverRun = -1, _hoverRuns = -1;
+
+    /// <summary>「開始」掣左邊：運行次數選單。</summary>
+    private Rectangle RunsRect(Rectangle tile)
+    {
+        var rr = RunRect(tile);
+        int w = Ui.S(110), h = Ui.S(30);
+        return new Rectangle(rr.X - Ui.S(10) - w, tile.Y + (tile.Height - h) / 2, w, h);
+    }
+
+    /// <summary>格仔最右邊「開始 / 停止」掣。</summary>
+    private Rectangle RunRect(Rectangle tile)
+    {
+        int w = Ui.S(96), h = Ui.S(34);
+        return new Rectangle(tile.Right - Ui.S(14) - w, tile.Y + (tile.Height - h) / 2, w, h);
+    }
 
     /// <summary>格仔中間「背景執行：揀程式」嗰粒。</summary>
     private Rectangle BgRect(Rectangle tile)
     {
         int w = Math.Clamp(tile.Width * 38 / 100, Ui.S(180), Ui.S(380));
         int h = Ui.S(30);
-        return new Rectangle(tile.Right - Ui.S(150) - w, tile.Y + (tile.Height - h) / 2, w, h);
+        return new Rectangle(tile.Right - Ui.S(270) - w, tile.Y + (tile.Height - h) / 2, w, h);
     }
 
     /// <summary>格仔右上角個剔格。</summary>
@@ -1854,15 +1939,20 @@ internal sealed class ScriptGrid : Control
             }
             var sc = _scripts[i];
             bool run = ScriptRunner.IsRunning(sc);
-            using (var pen = new Pen(run ? Ui.Success : hover ? Ui.Accent : Ui.Border, run ? Ui.S(1.5f) : 1f)) g.DrawPath(pen, path);
+            // 運行中：綠色粗框 + 淡綠底，一眼睇到
+            if (run) using (var rb = new SolidBrush(Ui.Alpha(Ui.Success, 28))) g.FillPath(rb, path);
+            using (var pen = new Pen(run ? Ui.Success : hover ? Ui.Accent : Ui.Border, run ? Ui.S(2.5f) : 1f)) g.DrawPath(pen, path);
             int pad = Ui.S(12);
             int tx = r.X + Ui.S(48);                         // 剔格右邊
             int textW = BgRect(r).X - tx - Ui.S(12);
             TextRenderer.DrawText(g, sc.Name, Ui.F(10.5f, FontStyle.Bold), new Rectangle(tx, r.Y + Ui.S(11), textW, Ui.S(22)),
                 Ui.Text, TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
-            string info = Lang.F("{0} 個步驟", sc.Steps.Count) + (sc.Ifs.Count > 0 ? Lang.F(" · {0} 個 IF", sc.Ifs.Count) : "") + " · " + (sc.Loop ? Lang.T("一直行") : Lang.T("行一次"));
-            TextRenderer.DrawText(g, info, Ui.F(8.75f), new Rectangle(tx, r.Y + Ui.S(36), textW, Ui.S(18)), Ui.TextDim,
-                TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+            string info = Lang.F("{0} 個步驟", sc.Steps.Count) + (sc.Ifs.Count > 0 ? Lang.F(" · {0} 個 IF", sc.Ifs.Count) : "")
+                          + (sc.Public ? " · " + Lang.T("🌐 已公開") : "");
+            // 運行中：顯示第幾輪 / 第幾步
+            bool showRun = run && _status.TryGetValue(sc.Id, out var stText) && stText.Length > 0;
+            TextRenderer.DrawText(g, showRun ? "● " + _status[sc.Id] : info, Ui.F(8.75f), new Rectangle(tx, r.Y + Ui.S(36), textW, Ui.S(18)),
+                showRun ? Ui.Success : Ui.TextDim, TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
             // 右上角剔格（多選）
             var cb = CheckRect(r);
             bool sel = Selected.Contains(sc);
@@ -1893,9 +1983,26 @@ internal sealed class ScriptGrid : Control
             }
             TextRenderer.DrawText(g, BgControls.ShortTarget(sc) + "  ▾", Ui.F(8.75f), new Rectangle(bp.X + Ui.S(8), bp.Y, bp.Width - Ui.S(12), bp.Height),
                 sc.Background ? Ui.Text : Ui.TextDim, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
-            string hk = sc.Hotkey.IsEmpty ? Lang.T("冇快捷鍵") : Lang.T("快捷鍵 ") + sc.Hotkey;
-            TextRenderer.DrawText(g, run ? Lang.T("● 運行中") : hk, Ui.F(8.75f), new Rectangle(r.Right - Ui.S(140), r.Y, Ui.S(128), r.Height),
-                run ? Ui.Success : Ui.TextFaint, TextFormatFlags.NoPadding | TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+            // 運行次數
+            var rs = RunsRect(r);
+            using (var rsp = Ui.Round(new RectangleF(rs.X, rs.Y, rs.Width, rs.Height), Ui.S(6f)))
+            {
+                using (var rsb = new SolidBrush(_hoverRuns == i ? Ui.CardHi : Ui.Card)) g.FillPath(rsb, rsp);
+                using var rspen = new Pen(_hoverRuns == i ? Ui.Accent : Ui.Border, 1f);
+                g.DrawPath(rspen, rsp);
+            }
+            TextRenderer.DrawText(g, Script.RunsName(sc.Runs) + "  ▾", Ui.F(8.75f), new Rectangle(rs.X + Ui.S(8), rs.Y, rs.Width - Ui.S(10), rs.Height),
+                Ui.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            // 開始 / 停止掣
+            var rr = RunRect(r);
+            bool rh = _hoverRun == i;
+            var runCol = run ? Ui.Danger : Ui.Success;
+            if (rh) runCol = ControlPaint.Light(runCol, 0.25f);
+            using (var rp = Ui.Round(new RectangleF(rr.X, rr.Y, rr.Width, rr.Height), Ui.S(8f)))
+            using (var rbr = new SolidBrush(runCol))
+                g.FillPath(rbr, rp);
+            TextRenderer.DrawText(g, run ? Lang.T("■ 停止") : Lang.T("▶ 開始"), Ui.F(9.75f, FontStyle.Bold), rr, Color.White,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
     }
 
@@ -1904,7 +2011,9 @@ internal sealed class ScriptGrid : Control
         base.OnMouseMove(e);
         int h = HitTest(e.Location);
         int hb = h >= 0 && h < _scripts.Count && BgRect(TileRect(h)).Contains(e.Location) ? h : -1;
-        if (h != _hover || hb != _hoverBg) { _hover = h; _hoverBg = hb; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); }
+        int hr = h >= 0 && h < _scripts.Count && RunRect(TileRect(h)).Contains(e.Location) ? h : -1;
+        int hn = h >= 0 && h < _scripts.Count && RunsRect(TileRect(h)).Contains(e.Location) ? h : -1;
+        if (h != _hover || hb != _hoverBg || hr != _hoverRun || hn != _hoverRuns) { _hover = h; _hoverBg = hb; _hoverRun = hr; _hoverRuns = hn; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); }
     }
 
     protected override void OnMouseLeave(EventArgs e)
@@ -1912,6 +2021,8 @@ internal sealed class ScriptGrid : Control
         base.OnMouseLeave(e);
         _hover = -1;
         _hoverBg = -1;
+        _hoverRun = -1;
+        _hoverRuns = -1;
         Invalidate();
     }
 
@@ -1927,6 +2038,19 @@ internal sealed class ScriptGrid : Control
         }
         if (e.Button == MouseButtons.Left)
         {
+            if (RunRect(TileRect(i)).Contains(e.Location))
+            {
+                ScriptRunner.Toggle(_scripts[i]);
+                Invalidate();
+                return;
+            }
+            if (RunsRect(TileRect(i)).Contains(e.Location))
+            {
+                var target = _scripts[i];
+                var rs = RunsRect(TileRect(i));
+                RunsMenu.Show(this, new Point(rs.X, rs.Bottom + Ui.S(2)), target, Invalidate);
+                return;
+            }
             if (BgRect(TileRect(i)).Contains(e.Location))
             {
                 var target = _scripts[i];
@@ -2004,7 +2128,8 @@ internal sealed class ScriptEditor : Panel
         };
 
         _mode = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(96), Ui.S(34)) };
-        _mode.Click += (_, _) => { _sc.Loop = !_sc.Loop; _sc.Save(); UpdateButtons(); };
+        _mode.Size = new Size(Ui.S(120), Ui.S(34));
+        _mode.Click += (_, _) => RunsMenu.Show(_mode, new Point(0, _mode.Height + Ui.S(2)), _sc, UpdateButtons);
 
         var hkLabel = Ui.Text_(Lang.T("快捷鍵"), Ui.TextDim, Ui.F(9.75f), new Padding(0));
         var hkBox = new HotkeyBox { Hotkey = sc.Hotkey };
@@ -2223,7 +2348,7 @@ internal sealed class ScriptEditor : Panel
         bool run = ScriptRunner.IsRunning(_sc);
         _start.Text = run ? Lang.T("停止") : Lang.T("測試");
         _start.Kind = run ? BtnKind.Danger : BtnKind.Success;
-        _mode.Text = _sc.Loop ? Lang.T("一直行") : Lang.T("行一次");
+        _mode.Text = Script.RunsName(_sc.Runs) + "  ▾";
         if (_back != null) _back.Enabled = !run;
         _start.Invalidate();
         _mode.Invalidate();
@@ -2356,20 +2481,35 @@ internal sealed class FlowRow : Panel
     }
 
     private int H => _left.Concat(_right).Max(c => c.Height);
+    private int RowGap => Ui.S(10);
 
-    public override Size GetPreferredSize(Size proposed) => new(proposed.Width, H);
+    private static bool Shown(Control c) => c.Tag as string != "hidden";
+    private static int W(Control c) => (c is Label ? c.PreferredSize : c.Size).Width;
+    private int LeftW => _left.Where(Shown).Sum(c => W(c) + Ui.S(10));
+    private int RightW => _right.Where(Shown).Sum(c => W(c) + Ui.S(10)) + Ui.S(6);
+
+    /// <summary>左右兩組放唔落一行：右邊組落第二行（唔會疊埋）。</summary>
+    private bool Wrapped(int width) => width > 0 && LeftW + RightW > width;
+
+    public override Size GetPreferredSize(Size proposed)
+    {
+        int w = proposed.Width > 0 ? proposed.Width : Width;
+        return new(proposed.Width, Wrapped(w) ? H * 2 + RowGap : H);
+    }
 
     protected override void OnLayout(LayoutEventArgs e)
     {
         base.OnLayout(e);
         if (_left == null || _right == null) return;
         int h = H, x = 0;
+        bool wrap = Wrapped(ClientSize.Width);
         foreach (var c in _left)
         {
             var sz = c is Label ? c.PreferredSize : c.Size;
             c.Location = new Point(x, (h - sz.Height) / 2);
             x += sz.Width + Ui.S(10);
         }
+        int y0 = wrap ? h + RowGap : 0;
         x = ClientSize.Width;
         bool first = true;
         for (int i = 0; i < _right.Length; i++)
@@ -2378,11 +2518,26 @@ internal sealed class FlowRow : Panel
             if (c.Tag as string == "hidden") continue;
             var sz = c is Label ? c.PreferredSize : c.Size;
             x -= sz.Width;
-            c.Location = new Point(x, (h - sz.Height) / 2);
+            c.Location = new Point(x, y0 + (h - sz.Height) / 2);
             x -= first ? Ui.S(16) : Ui.S(10);
             first = false;
         }
     }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        // 換行狀態變咗：叫上面重新計高度
+        bool wrap = Wrapped(ClientSize.Width);
+        if (wrap != _lastWrap)
+        {
+            _lastWrap = wrap;
+            for (Control? p = Parent; p != null; p = p.Parent)
+                if (p is CardStack cs) { if (cs.IsHandleCreated) cs.BeginInvoke(() => cs.PerformLayout()); break; }
+        }
+    }
+
+    private bool _lastWrap;
 }
 
 /// <summary>步驟清單：每行一個步驟（類型、參數、↑ ↓ ✕），下面一排「+ 新增」掣。</summary>
@@ -3363,7 +3518,7 @@ internal sealed class KindBadge : Control
         var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
         using var path = Ui.Round(r, Height / 2f);
         using (var b = new SolidBrush(Ui.Alpha(Ui.Accent, 40))) g.FillPath(b, path);
-        TextRenderer.DrawText(g, Text, Font, Rectangle.Round(r), Ui.Hex(0x9DBBFF),
+        TextRenderer.DrawText(g, Text, Font, Rectangle.Round(r), Ui.OnTint(Ui.Accent),
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
     }
 }
@@ -4736,7 +4891,7 @@ internal sealed class PreviewList : Control
             using (var path = Ui.Round(kr, Ui.S(11f)))
             using (var b = new SolidBrush(Ui.Alpha(hue, 45)))
                 g.FillPath(b, path);
-            TextRenderer.DrawText(g, kind, bf, Rectangle.Round(kr), Ui.Mix(hue, Color.White, 0.45f),
+            TextRenderer.DrawText(g, kind, bf, Rectangle.Round(kr), Ui.OnTint(hue),
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             x += (int)kr.Width + Ui.S(10);
             if (ln.Image != null && Thumb(ln.Image) is { } th)
@@ -4864,11 +5019,61 @@ internal static class ScriptCoords
     }
 }
 
+/// <summary>運行次數選單（腳本清單、預覽頁、修改頁共用）。</summary>
+internal static class RunsMenu
+{
+    public static void Show(Control anchor, Point at, Script sc, Action changed)
+    {
+        var menu = new ContextMenuStrip();
+        try { menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
+        menu.BackColor = Ui.CardHi;
+        menu.ForeColor = Ui.Text;
+        void Item(int n)
+        {
+            var it = new ToolStripMenuItem(Script.RunsName(n)) { Checked = sc.Runs == n };
+            it.Click += (_, _) => { sc.Runs = n; sc.Save(); changed(); };
+            menu.Items.Add(it);
+        }
+        foreach (var n in new[] { 1, 3, 5, 10, 0 }) Item(n);
+        menu.Items.Add(new ToolStripSeparator());
+        var custom = new ToolStripMenuItem(Lang.T("自訂次數…"));
+        custom.Click += (_, _) => anchor.BeginInvoke(() =>
+        {
+            int? n = AskCount(anchor.FindForm(), sc.Runs <= 1 ? 2 : sc.Runs);
+            if (n == null) return;
+            sc.Runs = n.Value;
+            sc.Save();
+            changed();
+        });
+        menu.Items.Add(custom);
+        menu.Closed += (_, _) => { try { if (!anchor.IsDisposed) anchor.BeginInvoke(() => menu.Dispose()); } catch { } };
+        menu.Show(anchor, at);
+    }
+
+    private static int? AskCount(Form? owner, int value)
+    {
+        using var f = new Form
+        {
+            Text = Lang.T("運行次數"), FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false,
+            StartPosition = FormStartPosition.CenterParent, BackColor = Ui.Bg, ForeColor = Ui.Text, Font = Ui.F(9.75f),
+            ClientSize = new Size(Ui.S(300), Ui.S(130))
+        };
+        var lbl = new Label { Text = Lang.T("運行幾多次？（0 = 一直運行）"), AutoSize = true, ForeColor = Ui.TextDim, Location = new Point(Ui.S(20), Ui.S(18)) };
+        var num = new NumericUpDown { Minimum = 0, Maximum = 99999, Value = Math.Clamp(value, 0, 99999), Location = new Point(Ui.S(20), Ui.S(46)), Width = Ui.S(120), BackColor = Ui.CardHi, ForeColor = Ui.Text };
+        var ok = new FancyButton { Text = Lang.T("確定"), Kind = BtnKind.Success, Size = new Size(Ui.S(90), Ui.S(34)), Location = new Point(Ui.S(190), Ui.S(84)) };
+        ok.Click += (_, _) => { f.DialogResult = DialogResult.OK; f.Close(); };
+        f.AcceptButton = ok;
+        f.Controls.AddRange(new Control[] { lbl, num, ok });
+        return f.ShowDialog(owner) == DialogResult.OK ? (int)num.Value : null;
+    }
+}
+
 /// <summary>「背景執行」開關 + 揀視窗掣（預覽頁同修改頁共用）。揀視窗前景 / 背景都用得。</summary>
 internal sealed class BgControls
 {
     public readonly ToggleChip Toggle;
     public readonly FancyButton Pick;
+    public readonly ToggleChip Fake;
     private readonly Script _sc;
     private readonly ToolTip _tip;
     /// <summary>設定或者座標改咗：外面要重新整個畫面。</summary>
@@ -4886,6 +5091,10 @@ internal sealed class BgControls
                                 Lang.T("閂咗（前景執行）就會先切去揀咗嘅視窗先開始。"));
         Pick = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(230), Ui.S(34)) };
         Pick.Click += (_, _) => ShowMenu(Pick, new Point(0, Pick.Height + Ui.S(2)), _sc, AfterChange, withBgToggle: false);
+        Fake = new ToggleChip(Lang.T("假焦點")) { Checked = sc.FakeFocus };
+        Fake.Size = new Size(Fake.Width + Ui.S(8), Ui.S(34));
+        _tip.SetToolTip(Fake, Lang.T("背景執行時，送按鍵 / 點擊之前先話俾遊戲知「你而家喺最前面」（唔會真係切視窗）。\n部分唔收背景輸入嘅遊戲開咗會得；讀原始輸入（DirectInput / Raw Input）嘅遊戲就冇效。"));
+        Fake.CheckedChanged += () => { _sc.FakeFocus = Fake.Checked; _sc.Save(); };
         Toggle.CheckedChanged += () =>
         {
             if (_busy) return;
@@ -4937,6 +5146,8 @@ internal sealed class BgControls
     {
         Pick.Tag = null;
         Pick.Visible = true;
+        Fake.Tag = _sc.Background ? null : "hidden";
+        Fake.Visible = _sc.Background;
         string label = _sc.Background && _sc.TargetProcess.Length == 0 ? Lang.T("揀程式…") : TargetLabel(_sc);
         Pick.Text = label + "  ▾";
         _tip.SetToolTip(Pick, Lang.T("揀腳本喺邊個程式視窗運行（前景 / 背景都用得）") + "\n" + label);
@@ -5050,7 +5261,7 @@ internal sealed class ScriptViewer : Panel
         back.Click += (_, _) => { if (!ScriptRunner.IsRunning(_sc)) BeginInvoke(() => Back?.Invoke()); };
         _back = back;
         var title = Ui.Text_(sc.Name, Ui.Text, Ui.F(12f, FontStyle.Bold), new Padding(0));
-        string info = (sc.Loop ? Lang.T("一直行") : Lang.T("行一次")) + (sc.Hotkey.IsEmpty ? "" : Lang.T(" · 快捷鍵 ") + sc.Hotkey);
+        string info = Script.RunsName(sc.Runs) + (sc.Hotkey.IsEmpty ? "" : Lang.T(" · 快捷鍵 ") + sc.Hotkey);
         _sc = sc;
         var infoLabel = Ui.Text_(info, Ui.TextDim, Ui.F(9.5f), new Padding(0));
         var edit = new FancyButton { Text = Lang.T("修改"), Kind = BtnKind.Primary, Size = new Size(Ui.S(96), Ui.S(34)) };
@@ -5098,7 +5309,10 @@ internal sealed class ScriptViewer : Panel
         speed.Click += (_, _) => speedMenu.Show(speed, new Point(0, speed.Height));
         speed.MouseWheel += (_, e) => SetSpeed(_sc.Speed + (e.Delta > 0 ? 0.1 : -0.1));
         _tip.SetToolTip(speed, Lang.T("腳本運行速度倍率：1.0x 正常、2.0x 快一倍、0.5x 慢一倍（等待、撳住、檢查間隔都會跟住變）") + "\n" + Lang.T("（滑鼠滾輪可以微調 ±0.1x）"));
-        _flow = new FlowRow(new Control[] { back, title, speed }, new Control[] { _start, edit, _bg.Toggle, _bg.Pick });
+        var runsBtn = new FancyButton { Text = Script.RunsName(sc.Runs) + "  ▾", Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(120), Ui.S(34)) };
+        _tip.SetToolTip(runsBtn, Lang.T("運行次數：一次、幾多次，或者一直運行"));
+        runsBtn.Click += (_, _) => RunsMenu.Show(runsBtn, new Point(0, runsBtn.Height + Ui.S(2)), _sc, () => { runsBtn.Text = Script.RunsName(_sc.Runs) + "  ▾"; runsBtn.Invalidate(); });
+        _flow = new FlowRow(new Control[] { back, title, speed, runsBtn }, new Control[] { _start, edit, _bg.Toggle, _bg.Pick });
         ShowSpeed();
         top.SetContent(_flow);
         _bg.Update();
@@ -5426,6 +5640,10 @@ internal sealed class RunCtx
     public bool Bg => Hwnd != 0;
 
     private readonly Size _ref;           // 記錄座標時個視窗內容區大小（按比例換算用）
+    public bool Fake;                     // 背景：送輸入前扮有焦點
+
+    /// <summary>背景 + 假焦點：送輸入前話俾個視窗知「你而家喺最前面」。</summary>
+    private void Focus() { if (Bg && Fake) Win.FakeFocus(Hwnd); }
 
     public RunCtx(Rectangle? exclude, nint hwnd, bool relative, nint fgWindow = 0, Size refSize = default)
     {
@@ -5453,6 +5671,7 @@ internal sealed class RunCtx
     public async Task DragAsync(Point a, Point b, bool right, TimeSpan duration, CancellationToken ct, bool pressAtStart = true)
     {
         if (pressAtStart) Guard();
+        Focus();
         int steps = Math.Clamp((int)(duration.TotalMilliseconds / 15), 5, 200);
         var stepDelay = TimeSpan.FromMilliseconds(Math.Max(1, duration.TotalMilliseconds / steps));
         if (Bg)
@@ -5496,23 +5715,27 @@ internal sealed class RunCtx
     public void KeyDown(int vk, bool alt)
     {
         Guard();
+        Focus();
         if (Bg) Win.PostKey(Hwnd, vk, false, alt); else Keyboard.Down(vk);
     }
 
     public void KeyUp(int vk, bool alt)
     {
+        Focus();
         if (Bg) Win.PostKey(Hwnd, vk, true, alt); else Keyboard.Up(vk);
     }
 
     public void MouseDown(int x, int y, bool right)
     {
         Guard();
+        Focus();
         if (Bg) Win.PostMouse(Hwnd, x, y, right, down: true);
         else Mouse.Down(x, y, right);
     }
 
     public void MouseUp(int x, int y, bool right, bool move)
     {
+        Focus();
         if (Bg) Win.PostMouse(Hwnd, x, y, right, down: false);
         else Mouse.Up(x, y, right, move);
     }
@@ -5522,6 +5745,7 @@ internal sealed class RunCtx
     {
         Guard();
         if (!Bg) { Keyboard.TypeText(text, ct); return; }
+        Focus();
         foreach (char ch in text.Replace("\r\n", "\n"))
         {
             ct.ThrowIfCancellationRequested();
@@ -5536,6 +5760,7 @@ internal sealed class RunCtx
     {
         Guard();
         if (!Bg) { Mouse.Wheel(x, y, notches); return; }
+        Focus();
         var scr = Win.ClientToScreenPt(Hwnd, new Point(x, y));
         for (int i = 0; i < Math.Abs(notches); i++)
         {
@@ -5547,6 +5772,7 @@ internal sealed class RunCtx
     public void Click(int x, int y, bool right)
     {
         Guard();
+        Focus();
         if (Bg)
         {
             Win.PostMouse(Hwnd, x, y, right, down: true);
@@ -5804,6 +6030,21 @@ internal static class Win
     }
 
     /// <summary>送按鍵訊息去視窗（有 Alt 就用 SYSKEY）。</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, long> _lastFake = new();
+
+    /// <summary>假焦點：送「啟動 / 攞焦點」訊息（唔會真係切視窗）。每 300ms 最多一次。</summary>
+    public static void FakeFocus(nint h)
+    {
+        long now = Environment.TickCount64;
+        if (_lastFake.TryGetValue(h, out var last) && now - last < 300) return;
+        _lastFake[h] = now;
+        PostMessage(h, 0x001C /*WM_ACTIVATEAPP*/, 1, 0);
+        PostMessage(h, 0x0086 /*WM_NCACTIVATE*/, 1, 0);
+        PostMessage(h, 0x0006 /*WM_ACTIVATE*/, 1 /*WA_ACTIVE*/, 0);
+        PostMessage(h, 0x0007 /*WM_SETFOCUS*/, 0, 0);
+        Thread.Sleep(15);
+    }
+
     public static void PostChar(nint h, char ch) => PostMessage(h, 0x0102 /*WM_CHAR*/, ch, 1);
 
     public static void PostWheel(nint h, Point screen, int delta) =>

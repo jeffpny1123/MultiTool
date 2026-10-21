@@ -69,7 +69,7 @@ internal abstract class AiProvider
         }
     }
 
-    protected static ProcessStartInfo Start(string exe, string args)
+    protected static ProcessStartInfo Start(string exe, string args, string? cwd = null)
     {
         bool cmd = exe.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase);
         return new ProcessStartInfo
@@ -84,7 +84,7 @@ internal abstract class AiProvider
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
             StandardInputEncoding = new UTF8Encoding(false),
-            WorkingDirectory = WorkDir
+            WorkingDirectory = cwd != null && Directory.Exists(cwd) ? cwd : WorkDir
         };
     }
 
@@ -105,9 +105,9 @@ internal abstract class AiProvider
     }
 
     /// <summary>行問答指令：問題經 stdin 傳入，返回 (exit code, stdout, stderr)。</summary>
-    protected static async Task<(int Code, string Out, string Err)> RunPromptAsync(string exe, string args, string prompt, Action<Process> started)
+    protected static async Task<(int Code, string Out, string Err)> RunPromptAsync(string exe, string args, string prompt, Action<Process> started, string? cwd = null)
     {
-        using var p = new Process { StartInfo = Start(exe, args) };
+        using var p = new Process { StartInfo = Start(exe, args, cwd) };
         p.Start();
         started(p);
         await p.StandardInput.WriteAsync(prompt);
@@ -139,7 +139,7 @@ internal abstract class AiProvider
     public abstract Task<Auth> AuthAsync(string exe);
     public abstract Task<bool> LogoutAsync(string exe);
     /// <param name="quick">語音對話：用快啲嘅設定、唔留對話紀錄。</param>
-    public abstract Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false);
+    public abstract Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null);
     protected abstract string LoginArgs { get; }
 
     /// <summary>開一個終端機視窗做登入，等用戶自己喺瀏覽器登入。</summary>
@@ -206,15 +206,16 @@ internal sealed class ClaudeProvider : AiProvider
 
     public override async Task<bool> LogoutAsync(string exe) => (await RunAsync(exe, "auth logout")).Code == 0;
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null)
     {
-        // 日常問答：唔俾佢改檔案 / 行指令
+        // 冇連接資料夾：唔俾佢改檔案 / 行指令；連接咗：喺嗰個資料夾入面做嘢（佢嘅工作目錄 = 嗰個資料夾）
+        string tools = folder != null
+            ? " --permission-mode acceptEdits --allowedTools Read Write Edit MultiEdit Glob Grep Bash WebSearch WebFetch TodoWrite"
+            : " --disallowedTools Bash Edit Write NotebookEdit --allowedTools WebSearch WebFetch";
         string args = "-p --output-format json" +
                       (sessionId != null ? $" --resume {sessionId}" : "") +
-                      (quick ? " --model haiku --no-session-persistence" : "") +
-                      " --disallowedTools Bash Edit Write NotebookEdit" +
-                      " --allowedTools WebSearch WebFetch"; // 可以上網搵資料
-        var (code, output, err) = await RunPromptAsync(exe, args, prompt, started);
+                      (quick ? " --model haiku --no-session-persistence" : "") + tools;
+        var (code, output, err) = await RunPromptAsync(exe, args, prompt, started, folder);
         // {"type":"result","result":"...","session_id":"...","is_error":false}
         try
         {
@@ -280,16 +281,18 @@ internal sealed class CodexProvider : AiProvider
 
     public override async Task<bool> LogoutAsync(string exe) => (await RunAsync(exe, "logout")).Code == 0;
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null)
     {
         string outFile = Path.Combine(WorkDir, "codex_" + Guid.NewGuid().ToString("N")[..8] + ".txt");
         // 唯讀 sandbox：唔俾佢改檔案
-        string common = $"--json --skip-git-repo-check -c sandbox_mode=read-only -o \"{outFile}\"" + (quick ? " --ephemeral" : "");
+        // 連接咗資料夾：可以喺嗰個資料夾寫檔（workspace-write sandbox）；冇就唯讀
+        string mode = folder != null ? "workspace-write" : "read-only";
+        string common = $"--json --skip-git-repo-check -c sandbox_mode={mode} -o \"{outFile}\"" + (quick ? " --ephemeral" : "");
         // --search：俾佢上網搵資料（唔使逐次批准）
         string args = sessionId != null ? $"--search exec resume {common} {sessionId} -" : $"--search exec {common} -";
         try
         {
-            var (code, output, err) = await RunPromptAsync(exe, args, prompt, started);
+            var (code, output, err) = await RunPromptAsync(exe, args, prompt, started, folder);
             string? sid = sessionId, text = null, error = null;
             foreach (var line in output.Split('\n'))
             {
@@ -347,12 +350,13 @@ internal sealed class GeminiProvider : AiProvider
         catch { return Task.FromResult(false); }
     }
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null)
     {
         // 新對話自己定 session id，之後用佢接返上文
         string sid = sessionId ?? Guid.NewGuid().ToString();
-        string args = "--output-format json --skip-trust " + (sessionId != null ? $"--resume {sid}" : $"--session-id {sid}");
-        var (code, output, err) = await RunPromptAsync(exe, args, prompt, started);
+        string args = "--output-format json --skip-trust " + (sessionId != null ? $"--resume {sid}" : $"--session-id {sid}") +
+                      (folder != null ? " --yolo" : ""); // 連接咗資料夾先俾佢自動用工具（工作目錄 = 嗰個資料夾）
+        var (code, output, err) = await RunPromptAsync(exe, args, prompt, started, folder);
         // {"session_id":"...","response":"...","stats":{...}}；出錯時 {"error":{"message":"..."}} 會喺 stderr
         try
         {
@@ -388,6 +392,9 @@ internal sealed class AiPage : Panel
     private AiProvider? _provider;   // null = 未揀平台
     private string? _session;
     private ChatRecord? _current;   // null = 未傳過嘢嘅新對話
+    private string? _pendingFolder; // 新對話未傳嘢之前揀咗嘅資料夾
+    private FancyButton _folderBtn = null!;
+    private string? Folder => _current != null ? _current.Folder : _pendingFolder;
     private Process? _running;
     private bool _stopped;
     private System.Windows.Forms.Timer? _poll;
@@ -406,7 +413,7 @@ internal sealed class AiPage : Panel
         _provider = AiProvider.LoadCurrent();
 
         // ---- 頂行：狀態 + 掣 ----
-        _top = new Panel { Dock = DockStyle.Top, Height = Ui.S(44), BackColor = Ui.Bg };
+        _top = new Panel { Dock = DockStyle.Top, Height = Ui.S(92), BackColor = Ui.Bg };
         var title = Ui.Text_(Lang.T("AI 助手"), Ui.Text, Ui.F(12f, FontStyle.Bold), new Padding(0));
         title.Location = new Point(0, Ui.S(8));
         _status = Ui.Text_(Lang.T("偵測緊…"), Ui.TextDim, Ui.F(9.5f), new Padding(0));
@@ -417,11 +424,15 @@ internal sealed class AiPage : Panel
             using var dlg = new AiSettingsDialog();
             dlg.ShowDialog(FindForm());
         });
-        _top.Controls.AddRange(new Control[] { title, _status, _detect, _login, _settings });
+        _folderBtn = Btn("", BtnKind.Ghost, ShowFolderMenu);
+        UpdateFolderButton();
+        _top.Controls.AddRange(new Control[] { title, _status, _detect, _login, _settings, _folderBtn });
         _top.Layout += (_, _) =>
         {
             _status.Location = new Point(title.Right + Ui.S(14), Ui.S(13));
             int x = _top.ClientSize.Width;
+            // 資料夾掣放第二行（左邊），唔會同狀態字疊埋
+            _folderBtn.Location = new Point(0, Ui.S(50));
             foreach (var b in new[] { _settings, _login, _detect })
             {
                 x -= b.Width;
@@ -649,10 +660,79 @@ internal sealed class AiPage : Panel
         _poll.Start();
     }
 
+    // ---------- 連接資料夾 ----------
+    private void UpdateFolderButton()
+    {
+        var f = Folder;
+        _folderBtn.Text = f == null ? Lang.T("資料夾：未連接（只可以對話）  ▾") : Lang.T("資料夾：") + f + "  ▾";
+        _folderBtn.Kind = f == null ? BtnKind.Ghost : BtnKind.Primary;
+        _folderBtn.Size = new Size(Math.Min(Ui.S(520), Math.Max(Ui.S(84), _folderBtn.GetPreferredSize(Size.Empty).Width + Ui.S(16))), Ui.S(34));
+        _folderBtn.Invalidate();
+        _top?.PerformLayout();
+    }
+
+    private void SetFolder(string? f)
+    {
+        if (_current != null) { _current.Folder = f; ChatStore.Save(_current); }
+        else _pendingFolder = f;
+        UpdateFolderButton();
+        AppendSystem(f == null ? Lang.T("已中斷連接資料夾：AI 而家淨係可以對話。")
+                               : Lang.F("已連接資料夾：{0}\nAI 可以喺呢個資料夾入面讀寫、刪除檔案同執行指令（例如編譯、測試）。", f));
+    }
+
+    private void ShowFolderMenu()
+    {
+        if (_running != null) return;
+        var menu = new ContextMenuStrip();
+        try { menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
+        menu.BackColor = Ui.CardHi;
+        menu.ForeColor = Ui.Text;
+        menu.Items.Add(Lang.T("連接資料夾…"), null, (_, _) => BeginInvoke(() =>
+        {
+            using var dlg = new FolderBrowserDialog { Description = Lang.T("揀一個資料夾：AI 只可以喺入面讀寫檔案同執行指令"), UseDescriptionForTitle = true };
+            if (Folder != null) dlg.SelectedPath = Folder;
+            if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+            string path = dlg.SelectedPath;
+            string root = Path.GetPathRoot(path) ?? "";
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (string.Equals(path.TrimEnd('\\'), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(path.TrimEnd('\\'), home.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith(Environment.GetFolderPath(Environment.SpecialFolder.Windows), StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(FindForm(), Lang.T("唔可以連接成個磁碟、用戶資料夾或者 Windows 資料夾，請揀一個專用嘅資料夾。"), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (MessageBox.Show(FindForm(), Lang.F("連接「{0}」？\n\nAI 可以喺呢個資料夾入面建立、修改、刪除檔案同執行指令。建議用專用資料夾，重要檔案先備份。", path),
+                    Program.AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            SetFolder(path);
+        }));
+        if (Folder != null)
+        {
+            menu.Items.Add(Lang.T("開啟資料夾"), null, (_, _) =>
+            {
+                try { Process.Start(new ProcessStartInfo("explorer.exe", "\"" + Folder + "\"") { UseShellExecute = true }); } catch { }
+            });
+            menu.Items.Add(Lang.T("中斷連接"), null, (_, _) => SetFolder(null));
+        }
+        menu.Closed += (_, _) => BeginInvoke(() => menu.Dispose());
+        menu.Show(_folderBtn, new Point(0, _folderBtn.Height + Ui.S(2)));
+    }
+
+    /// <summary>每句附上：AI 而家有冇資料夾、可以做乜。</summary>
+    private string FolderTag(AiProvider prov)
+    {
+        var f = prov.Key == "local" ? null : Folder; // 本地 AI 冇工具，連接咗都只可以對話
+        return f == null
+            ? "[MultiTool: 呢個對話冇連接資料夾。你冇權限讀寫檔案或者執行指令；寫程式就將完整程式碼直接放喺回覆，叫用戶自己儲存同執行。唔好話自己可以讀寫檔案或者執行指令；如果用戶想你直接改檔案，叫佢撳上面「資料夾：未連接」掣連接一個資料夾。]"
+            : $"[MultiTool: 工作資料夾 = {f}。你可以喺呢個資料夾（同佢嘅子資料夾）入面讀取、建立、修改、刪除檔案同執行指令，例如編譯同測試。絕對唔可以讀取、改動或刪除呢個資料夾以外嘅任何檔案、程式或者系統設定，亦唔可以 cd 出去。]";
+    }
+
     private void NewChat()
     {
         if (_running != null) return;
         _current = null;
+        _pendingFolder = null;
+        UpdateFolderButton();
         _session = null;
         _list.Select(null);
         _log.Clear();
@@ -665,6 +745,7 @@ internal sealed class AiPage : Panel
         if (_running != null) { _list.Select(_current); return; }
         _current = rec;
         _session = rec.SessionId;
+        UpdateFolderButton();
         SetProvider(AiProvider.Get(rec.Provider));   // 舊對話用返佢原本嘅 AI
         _log.Clear();
         AppendSystem($"{rec.Title}　·　{AiProvider.Get(rec.Provider).Name}　·　{rec.Updated:yyyy-MM-dd HH:mm}");
@@ -761,6 +842,8 @@ internal sealed class AiPage : Panel
         if (_current == null)
         {
             _current = ChatRecord.New(q, prov.Key);
+            _current.Folder = _pendingFolder;
+            _pendingFolder = null;
             _list.Add(_current);
         }
         var chat = _current;
@@ -796,15 +879,17 @@ internal sealed class AiPage : Panel
         try
         {
             // 每句附上系統時間；新對話第一句再講明可以開網頁 / 程式
-            string Wrap(bool first) => (first ? PcActions.Rules + "\n\n" : "") + PcActions.NowTag + "\n" + q;
+            string tag = FolderTag(prov);
+            string Wrap(bool first) => (first ? PcActions.Rules + "\n\n" : "") + tag + "\n" + PcActions.NowTag + "\n" + q;
             string prompt = await Task.Run(() => Wrap(_session == null));
-            ans = await prov.AskAsync(exe, prompt, _session, p => { _running = p; BeginInvoke(UpdateButtons); });
+            var folder = chat.Folder != null && Directory.Exists(chat.Folder) ? chat.Folder : null;
+            ans = await prov.AskAsync(exe, prompt, _session, p => { _running = p; BeginInvoke(UpdateButtons); }, folder: folder);
             // 舊對話喺工具嗰邊已經清咗，就當新對話再問一次
             if (ans.IsError && !_stopped && _session != null && AiProvider.IsSessionGone(ans.Text))
             {
                 _session = null;
                 string prompt2 = await Task.Run(() => Wrap(true));
-                ans = await prov.AskAsync(exe, prompt2, null, p => { _running = p; BeginInvoke(UpdateButtons); });
+                ans = await prov.AskAsync(exe, prompt2, null, p => { _running = p; BeginInvoke(UpdateButtons); }, folder: folder);
                 if (!ans.IsError) ans = ans with { Text = Lang.T("（舊對話嘅上文已過期，呢個回答唔記得之前講過乜）\n\n") + ans.Text };
             }
         }
@@ -1075,6 +1160,8 @@ internal sealed class ChatRecord
     public string Title { get; set; } = "";
     public string? SessionId { get; set; }
     public string Provider { get; set; } = "claude";
+    /// <summary>呢個對話連接嘅資料夾（AI 只可以喺入面讀寫 / 執行）；null = 淨係對話。</summary>
+    public string? Folder { get; set; }
     public DateTime Updated { get; set; }
     public List<ChatMsg> Messages { get; set; } = new();
 

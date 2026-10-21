@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 using MultiTool.UI;
 
@@ -30,7 +31,8 @@ internal static class Program
         {
             if (e.ExceptionObject is Exception ex) AppPaths.LogError("Fatal", ex);
         };
-        Application.Run(new MainForm());
+        bool startup = Environment.GetCommandLineArgs().Any(a => a == "--startup");
+        Application.Run(new MainForm(startup));
     }
 }
 
@@ -42,8 +44,13 @@ internal sealed class MainForm : Form
     private readonly System.Collections.Generic.List<(NavItem Nav, Func<Control> Build, Control? Page)> _pages = new();
     private int _current = -1;
 
-    public MainForm()
+    private readonly bool _startup;
+    private NotifyIcon? _tray;
+    private bool _exiting;
+
+    public MainForm(bool startup = false)
     {
+        _startup = startup;
         Text = Program.AppName;
         AutoScaleMode = AutoScaleMode.None;
         BackColor = Ui.Bg;
@@ -55,6 +62,9 @@ internal sealed class MainForm : Form
         // 拖視窗邊改大細：放手先重新排位（步驟多時唔會拖到卡）
         Size sizeAtBegin = Size.Empty;
         ResizeBegin += (_, _) => { sizeAtBegin = Size; LiveResize.Active = true; };
+        // 腳本庫分享（有開先會行）
+        Shown += (_, _) => Scripts.ShareService.Start();
+        FormClosed += (_, _) => Scripts.ShareService.Stop();
         ResizeEnd += (_, _) =>
         {
             if (Size == sizeAtBegin) LiveResize.Active = false; // 淨係搬視窗：唔使重新排
@@ -99,10 +109,21 @@ internal sealed class MainForm : Form
         lang.MouseEnter += (_, _) => lang.ForeColor = Ui.Text;
         lang.MouseLeave += (_, _) => lang.ForeColor = Ui.TextDim;
         _sidebar.Controls.Add(lang);
+        // 左下角：日光 / 夜間主題（喺語言上面）
+        var theme = new Label
+        {
+            Text = Ui.Light ? Lang.T("🌙 夜間主題") : Lang.T("☀ 日光主題"), AutoSize = true, ForeColor = Ui.TextDim, Font = Ui.F(9f),
+            Cursor = Cursors.Hand, BackColor = Ui.Panel
+        };
+        theme.Click += (_, _) => SwitchTheme(!Ui.Light);
+        theme.MouseEnter += (_, _) => theme.ForeColor = Ui.Text;
+        theme.MouseLeave += (_, _) => theme.ForeColor = Ui.TextDim;
+        _sidebar.Controls.Add(theme);
         void PlaceBy()
         {
             by.Location = new Point(Ui.S(22), _sidebar.ClientSize.Height - by.PreferredHeight - Ui.S(16));
             lang.Location = new Point(Ui.S(20), by.Top - lang.PreferredHeight - Ui.S(8));
+            theme.Location = new Point(Ui.S(20), lang.Top - theme.PreferredHeight - Ui.S(8));
         }
         _sidebar.Resize += (_, _) => PlaceBy();
         PlaceBy();
@@ -110,14 +131,96 @@ internal sealed class MainForm : Form
         // ---- 功能清單（以後喺度加）----
         AddPage(Lang.T("首頁"), BuildHomePage);
         AddPage(Lang.T("我的腳本"), Scripts.ScriptsPage.Build);
+        AddPage(Lang.T("腳本庫"), Scripts.LibraryPage.Build);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build);
-        AddPage(Lang.T("關於"), BuildAboutPage);
+        AddPage(Lang.T("設定"), BuildAboutPage);
 
         Controls.Add(_content);
         Controls.Add(_sidebar);
         Controls.Add(new TitleBar(this, _sidebar.Width)); // 自己畫嘅標題列（最後加 = 最先 dock，橫跨成個頂）
         // 開頭就整晒所有頁（咁各頁嘅快捷鍵唔使打開過都用得）
         for (int i = _pages.Count - 1; i >= 0; i--) Show(i);
+    }
+
+    // ---------- 系統匣 ----------
+    private void EnsureTray()
+    {
+        if (_tray != null) return;
+        var menu = new ContextMenuStrip();
+        try { menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
+        menu.BackColor = Ui.CardHi;
+        menu.ForeColor = Ui.Text;
+        menu.Items.Add(Lang.T("開啟"), null, (_, _) => RestoreFromTray());
+        menu.Items.Add(Lang.T("結束"), null, (_, _) => ExitApp());
+        _tray = new NotifyIcon { Icon = Icon, Text = Program.AppName, ContextMenuStrip = menu, Visible = false };
+        _tray.DoubleClick += (_, _) => RestoreFromTray();
+    }
+
+    private void HideToTray(bool tip)
+    {
+        EnsureTray();
+        _tray!.Visible = true;
+        Hide();
+        if (tip) try { _tray.ShowBalloonTip(3000, Program.AppName, Lang.T("MultiTool 喺系統匣繼續運行，腳本同快捷鍵照用得。右鍵圖示可以結束。"), ToolTipIcon.Info); } catch { }
+    }
+
+    private void RestoreFromTray()
+    {
+        Show();
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        Activate();
+        if (_tray != null) _tray.Visible = false;
+    }
+
+    private void ExitApp()
+    {
+        _exiting = true;
+        if (_tray != null) _tray.Visible = false;
+        Close();
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (!_exiting && e.CloseReason == CloseReason.UserClosing)
+        {
+            if (!AppSettings.AskedClose)
+            {
+                // 第一次閂：問想閂定縮去系統匣（之後喺「設定」改）
+                var r = MessageBox.Show(this,
+                    Lang.T("閂視窗時要點做？\n\n「是」：最少化至系統匣（腳本同快捷鍵繼續用得）\n「否」：關閉程式\n\n之後可以喺「設定」改。"),
+                    Program.AppName, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (r == DialogResult.Cancel) { e.Cancel = true; return; }
+                AppSettings.Tray = r == DialogResult.Yes;
+                AppSettings.AskedClose = true;
+                AppSettings.Save();
+                _trayBox?.Invoke(AppSettings.Tray);
+            }
+            if (AppSettings.Tray)
+            {
+                e.Cancel = true;
+                HideToTray(tip: !_trayTipShown);
+                _trayTipShown = true;
+                return;
+            }
+        }
+        if (_tray != null) { _tray.Visible = false; _tray.Dispose(); _tray = null; }
+        base.OnFormClosing(e);
+    }
+
+    private bool _trayTipShown;
+    private Action<bool>? _trayBox; // 設定頁個剔格（第一次問完同步）
+
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        // 開機自動啟動：有開「系統匣」就直接收埋，冇就最少化
+        if (_startup)
+        {
+            if (AppSettings.Tray) HideToTray(tip: false);
+            else WindowState = FormWindowState.Minimized;
+        }
+        // 開程式自動檢查更新（冇網 / 冇新版就唔出聲）
+        _ = Updater.CheckAsync(this, silent: true);
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -161,11 +264,20 @@ internal sealed class MainForm : Form
         base.WndProc(ref m);
     }
 
-    protected override void OnShown(EventArgs e)
+
+    /// <summary>換主題：記低，再重新啟動程式。</summary>
+    private void SwitchTheme(bool light)
     {
-        base.OnShown(e);
-        // 開程式自動檢查更新（冇網 / 冇新版就唔出聲）
-        _ = Updater.CheckAsync(this, silent: true);
+        if (MessageBox.Show(this, Lang.T("切換主題需要重新啟動程式，運行中嘅腳本會停止。而家重新啟動？"), Program.AppName,
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        Ui.SaveTheme(light);
+        try
+        {
+            string exe = Environment.ProcessPath ?? Application.ExecutablePath;
+            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" });
+        }
+        catch (Exception ex) { AppPaths.LogError("重新啟動", ex); }
+        Application.Exit();
     }
 
     /// <summary>換語言：記低，再重新啟動程式（介面全部重新整過）。</summary>
@@ -229,25 +341,34 @@ internal sealed class MainForm : Form
 
         var welcome = new CardPanel { Title = Lang.T("歡迎使用 ") + Program.AppName, Hint = Program.Version + Lang.T(" · 開發者：") + Program.Author };
         welcome.SetContent(new WrapText(
-            Lang.T("一個自用嘅 Windows 小工具，將平時重複嘅滑鼠同鍵盤動作自動化。左邊揀功能；") +
-            Lang.T("所有設定同圖片會自動儲存喺 exe 隔籬嘅 data 資料夾，重開都仲喺度。")));
+            Lang.T("Windows 自動化小工具：自己砌腳本自動撳鍵盤滑鼠、搵圖、判斷條件，再加埋 AI 助手同語音對話。左邊揀功能；") +
+            Lang.T("所有腳本、設定同圖片都存喺 exe 隔籬嘅 data 資料夾。")));
         stack.AddRow(welcome);
 
         stack.AddRow(Feature(Lang.T("我的腳本"), 1,
-            Lang.T("好似按鍵精靈咁自己砌腳本：按鍵（可組合鍵、撳住 / 按下 / 彈起）、滑鼠點擊、等待、") +
-            Lang.T("截圖搵圖點擊、循環同中斷循環、IF 條件（搵到圖 / 搵唔到圖 / 某點顏色 / 時間 / 倒數，可以一層層 nest）。") +
-            Lang.T("IF 框同主線程同時行；每個腳本可以揀「行一次」或者「一直行」，亦可以設自己嘅快捷鍵（入咗嗰個腳本嘅預覽頁先用得）。\n\n") +
-            Lang.T("已經幫你寫好一個「自動點擊」腳本：截圖搵怪物 → 搵到就點擊 → 喺點選CD 期間循環按鍵 → 再搵。") +
-            Lang.T("入去截好怪物圖、設好按鍵就用得。")));
+            Lang.T("步驟：按鍵、滑鼠（左鍵 / 右鍵 / 滾輪、拖曳）、延遲（可以隨機）、搵圖點擊、輸入文字、循環（次數 / 時限 / 指定時間）、") +
+            Lang.T("IF 條件（AND / OR）、同時運行、系統（開關程式、切換視窗、播音效、關機）、停止腳本；仲有新線程同主線程一齊行。\n") +
+            Lang.T("可以「● 錄製」你嘅操作自動變成步驟，揀運行次數，揀目標視窗（座標跟視窗位置同大細），或者背景執行。") +
+            Lang.T("清單入面撳「▶ 開始」就行，亦可以剔幾個一齊開始。")));
 
-        stack.AddRow(Feature(Lang.T("AI 助手"), 2,
-            Lang.T("用你部機已經安裝同登入咗嘅 Claude Code、Codex CLI（ChatGPT）或者 Gemini CLI 嚟問嘢，做基本日常問答，對話會自動儲存。") +
-            Lang.T("唔使喺呢度輸入任何帳號密碼；撳右上角「登入」揀用邊個，未登入就喺彈出嘅視窗登入一次。")));
+        stack.AddRow(Feature(Lang.T("腳本庫"), 2,
+            Lang.T("搜尋同下載其他用戶公開咗嘅腳本，亦可以公開你自己嘅（喺我的腳本右鍵）。直接由對方部機傳送，唔經伺服器；") +
+            Lang.T("下載前會列出腳本入面嘅系統動作，俾你確認。")));
+
+        stack.AddRow(Feature(Lang.T("AI 助手"), 3,
+            Lang.T("用你部機已經登入咗嘅 Claude、ChatGPT（Codex）、Gemini，或者免費本地 AI 嚟問嘢；識講時間、開程式同網頁、上網搵資料。") +
+            Lang.T("連接一個資料夾之後，AI 可以喺入面寫程式、執行同 debug。仲有快捷鍵語音對話（支援廣東話），同埋寫腳本時右下角嘅雲朵 AI 幫手。")));
+
+        stack.AddRow(Feature(Lang.T("設定"), 4,
+            Lang.T("開機時啟動、關閉時最少化至系統匣、檢查更新。左下角可以切換日光 / 夜間主題同語言。")));
 
         var tips = new CardPanel { Title = Lang.T("小貼士") };
         tips.SetContent(new WrapText(
+            Lang.T("• 緊急停止：腳本行緊時連撳 3 下 Esc，或者將滑鼠推去螢幕左上角，所有腳本即刻停。\n") +
+            Lang.T("• 撳錯刪咗步驟？修改頁右下角「↶ 復原」可以還原上一次改動。\n") +
             Lang.T("• 搵圖用嘅圖片最好直接喺遊戲畫面截，唔好縮放過，配對會準好多。\n") +
-            Lang.T("• 如果遊戲用管理員權限開，呢個工具都要用管理員權限開，否則點擊同按鍵會被 Windows 擋住。\n") +
+            Lang.T("• 遊戲用管理員權限開嘅話，MultiTool 會自動偵測，提示你用管理員身份重開。\n") +
+            Lang.T("• 部分 DirectX 遊戲唔收背景輸入，就要用前景執行。\n") +
             Lang.T("• 出錯會寫入 data\\error.log。")));
         stack.AddRow(tips);
         return stack;
@@ -266,6 +387,31 @@ internal sealed class MainForm : Form
     private Control BuildAboutPage()
     {
         var stack = new CardStack();
+
+        // ---- 設定 ----
+        var set = new CardPanel { Title = Lang.T("設定") };
+        var flow = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        CheckBox Box(string text, bool value, Action<bool> changed)
+        {
+            var cb = new CheckBox { Text = text, Checked = value, AutoSize = true, ForeColor = Ui.Text, BackColor = Ui.Card, Font = Ui.F(10f), Margin = new Padding(0, Ui.S(4), 0, Ui.S(8)) };
+            cb.CheckedChanged += (_, _) => changed(cb.Checked);
+            flow.Controls.Add(cb);
+            return cb;
+        }
+        var auto = Box(Lang.T("開機時啟動"), AutoStart.Enabled, v =>
+        {
+            if (!AutoStart.Set(v)) MessageBox.Show(this, Lang.T("設定唔到開機啟動。"), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        });
+        var tray = Box(Lang.T("關閉時最少化至系統匣"), AppSettings.Tray, v =>
+        {
+            AppSettings.Tray = v;
+            AppSettings.AskedClose = true;
+            AppSettings.Save();
+        });
+        _trayBox = v => { if (!tray.IsDisposed) tray.Checked = v; };
+        set.SetContent(flow);
+        stack.AddRow(set);
+
         var card = new CardPanel { Title = Program.AppName + " " + Program.Version, Hint = Lang.T("開發者：") + Program.Author + Lang.T("。設定同圖片全部存喺 exe 隔籬嘅 data 資料夾。") };
         var row = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, WrapContents = false };
         var update = new FancyButton { Text = Lang.T("檢查更新"), Kind = BtnKind.Primary };
@@ -302,6 +448,71 @@ internal sealed class MainForm : Form
             "https://polyformproject.org/licenses/noncommercial/1.0.0"));
         stack.AddRow(lic);
         return stack;
+    }
+}
+
+/// <summary>程式設定（data\\settings.txt）。</summary>
+internal static class AppSettings
+{
+    private static string File_ => Path.Combine(AppPaths.Data, "settings.txt");
+    public static bool Tray;
+    public static bool AskedClose;
+
+    static AppSettings()
+    {
+        try
+        {
+            if (!File.Exists(File_)) return;
+            foreach (var line in File.ReadAllLines(File_))
+            {
+                if (line == "tray=1") Tray = true;
+                if (line == "asked=1") AskedClose = true;
+            }
+        }
+        catch { }
+    }
+
+    public static void Save()
+    {
+        try
+        {
+            Directory.CreateDirectory(AppPaths.Data);
+            File.WriteAllLines(File_, new[] { "tray=" + (Tray ? "1" : "0"), "asked=" + (AskedClose ? "1" : "0") });
+        }
+        catch { }
+    }
+}
+
+/// <summary>開機啟動（目前用戶嘅 Run 登錄機碼，唔使管理員）。</summary>
+internal static class AutoStart
+{
+    private const string Key = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string Name = "MultiTool";
+    private static string Exe => Environment.ProcessPath ?? Application.ExecutablePath;
+
+    public static bool Enabled
+    {
+        get
+        {
+            try
+            {
+                using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(Key);
+                return k?.GetValue(Name) is string v && v.Contains(Exe, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+    }
+
+    public static bool Set(bool on)
+    {
+        try
+        {
+            using var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(Key);
+            if (on) k.SetValue(Name, $"\"{Exe}\" --startup");
+            else k.DeleteValue(Name, false);
+            return true;
+        }
+        catch (Exception ex) { AppPaths.LogError("開機啟動", ex); return false; }
     }
 }
 
