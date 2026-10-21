@@ -1,7 +1,7 @@
 """用一個現成嘅 .NET 9 WinForms single-file exe 做底（攞佢個 apphost + runtime），
 砌一個乾淨嘅新 bundle：唔包舊 app 嘅 dll，換成新嘅 MultiTool.dll。
 底本可以係舊 StickyPad.exe，亦可以直接用上一版 MultiTool.exe。
-用法: python make_exe.py <base.exe> <MultiTool.dll> <out.exe>"""
+用法: python make_exe.py <base.exe> <MultiTool.dll> <out.exe> [apphost.exe]"""
 import sys, os, struct, json, hashlib, base64
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bundle import parse
@@ -20,6 +20,9 @@ host_end = max(struct.unpack_from('<II', d, sec + i * 40 + 16)[1] + struct.unpac
                for i in range(nsec))
 assert host_end <= min(e['off'] for e in m['ents'])
 host = bytearray(d[:host_end])
+# 可選：用另一個 apphost（例如加咗程式 icon 嘅版本）：python make_exe.py base.exe app.dll out.exe host.exe
+if len(sys.argv) > 4:
+    host = bytearray(open(sys.argv[4], 'rb').read())
 
 def swap(buf, a, b):
     assert len(a) == len(b)
@@ -72,7 +75,9 @@ h += struct.pack('<qqqqQ', dep[2], dep[3], rc[2], rc[3], m['flags'])
 for p, t, off, size in ents:
     h += struct.pack('<qqq', off, size, 0) + bytes([t]) + wstr(p)
 hoff = len(blob); blob += h
-struct.pack_into('<q', blob, m['sigpos'] - 8, hoff)
+from bundle import SIG
+sigpos = bytes(host).find(SIG)
+struct.pack_into('<q', blob, sigpos - 8, hoff)
 open(out, 'wb').write(blob)
 m2 = parse(bytes(blob))
 assert len(m2['ents']) == len(ents)
