@@ -68,7 +68,7 @@ internal static class Extensions
             Lang.T("一撳架設 Palworld、Valheim、7 Days to Die 等 Steam 遊戲伺服器，有設定、自動備份同開端口。需要下載 SteamCMD。"), false,
             (p, ct) => Tools.SteamCmd.InstallAsync(p, ct), () => Tools.SteamCmd.Ready, Tools.SteamCmd.Delete, "~5 MB"),
         new(Download, Lang.T("影片下載"),
-            Lang.T("貼上 YouTube 等網站嘅連結，存做 MP3 或者 MP4，支援播放清單。需要下載 yt-dlp 同 ffmpeg。"), false,
+            Lang.T("貼上 YouTube、Bilibili、Twitch、TikTok、X、Vimeo、SoundCloud 等 1000 幾個網站嘅連結，存做 MP3 或者 MP4，支援播放清單。需要下載 yt-dlp 同 ffmpeg。"), false,
             (p, ct) => Tools.YtDlp.InstallAsync(p, ct), () => Tools.YtDlp.Ready, () => { Tools.YtDlp.Delete(); RemoveFfmpeg(Download); }, "~120 MB"),
     };
 
@@ -135,6 +135,7 @@ internal sealed class ExtensionsPage : Panel
     private readonly Label _title, _hint, _empty;
     private readonly TextBox _query = new();
     private readonly InputHost _queryHost;
+    private readonly Tools.TabStrip _tabs;
     private readonly List<ExtTile> _tiles = new();
     private bool _ready;
 
@@ -149,6 +150,12 @@ internal sealed class ExtensionsPage : Panel
         _query.TextChanged += (_, _) => PerformLayout();
         _queryHost = new InputHost(_query, Ui.S(260));
         Controls.Add(_queryHost);
+        // 分頁：全部 / 已安裝 / 未安裝
+        _tabs = new Tools.TabStrip(Lang.T("全部"), Lang.T("已安裝"), Lang.T("未安裝"));
+        _tabs.Selected += _ => PerformLayout();
+        Controls.Add(_tabs);
+        Extensions.Changed += OnExtChanged;
+        Disposed += (_, _) => Extensions.Changed -= OnExtChanged;
         _empty = Ui.Text_(Lang.T("搵唔到相關工具"), Ui.TextDim, Ui.F(9.75f), new Padding(0));
         Controls.Add(_empty);
         _hint = Ui.Text_(Lang.T("揀你想用嘅工具：安裝之後會喺左邊顯示；唔用可以移除（你嘅資料唔會刪走）。"), Ui.TextDim, Ui.F(9.5f), new Padding(0));
@@ -172,6 +179,12 @@ internal sealed class ExtensionsPage : Panel
         catch (Exception ex) { AppPaths.LogError("擴充工具排位", ex); }
     }
 
+    private void OnExtChanged()
+    {
+        if (IsDisposed || !IsHandleCreated) return;
+        BeginInvoke(() => { PerformLayout(); Invalidate(true); });
+    }
+
     private void Arrange()
     {
         int pad = Ui.S(24), gap = Ui.S(14);
@@ -189,10 +202,12 @@ internal sealed class ExtensionsPage : Panel
         y += _hint.PreferredHeight + Ui.S(14);
         _queryHost.Location = new Point(pad + o.X, y + o.Y);
         _queryHost.Width = Math.Min(Ui.S(360), w);
-        y += _queryHost.Height + Ui.S(16);
+        y += _queryHost.Height + Ui.S(12);
+        _tabs.SetBounds(pad + o.X, y + o.Y, w, _tabs.Height);
+        y += _tabs.Height + Ui.S(16);
         // 搜尋：名或者簡介有齊所有關鍵字先顯示
         var words = _query.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var shown = _tiles.Where(t => words.All(t.Matches)).ToList();
+        var shown = _tiles.Where(t => words.All(t.Matches) && (_tabs.Index == 0 || (_tabs.Index == 1) == t.IsOn)).ToList();
         foreach (var t in _tiles) t.Visible = shown.Contains(t);
         _empty.Visible = shown.Count == 0;
         _empty.Location = new Point(pad + o.X, y + o.Y);
@@ -233,6 +248,8 @@ internal sealed class ExtensionsPage : Panel
         private (string Glyph, Color Hue) Look => Extensions.Look(_e.Id);
 
         private bool Installed => Extensions.IsInstalled(_e.Id) && (_e.Ready?.Invoke() ?? true);
+
+        public bool IsOn => Installed;
 
         public bool Matches(string word) =>
             _e.Name.Contains(word, StringComparison.OrdinalIgnoreCase) || _e.Desc.Contains(word, StringComparison.OrdinalIgnoreCase) ||

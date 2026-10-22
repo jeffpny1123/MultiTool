@@ -107,7 +107,7 @@ internal sealed class DownloadPage : ToolPage
     private DownloadPage()
     {
         LoadSettings();
-        _url.PlaceholderText = Lang.T("貼上影片連結（YouTube 等），可以一次貼幾條，一行一條");
+        _url.PlaceholderText = Lang.T("貼上影片連結（YouTube、Bilibili、TikTok…），可以一次貼幾條，一行一條");
         _url.Multiline = true;
         _url.Height = Ui.S(60);
         _url.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter && e.Control) { e.SuppressKeyPress = true; Add(); } };
@@ -138,8 +138,15 @@ internal sealed class DownloadPage : ToolPage
         var open = TUi.Btn(Lang.T("開啟資料夾"), () => TUi.Open(_folder, folder: true));
         var update = TUi.Btn(Lang.T("更新 yt-dlp"), () => _ = SelfUpdateAsync());
         Card(Lang.T("影片下載"),
-            Lang.T("將 YouTube 等網站嘅影片存做 MP3 或者 MP4。只下載你有權使用嘅內容（例如自己嘅影片、允許下載嘅作品）。"),
+            Lang.T("將網上影片存做 MP3 或者 MP4。只下載你有權使用嘅內容（例如自己嘅影片、允許下載嘅作品）。"),
             TUi.Col(
+                new WrapText(Lang.T("支援網站：YouTube（連 Shorts、播放清單、YouTube Music）、Bilibili、Twitch、Vimeo、Dailymotion、X (Twitter)、Reddit、TikTok、") +
+                    Lang.T("Facebook / Instagram（公開影片）、SoundCloud、Bandcamp、新聞台網站等 1000 幾個網站。\n") +
+                    Lang.T("唔支援：要登入先睇到嘅影片，同有版權保護嘅串流（Netflix、Disney+、Spotify 等）。"),
+                    TUi.Btn(Lang.T("完整網站列表"), () =>
+                    {
+                        try { Process.Start(new ProcessStartInfo("https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md") { UseShellExecute = true }); } catch { }
+                    })),
                 TUi.Row(new InputHost(_url, Ui.S(560)) { Height = Ui.S(70) }, paste),
                 TUi.Row(TUi.L(Lang.T("格式")), _fmt, _qual, _playlist),
                 TUi.Row(TUi.L(Lang.T("儲存位置")), _folderLabel, _folderBtn, open),
@@ -274,7 +281,8 @@ internal sealed class DownloadPage : ToolPage
     private string Args(Job j)
     {
         var ff = Path.GetDirectoryName(Video.Ffmpeg.Exe)!;
-        var sb = new StringBuilder("--newline --progress --no-colors --windows-filenames --no-mtime ");
+        // --encoding utf-8：唔加會用系統編碼輸出，中文 / 韓文名會變亂碼
+        var sb = new StringBuilder("--encoding utf-8 --newline --progress --no-colors --windows-filenames --no-mtime ");
         sb.Append($"--ffmpeg-location \"{ff}\" ");
         sb.Append(j.Playlist ? "--yes-playlist " : "--no-playlist ");
         string tpl = j.Playlist ? "%(playlist_title|)s\\%(playlist_index|)s %(title)s.%(ext)s" : "%(title)s.%(ext)s";
