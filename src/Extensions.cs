@@ -25,9 +25,10 @@ internal static class Extensions
     public const string Ocr = "ocr";
     public const string Convert = "convert";
     public const string GameServer = "gameserver";
+    public const string Download = "download";
 
     /// <summary>用 ffmpeg 嘅工具：最後一個移除先刪 ffmpeg。</summary>
-    private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert };
+    private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert, Download };
 
     private static void RemoveFfmpeg(string id)
     {
@@ -66,6 +67,9 @@ internal static class Extensions
         new(GameServer, Lang.T("遊戲伺服器"),
             Lang.T("一撳架設 Palworld、Valheim、7 Days to Die 等 Steam 遊戲伺服器，有設定、自動備份同開端口。需要下載 SteamCMD。"), false,
             (p, ct) => Tools.SteamCmd.InstallAsync(p, ct), () => Tools.SteamCmd.Ready, Tools.SteamCmd.Delete, "~5 MB"),
+        new(Download, Lang.T("影片下載"),
+            Lang.T("貼上 YouTube 等網站嘅連結，存做 MP3 或者 MP4，支援播放清單。需要下載 yt-dlp 同 ffmpeg。"), false,
+            (p, ct) => Tools.YtDlp.InstallAsync(p, ct), () => Tools.YtDlp.Ready, () => { Tools.YtDlp.Delete(); RemoveFfmpeg(Download); }, "~120 MB"),
     };
 
     private static string File_ => Path.Combine(AppPaths.Data, "extensions.txt");
@@ -106,6 +110,7 @@ internal static class Extensions
         Ocr => ("T", Ui.Accent2),
         Convert => ("⇄", Ui.Success),
         GameServer => ("◆", Ui.Success),
+        Download => ("⇩", Ui.Danger),
         "ai" => ("✦", Ui.Accent2),
         "add" => ("+", Ui.Accent),
         _ => ("★", Ui.Accent2)

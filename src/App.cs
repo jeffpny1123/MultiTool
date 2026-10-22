@@ -140,6 +140,7 @@ internal sealed class MainForm : Form
         AddPage(Lang.T("文字辨識"), Tools.OcrPage.Build, "ocr", Extensions.Ocr);
         AddPage(Lang.T("轉檔工具"), Tools.ConvertPage.Build, "convert", Extensions.Convert);
         AddPage(Lang.T("遊戲伺服器"), Tools.GameServerPage.Build, "gameserver", Extensions.GameServer);
+        AddPage(Lang.T("影片下載"), Tools.DownloadPage.Build, "download", Extensions.Download);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");
         AddPage(Lang.T("工具庫"), () => new ExtensionsPage(), "extensions");
         AddPage(Lang.T("設定"), BuildAboutPage, "settings");
