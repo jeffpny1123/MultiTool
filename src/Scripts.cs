@@ -2284,6 +2284,7 @@ internal sealed class ScriptEditor : Panel
             recorder.Stop();
             try { bar.Close(); bar.Dispose(); } catch { }
             var steps = recorder.ToSteps(p => ScriptCoords.FromScreen(_sc, p) ?? p);
+            if (form is { IsDisposed: true }) form = null;
             if (form != null)
             {
                 if (form.WindowState == FormWindowState.Minimized) form.WindowState = FormWindowState.Normal;
@@ -2300,8 +2301,19 @@ internal sealed class ScriptEditor : Panel
             MessageBox.Show(form, Lang.F("錄到 {0} 個步驟，已經加咗喺主線程最尾。", steps.Count), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
             Reload?.Invoke();
         }
-        recorder.StopRequested += () => BeginInvoke(Finish);
-        bar.StopClicked += () => BeginInvoke(Finish);
+        // 唔好靠修改頁自己嘅視窗控制代碼（縮細 / 重建頁面時可能冇咗），用錄製細窗或者主視窗轉返 UI 執行緒
+        void OnUi()
+        {
+            try
+            {
+                if (bar.IsHandleCreated && !bar.IsDisposed) bar.BeginInvoke(Finish);
+                else if (form is { IsHandleCreated: true, IsDisposed: false }) form.BeginInvoke(Finish);
+                else if (IsHandleCreated) BeginInvoke(Finish);
+            }
+            catch (Exception ex) { AppPaths.LogError("停止錄製", ex); }
+        }
+        recorder.StopRequested += OnUi;
+        bar.StopClicked += Finish; // 撳掣本身已經喺 UI 執行緒
         bar.Show();
         // 揀咗視窗就切去嗰個視窗；冇就縮細 MultiTool
         var h = _sc.TargetProcess.Length > 0 ? Win.Find(_sc) : 0;
