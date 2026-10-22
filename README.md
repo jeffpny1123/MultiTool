@@ -88,10 +88,57 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - **Recent recording** shows the latest video with **Play** and **Delete** (moves it to the Recycle Bin).
   **最近錄影**顯示最新的影片，可**播放**或**刪除**（移至資源回收筒）。
 
+**Instant Replay 精彩重播** — keeps recording in the background, saves the last moments on a hotkey / 背景持續錄影，按快捷鍵儲存最近一段
+
+- Keeps the last 15 s – 5 min of the screen (with system audio / microphone) and saves it as MP4 only when you press the hotkey, like ShadowPlay. Nothing is saved otherwise.
+  背景保留最近 15 秒至 5 分鐘的畫面（可連電腦聲音／咪高峰），按快捷鍵才儲存為 MP4，類似 ShadowPlay；未按則不會儲存任何內容。
+- Choose screen, FPS, resolution, quality, audio volume and cursor; can start automatically with MultiTool.
+  可選擇螢幕、FPS、解像度、品質、音量及滑鼠游標；可於開啟 MultiTool 時自動開始。
+
+**Key Remap 遊戲改鍵** — turn one key into another / 將一個按鍵變成另一個按鍵
+
+- Rules like Caps Lock → Ctrl or mouse side button → F; targets can be keys or mouse buttons. Each rule can be limited to one program. On / off with a hotkey.
+  規則例如 Caps Lock → Ctrl、滑鼠側鍵 → F；目標可為按鍵或滑鼠鍵，每條規則可限定只於指定程式生效，並可用快捷鍵開關。
+
+**Window Tools 視窗工具**
+
+- Keep any window on top, set its opacity (10–100%), make it borderless fullscreen or center it. Hotkeys act on the window in front.
+  將任何視窗置頂、設定透明度（10–100%）、變為無邊框全螢幕或置中；快捷鍵作用於最前面的視窗。
+
+**Clipboard History 剪貼簿紀錄**
+
+- Remembers copied text and images (searchable, pinnable). A hotkey opens a popup anywhere; press 1–9 to paste. Text history can optionally be kept after restart; images stay in memory only.
+  記錄複製過的文字及圖片（可搜尋、釘選）；快捷鍵可於任何地方開啟小視窗，按 1–9 直接貼上。文字紀錄可選擇於重新開啟後保留；圖片只保留於記憶體。
+
+**Text Recognition 文字辨識**
+
+- Select any area on screen (or an image file) to extract its text with Windows' built-in OCR — offline, no download. Copies the result automatically.
+  框選畫面任何範圍（或選擇圖片檔），以 Windows 內建 OCR 擷取文字——離線使用，無須下載，並自動複製結果。
+
+**Converter 轉檔工具**
+
+- Convert video, audio and images (MP4, MKV, WEBM, AVI, MOV, GIF, MP3, WAV, M4A, PNG, JPG, WEBP), resize and trim. Drag files in, convert in batches with progress.
+  影片、聲音、圖片互相轉換（MP4、MKV、WEBM、AVI、MOV、GIF、MP3、WAV、M4A、PNG、JPG、WEBP），可縮小及剪輯頭尾；可拖曳檔案批次轉換並顯示進度。
+
+**Game Servers 遊戲伺服器** — host dedicated servers with Valve's SteamCMD / 使用 Valve 官方 SteamCMD 架設專用伺服器
+
+- One-click install / update with download progress: Palworld, Valheim, Enshrouded, 7 Days to Die, Satisfactory, V Rising, ARK: Survival Ascended, Rust, Project Zomboid, Counter-Strike 2, plus any number of custom Steam dedicated servers (App ID + executable + arguments).
+  一鍵安裝／更新並顯示下載進度：Palworld、Valheim、Enshrouded、7 Days to Die、Satisfactory、V Rising、ARK: Survival Ascended、Rust、Project Zomboid、Counter-Strike 2，另可無限新增自訂 Steam 專用伺服器（App ID + 執行檔 + 參數）。
+- **Server info** tab: name, password, admin password, players, port and extra arguments (written into each game's config automatically), start with MultiTool, auto restart on crash, public / LAN IP, UPnP port opening, firewall exception, and scheduled backups with restore.
+  **伺服器資訊**分頁：伺服器名稱、密碼、管理員密碼、人數、端口及額外參數（自動寫入各遊戲設定檔）、開啟 MultiTool 時自動開始、當機自動重新啟動、對外／區網 IP、UPnP 開放端口、防火牆例外，以及定時備份與還原。
+- **Files** tab: quick folders, the game's config files with a built-in editor, and a file browser. **Console** tab: live output and commands.
+  **檔案**分頁：常用資料夾、遊戲設定檔（內建編輯器）及檔案瀏覽；**控制台**分頁：即時輸出及輸入指令。
+- Servers stop gracefully (save first) when stopped or when MultiTool closes.
+  停止伺服器或關閉 MultiTool 時，會先讓伺服器儲存再停止。
+- **AI helper**: with an AI signed in, a cloud button at the bottom-right can fill in server settings ("8 players, password abc123"), edit game config files inside the server folder only, and read the last lines of the console to explain errors. **Ask AI why** appears when a server fails.
+  **AI 助手**：已登入 AI 時，右下角雲朵按鈕可代為填寫伺服器設定（例如「8 人遊玩，密碼 abc123」）、只於伺服器資料夾內修改遊戲設定檔，並查看控制台最後數行解釋錯誤；伺服器出問題時會出現**問 AI 原因**按鈕。
+
 **Settings 設定**
 
 - Start with Windows, minimize to the system tray on close (asked the first time you close), check for updates. Light / dark theme and language are at the bottom-left.
   開機時啟動、關閉時最少化至系統匣（首次關閉時會詢問）、檢查更新。日光／夜間主題及語言於左下角切換。
+- **Hotkeys**: one table with every installed tool's hotkey (editable). Tick **Use outside page** to use a hotkey anywhere; otherwise it only works on that tool's page. Duplicate hotkeys cannot be ticked.
+  **快捷鍵**：一個表格列出所有已安裝工具的快捷鍵（可直接修改）。勾選**頁面外使用**即可於任何地方使用，否則只可在該工具頁使用；重複的快捷鍵無法勾選。
 - **Sidebar order**: drag items in the sidebar up or down, or right-click for Move up / Move down / Reset order.
   **側欄排序**：可直接拖曳側欄項目上下移動，或右鍵選擇上移／下移／重設排序。
 
@@ -131,6 +178,18 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v1.8
+- **New tools** in the Tool library: Instant Replay, Key Remap, Window Tools, Clipboard History, Text Recognition, Converter and Game Servers.
+  **新工具**（於工具庫安裝）：精彩重播、遊戲改鍵、視窗工具、剪貼簿紀錄、文字辨識、轉檔工具及遊戲伺服器。
+- **New: Game Servers** — SteamCMD dedicated servers with settings, backups, UPnP, file editor, console and an AI helper that can fill in settings and explain errors.
+  **新增：遊戲伺服器**——SteamCMD 專用伺服器，附設定、備份、UPnP、檔案編輯、控制台，以及可代填設定及解釋錯誤的 AI 助手。
+- **New: Hotkeys table** in Settings — change every tool's hotkey in one place and choose whether it works outside its page.
+  **新增：設定中的快捷鍵表**——一處修改所有工具的快捷鍵，並選擇是否於頁面外使用。
+- **Changed:** redesigned home page — shows only installed tools, with tips for them.
+  **變更：**重新設計首頁——只顯示已安裝的工具及相關提示。
+- **Changed:** Tool library tiles show an icon for each tool.
+  **變更：**工具庫方格顯示各工具圖示。
 
 ### v1.7
 - **New: Tool library** (replaces the fixed sidebar) — install or remove tools as tiles, with search. Tools that need extra files download them on install.
@@ -285,7 +344,7 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 錄影工具；`P2P.cs` Script library 腳本庫 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 錄影工具；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Tools, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗工具、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
 | `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
 | `release/` | User guide shipped with releases 隨發佈版本附上的使用說明（`使用說明.txt`） |
@@ -331,7 +390,8 @@ Downloaded by the user on demand, not bundled in the executable / 由用戶按�
 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and [OpenAI Whisper](https://github.com/openai/whisper) models — MIT License
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) — MIT License
-- [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the screen recorder as a separate program / GPL 授權，錄影工具以獨立程式方式調用
+- [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the recorder, Instant Replay and Converter as a separate program / GPL 授權，錄影工具、精彩重播及轉檔工具以獨立程式方式調用
+- [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD) — Valve's command-line Steam client, downloaded by Game Servers; dedicated servers are downloaded from Steam under each game's own terms / Valve 官方命令列 Steam 用戶端，由遊戲伺服器下載；各專用伺服器從 Steam 下載，受各遊戲條款約束
 - [Qwen3.5](https://huggingface.co/Qwen) models (GGUF by [unsloth](https://huggingface.co/unsloth)) — see each model's license / 請參閱各模型的授權
 
 ---
