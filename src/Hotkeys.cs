@@ -45,6 +45,7 @@ internal static class HotkeyHub
         new() { Id = "window.borderless", Ext = Extensions.Window, Page = "window", Name = () => Lang.T("視窗工具：目前視窗無邊框全螢幕 / 還原") },
         new() { Id = "clipboard.show", Ext = Extensions.Clipboard, Page = "clipboard", Name = () => Lang.T("剪貼簿紀錄：打開紀錄視窗") },
         new() { Id = "ocr.capture", Ext = Extensions.Ocr, Page = "ocr", Name = () => Lang.T("文字辨識：框選畫面辨識") },
+        new() { Id = "perf.overlay", Ext = Extensions.Perf, Page = "perf", Name = () => Lang.T("效能監看：顯示 / 隱藏遊戲疊加") },
     };
 
     /// <summary>MainForm 設定：而家顯示緊邊頁。</summary>

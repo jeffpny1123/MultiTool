@@ -11,7 +11,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v1.8";
+    public const string Version = "v1.9";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -138,10 +138,12 @@ internal sealed class MainForm : Form
         AddPage(Lang.T("視窗工具"), Tools.WindowPage.Build, "window", Extensions.Window);
         AddPage(Lang.T("剪貼簿紀錄"), Tools.ClipboardPage.Build, "clipboard", Extensions.Clipboard);
         AddPage(Lang.T("文字辨識"), Tools.OcrPage.Build, "ocr", Extensions.Ocr);
-        AddPage(Lang.T("轉檔工具"), Tools.ConvertPage.Build, "convert", Extensions.Convert);
+        AddPage(Lang.T("轉檔工具"), Tools.ConvertHub.Build, "convert", Extensions.Convert);
         AddPage(Lang.T("遊戲伺服器"), Tools.GameServerPage.Build, "gameserver", Extensions.GameServer);
         AddPage(Lang.T("影片下載"), Tools.DownloadPage.Build, "download", Extensions.Download);
         AddPage(Lang.T("遠端桌面（測試）"), Tools.RemotePage.Build, "remote", Extensions.Remote);
+        AddPage(Lang.T("效能監看"), Tools.PerfPage.Build, "perf", Extensions.Perf);
+        AddPage(Lang.T("磁碟空間及健康"), Tools.DiskPage.Build, "disk", Extensions.Disk);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");
         AddPage(Lang.T("工具庫"), () => new ExtensionsPage(), "extensions");
         AddPage(Lang.T("設定"), BuildAboutPage, "settings");
@@ -149,6 +151,7 @@ internal sealed class MainForm : Form
         LayoutNav();
         HotkeyHub.CurrentPage = () => _current >= 0 ? _pageKeys[_current].Key : null;
         HotkeyHub.Start();
+        Tools.PerfOverlay.Wire();
         Extensions.Changed += () => BeginInvoke(() =>
         {
             LayoutNav();

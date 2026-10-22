@@ -74,6 +74,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   工具以方格排列，並設有搜尋欄。按**安裝**會在側欄加入該工具，按**移除**則會隱藏；你的腳本及影片會保留。全新下載時預設未安裝任何工具；由舊版更新時，**我的腳本**會保持已安裝。
 - Tools that need extra files download them when installed (e.g. the recorder downloads FFmpeg, about 100 MB). No server of our own is involved.
   需要額外檔案的工具會於安裝時下載（例如錄影工具會下載約 100 MB 的 FFmpeg），不經任何自設伺服器。
+- **Categories** (Gaming, Media, Productivity, System, Network) and **All / Installed / Not installed** tabs can be combined; commonly used tools are listed first and beta tools last.
+  **分類**（遊戲、媒體、效率、系統、網絡）可與**全部／已安裝／未安裝**分頁一併篩選；常用工具排在最前，測試版排在最後。
 
 **Screen recorder 錄影工具** — install it from the Tool library / 於工具庫安裝
 
@@ -115,10 +117,38 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - Select any area on screen (or an image file) to extract its text with Windows' built-in OCR — offline, no download. Copies the result automatically.
   框選畫面任何範圍（或選擇圖片檔），以 Windows 內建 OCR 擷取文字——離線使用，無須下載，並自動複製結果。
 
-**Converter 轉檔工具**
+**Converter 轉檔工具** — two tabs: Media and Documents / 分「影音」及「文件」兩個分頁
 
-- Convert video, audio and images (MP4, MKV, WEBM, AVI, MOV, GIF, MP3, WAV, M4A, PNG, JPG, WEBP), resize and trim. Drag files in, convert in batches with progress.
-  影片、聲音、圖片互相轉換（MP4、MKV、WEBM、AVI、MOV、GIF、MP3、WAV、M4A、PNG、JPG、WEBP），可縮小及剪輯頭尾；可拖曳檔案批次轉換並顯示進度。
+- **Media**: convert video, audio and images (MP4, MKV, WEBM, AVI, MOV, GIF, MP3, WAV, M4A, PNG, JPG, WEBP), resize and trim. Drag files in, convert in batches with progress. FFmpeg (~100 MB) is downloaded on first use from inside the tab.
+  **影音**：影片、聲音、圖片互相轉換（MP4、MKV、WEBM、AVI、MOV、GIF、MP3、WAV、M4A、PNG、JPG、WEBP），可縮小及剪輯頭尾；可拖曳檔案批次轉換並顯示進度。首次使用時於分頁內下載 FFmpeg（約 100 MB）。
+- **Documents**: convert between Excel (.xlsx), CSV, TSV and JSON without Office. Each sheet becomes its own file, or merge several files into one workbook. CSV output in UTF-8 with BOM (opens correctly in Excel), UTF-8, Big5 or GBK; old Big5 CSVs are detected automatically. Old `.xls` is not supported.
+  **文件**：Excel（.xlsx）、CSV、TSV、JSON 互相轉換，無須安裝 Office。每張工作表輸出一個檔案，或將多個檔案合併為一個活頁簿。CSV 可輸出 UTF-8（附 BOM，Excel 可正常顯示中文）、UTF-8、Big5 或 GBK；自動辨認舊 Big5 CSV。不支援舊版 `.xls`。
+
+**Video Downloader 影片下載** — uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) / 使用 yt-dlp
+
+- Paste a link from YouTube, Bilibili, Twitch, TikTok, X, Vimeo, SoundCloud and 1000+ other sites and save it as MP3 or MP4; playlists supported. yt-dlp and FFmpeg are downloaded on install.
+  貼上 YouTube、Bilibili、Twitch、TikTok、X、Vimeo、SoundCloud 等 1000 多個網站的連結，儲存為 MP3 或 MP4，支援播放清單。安裝時下載 yt-dlp 及 FFmpeg。
+
+**Performance Monitor 效能監看**
+
+- Live CPU, GPU, RAM, VRAM, disk and network usage with graphs, plus GPU temperature on NVIDIA cards, using Windows' own performance counters. Lists the programs using the most CPU and memory.
+  即時顯示 CPU、GPU、RAM、VRAM、磁碟及網絡用量與走勢圖，NVIDIA 顯示卡另顯示 GPU 溫度，使用 Windows 內置效能計數器；並列出最耗 CPU 及記憶體的程式。
+- **Game overlay**: a small always-on-top, click-through box in a screen corner, with a hotkey. Choose items, corner, font size and opacity. Works with borderless / windowed games (exclusive fullscreen covers it).
+  **遊戲疊加**：於螢幕角落顯示永遠置頂、滑鼠可穿透的小框，並設有快捷鍵；可選擇顯示項目、位置、字體大小及不透明度。適用於無邊框／視窗模式遊戲（獨佔全螢幕會將其覆蓋）。
+
+**Disk Space & Health 磁碟空間及健康**
+
+- Used / free space for every drive, and drive health (status, temperature, SSD life used, power-on hours, read / write errors) from Windows' built-in storage data. Temperature, wear and hours need MultiTool to run as Administrator.
+  顯示每個磁碟的已用／剩餘空間，以及 Windows 內置存放裝置資料中的硬碟健康（狀態、溫度、SSD 已用壽命、開機時數、讀寫錯誤）。溫度、損耗及開機時數須以系統管理員身分執行 MultiTool。
+- **Space analysis**: scan a drive or folder and browse it as a treemap; the 30 largest files (100 MB+) are listed. Right-click to open in Explorer or move to the Recycle Bin (with confirmation).
+  **空間分析**：掃描磁碟或資料夾並以方格圖瀏覽，列出最大的 30 個檔案（100 MB 以上）；右鍵可於檔案總管開啟或移至資源回收筒（會先確認）。
+
+**Remote Desktop (beta) 遠端桌面（測試版）** — built in, no extra program / 內置，無須額外程式
+
+- Connect with an ID and password to control another PC running MultiTool, or let someone connect to yours. End-to-end encrypted (ECDH P-256 key exchange, password-authenticated, AES-GCM).
+  以 ID 及密碼連接另一部執行 MultiTool 的電腦並遠端控制，或讓別人連入你的電腦；全程端對端加密（ECDH P-256 交換金鑰、密碼驗證、AES-GCM）。
+- There is no relay server: the host PC must be reachable directly (same LAN, or a public IP / UPnP). It does **not** work when the host is behind CGNAT, mobile data or most public Wi-Fi; a VPN such as Tailscale works around this.
+  沒有中轉伺服器：被控電腦必須可直接連線（同一區網，或有公共 IP／UPnP）。被控電腦使用 CGNAT、流動數據或大部分公共 Wi-Fi 時**無法連線**，可改用 Tailscale 等 VPN。
 
 **Game Servers 遊戲伺服器** — host dedicated servers with Valve's SteamCMD / 使用 Valve 官方 SteamCMD 架設專用伺服器
 
@@ -178,6 +208,22 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v1.9
+- **New: Video Downloader** — save links from YouTube, Bilibili, Twitch, TikTok and 1000+ sites as MP3 / MP4 (yt-dlp).
+  **新增：影片下載**——將 YouTube、Bilibili、Twitch、TikTok 等 1000 多個網站的連結儲存為 MP3／MP4（yt-dlp）。
+- **New: Remote Desktop (beta)** — built-in, ID + password, end-to-end encrypted, no relay server.
+  **新增：遠端桌面（測試版）**——內置，以 ID + 密碼連線，端對端加密，沒有中轉伺服器。
+- **New: Performance Monitor** — live CPU / GPU / RAM / VRAM / disk / network with graphs, top programs and an in-game corner overlay.
+  **新增：效能監看**——即時 CPU／GPU／RAM／VRAM／磁碟／網絡走勢圖、最耗資源程式，以及遊戲角落疊加顯示。
+- **New: Disk Space & Health** — free space per drive, drive health, treemap space analysis and largest files.
+  **新增：磁碟空間及健康**——各磁碟剩餘空間、硬碟健康、方格圖空間分析及最大檔案。
+- **Changed: Converter** now has **Media** and **Documents** tabs; Documents converts Excel / CSV / TSV / JSON and fixes garbled Chinese CSVs. FFmpeg is only downloaded when the Media tab is first used.
+  **變更：轉檔工具**新增**影音**及**文件**分頁；文件分頁可轉換 Excel／CSV／TSV／JSON 並修正 CSV 中文亂碼。FFmpeg 只會於首次使用影音分頁時下載。
+- **Changed: Tool library** — category filters, commonly used tools first, beta tools last.
+  **變更：工具庫**——新增分類篩選，常用工具排最前，測試版排最後。
+- **Fixed:** the Tool library could not be scrolled when the list was taller than the window.
+  **修正：**工具庫內容超出視窗時無法向下捲動。
 
 ### v1.8
 - **New tools** in the Tool library: Instant Replay, Key Remap, Window Tools, Clipboard History, Text Recognition, Converter and Game Servers.
@@ -344,7 +390,7 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 錄影工具；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Tools, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗工具、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 錄影工具；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Tools, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗工具、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs` Performance Monitor 效能監看；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
 | `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
 | `release/` | User guide shipped with releases 隨發佈版本附上的使用說明（`使用說明.txt`） |
@@ -390,7 +436,8 @@ Downloaded by the user on demand, not bundled in the executable / 由用戶按�
 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and [OpenAI Whisper](https://github.com/openai/whisper) models — MIT License
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) — MIT License
-- [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the recorder, Instant Replay and Converter as a separate program / GPL 授權，錄影工具、精彩重播及轉檔工具以獨立程式方式調用
+- [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the recorder, Instant Replay, Converter and Video Downloader as a separate program / GPL 授權，錄影工具、精彩重播、轉檔工具及影片下載以獨立程式方式調用
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — Unlicense, downloaded by Video Downloader / 由影片下載工具下載
 - [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD) — Valve's command-line Steam client, downloaded by Game Servers; dedicated servers are downloaded from Steam under each game's own terms / Valve 官方命令列 Steam 用戶端，由遊戲伺服器下載；各專用伺服器從 Steam 下載，受各遊戲條款約束
 - [Qwen3.5](https://huggingface.co/Qwen) models (GGUF by [unsloth](https://huggingface.co/unsloth)) — see each model's license / 請參閱各模型的授權
 

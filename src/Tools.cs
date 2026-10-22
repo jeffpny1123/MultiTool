@@ -1406,7 +1406,7 @@ internal sealed class OcrPage : ToolPage
 }
 
 // =====================================================================
-//  轉檔工具（用 ffmpeg）
+//  影音轉檔（用 ffmpeg）
 // =====================================================================
 internal sealed class ConvertPage : ToolPage
 {
@@ -1444,6 +1444,7 @@ internal sealed class ConvertPage : ToolPage
         Stack.DragEnter += (_, e) => e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true ? DragDropEffects.Copy : DragDropEffects.None;
         Stack.DragDrop += (_, e) => { if (e.Data?.GetData(DataFormats.FileDrop) is string[] files) Add(files); };
 
+        if (!Video.Ffmpeg.Ready) AddFfmpegCard();
         var add = TUi.Btn(Lang.T("+ 加入檔案…"), () =>
         {
             using var dlg = new OpenFileDialog { Multiselect = true, Filter = Lang.T("所有檔案") + "|*.*" };
@@ -1451,7 +1452,7 @@ internal sealed class ConvertPage : ToolPage
         }, 0, BtnKind.Primary);
         var clear = TUi.Btn(Lang.T("清空"), () => { if (_cts == null) { _jobs.Clear(); BuildRows(); } });
         _list = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, FlowDirection = FlowDirection.TopDown, WrapContents = false };
-        Card(Lang.T("轉檔工具"), Lang.T("影片、聲音、圖片互相轉換，亦可以剪頭尾同縮細。可以直接拖檔案入嚟。"), TUi.Col(TUi.Row(add, clear), _list));
+        Card(Lang.T("影音轉檔"), Lang.T("影片、聲音、圖片互相轉換，亦可以剪頭尾同縮細。可以直接拖檔案入嚟。"), TUi.Col(TUi.Row(add, clear), _list));
 
         _fmtBtn = TUi.Btn("", () => TUi.Pick(_fmtBtn!, Formats.Select(f => (f.Name + (f.Audio ? Lang.T("（淨聲音）") : f.Image ? Lang.T("（圖片）") : ""), f.Ext)), _fmt,
             v => { _fmt = v; UpdateLabels(); }), 140);
@@ -1484,6 +1485,36 @@ internal sealed class ConvertPage : ToolPage
                 TUi.Row(_start, _status)));
         UpdateLabels();
         BuildRows();
+    }
+
+    /// <summary>未有 ffmpeg：頂部顯示下載卡，下載完自動收埋。</summary>
+    private void AddFfmpegCard()
+    {
+        CardPanel? card = null;
+        var bar = new ThinBar { Width = Ui.S(320), Margin = new Padding(0, Ui.S(14), Ui.S(12), 0) };
+        var msg = TUi.L("");
+        CancellationTokenSource? cts = null;
+        FancyButton? btn = null;
+        btn = TUi.Btn(Lang.T("⬇ 下載 ffmpeg"), async () =>
+        {
+            if (cts != null) { cts.Cancel(); return; }
+            cts = new CancellationTokenSource();
+            btn!.Text = Lang.T("取消"); btn.Kind = BtnKind.Ghost; btn.Invalidate();
+            try
+            {
+                await Video.Ffmpeg.InstallAsync((t, p) => { try { BeginInvoke(() => { msg.Text = t; bar.Value = p; }); } catch { } }, cts.Token);
+                if (card != null) Stack.RemoveRow(card);
+                Relayout();
+                Toast.Show(Lang.T("ffmpeg 下載好喇"));
+                return;
+            }
+            catch (OperationCanceledException) { msg.Text = Lang.T("已取消"); }
+            catch (Exception ex) { msg.Text = Lang.T("失敗：") + ex.Message; AppPaths.LogError("ffmpeg", ex); }
+            finally { cts = null; }
+            bar.Value = -1;
+            btn.Text = Lang.T("⬇ 下載 ffmpeg"); btn.Kind = BtnKind.Primary; btn.Invalidate();
+        }, 150, BtnKind.Primary);
+        card = Card(Lang.T("要先下載 ffmpeg"), Lang.T("影音轉檔用 ffmpeg（免費開源第三方工具，~100 MB）。文件轉檔唔使。"), TUi.Row(btn, bar, msg));
     }
 
     private void UpdateLabels()
@@ -1588,7 +1619,7 @@ internal sealed class ConvertPage : ToolPage
     private async Task StartAsync()
     {
         if (_cts != null) { _cts.Cancel(); return; }
-        if (!Video.Ffmpeg.Ready) { _status.Text = Lang.T("未下載 ffmpeg：請去「工具庫」重新安裝轉檔工具。"); return; }
+        if (!Video.Ffmpeg.Ready) { _status.Text = Lang.T("未下載 ffmpeg：撳上面「下載 ffmpeg」先。"); return; }
         var todo = _jobs.Where(j => !j.Status.StartsWith("✓")).ToList();
         if (todo.Count == 0) { _status.Text = Lang.T("未有要轉嘅檔案"); return; }
         var f = Formats.First(x => x.Ext == _fmt);

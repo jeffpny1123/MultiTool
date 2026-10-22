@@ -27,6 +27,40 @@ internal static class Extensions
     public const string GameServer = "gameserver";
     public const string Download = "download";
     public const string Remote = "remote";
+    public const string Perf = "perf";
+    public const string Disk = "disk";
+    public const string Doc = "doc";
+
+    /// <summary>工具庫分類（一個工具可以屬幾類）。</summary>
+    public static readonly string[] Categories = { "game", "media", "work", "system", "net" };
+
+    public static string CategoryName(string c) => c switch
+    {
+        "game" => Lang.T("遊戲"),
+        "media" => Lang.T("媒體"),
+        "work" => Lang.T("效率"),
+        "system" => Lang.T("系統"),
+        "net" => Lang.T("網絡"),
+        _ => c
+    };
+
+    public static string[] CategoriesOf(string id) => id switch
+    {
+        Scripts => new[] { "work", "game" },
+        Recorder => new[] { "media", "game" },
+        Replay => new[] { "media", "game" },
+        Remap => new[] { "game" },
+        Window => new[] { "work", "game" },
+        Clipboard => new[] { "work" },
+        Ocr => new[] { "work" },
+        Convert => new[] { "media", "work" },
+        GameServer => new[] { "game", "net" },
+        Download => new[] { "media", "net" },
+        Remote => new[] { "net", "system" },
+        Perf => new[] { "system", "game" },
+        Disk => new[] { "system" },
+        _ => Array.Empty<string>()
+    };
 
     /// <summary>用 ffmpeg 嘅工具：最後一個移除先刪 ffmpeg。</summary>
     private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert, Download };
@@ -63,8 +97,9 @@ internal static class Extensions
             Lang.T("記低你複製過嘅文字同圖片，快捷鍵叫出細視窗，撳 1-9 就貼上。"), false),
         new(Ocr, Lang.T("文字辨識"),
             Lang.T("框住畫面上嘅文字就抽出嚟複製，用 Windows 內置辨識，唔使上網。"), false),
-        FfmpegTool(Convert, Lang.T("轉檔工具"),
-            Lang.T("影片、聲音、圖片互相轉換（MP4、GIF、MP3、PNG…），可以剪頭尾同縮細。需要下載 ffmpeg。")),
+        new(Convert, Lang.T("轉檔工具"),
+            Lang.T("影音：影片、聲音、圖片互轉（MP4、GIF、MP3、PNG…），剪頭尾同縮細，第一次用要下載 ffmpeg（~100 MB）。文件：Excel、CSV、TSV、JSON 互轉，修正 CSV 中文亂碼。"), false,
+            Remove: () => RemoveFfmpeg(Convert)),
         new(GameServer, Lang.T("遊戲伺服器"),
             Lang.T("一撳架設 Palworld、Valheim、7 Days to Die 等 Steam 遊戲伺服器，有設定、自動備份同開端口。需要下載 SteamCMD。"), false,
             (p, ct) => Tools.SteamCmd.InstallAsync(p, ct), () => Tools.SteamCmd.Ready, Tools.SteamCmd.Delete, "~5 MB"),
@@ -74,7 +109,25 @@ internal static class Extensions
         new(Remote, Lang.T("遠端桌面（測試）"),
             Lang.T("MultiTool 內置嘅遠端桌面：用 ID + 密碼控制其他電腦或者俾人連入嚟，全程加密。冇中轉伺服器：被控電腦用流動數據、CGNAT 或者公共網絡就連唔到。"), false,
             Remove: () => Tools.RemoteHost.Stop()),
+        new(Perf, Lang.T("效能監看"),
+            Lang.T("即時睇 CPU、GPU、RAM、VRAM、磁碟、網速同 GPU 溫度，仲可以喺遊戲畫面角落顯示。用 Windows 內置資料，唔使第三方程式。"), false,
+            Remove: () => Tools.PerfOverlay.Set(false, false)),
+        new(Disk, Lang.T("磁碟空間及健康"),
+            Lang.T("睇每個磁碟剩幾多位、硬碟健康（溫度、SSD 壽命、讀寫錯誤），掃描邊個資料夾最食位，一撳掉入資源回收筒。"), false),
     };
+
+    /// <summary>工具庫 / 首頁排序：常用嘅放前，我的腳本第一，測試版最後。</summary>
+    private static readonly string[] Order =
+        { Scripts, Recorder, Download, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
+
+    private static readonly bool Sorted = SortAll();
+
+    private static bool SortAll()
+    {
+        All.Sort((a, b) => Rank(a.Id).CompareTo(Rank(b.Id)));
+        return true;
+        static int Rank(string id) { int i = Array.IndexOf(Order, id); return i < 0 ? Order.Length : i; }
+    }
 
     private static string File_ => Path.Combine(AppPaths.Data, "extensions.txt");
     private static HashSet<string>? _installed;
@@ -94,6 +147,7 @@ internal static class Extensions
                         if (l.Trim().Length > 0) _installed.Add(l.Trim());
                 }
                 else foreach (var e in All.Where(e => e.DefaultOn)) _installed.Add(e.Id); // 第一次：用預設
+                if (_installed.Remove(Doc)) _installed.Add(Convert); // 舊版「文件轉檔」併咗入轉檔工具
             }
             catch { }
             return _installed;
@@ -116,6 +170,9 @@ internal static class Extensions
         GameServer => ("◆", Ui.Success),
         Download => ("⇩", Ui.Danger),
         Remote => ("⇆", Ui.Accent),
+        Perf => ("▤", Ui.Success),
+        Disk => ("◔", Ui.Accent2),
+        Doc => ("▦", Ui.Accent),
         "ai" => ("✦", Ui.Accent2),
         "add" => ("+", Ui.Accent),
         _ => ("★", Ui.Accent2)
@@ -141,6 +198,7 @@ internal sealed class ExtensionsPage : Panel
     private readonly TextBox _query = new();
     private readonly InputHost _queryHost;
     private readonly Tools.TabStrip _tabs;
+    private readonly ChipRow _cats;
     private readonly List<ExtTile> _tiles = new();
     private bool _ready;
 
@@ -159,6 +217,10 @@ internal sealed class ExtensionsPage : Panel
         _tabs = new Tools.TabStrip(Lang.T("全部"), Lang.T("已安裝"), Lang.T("未安裝"));
         _tabs.Selected += _ => PerformLayout();
         Controls.Add(_tabs);
+        // 分類：全部 / 遊戲 / 媒體 …
+        _cats = new ChipRow(new[] { Lang.T("全部類別") }.Concat(Extensions.Categories.Select(Extensions.CategoryName)).ToArray());
+        _cats.Selected += _ => PerformLayout();
+        Controls.Add(_cats);
         Extensions.Changed += OnExtChanged;
         Disposed += (_, _) => Extensions.Changed -= OnExtChanged;
         _empty = Ui.Text_(Lang.T("搵唔到相關工具"), Ui.TextDim, Ui.F(9.75f), new Padding(0));
@@ -176,12 +238,27 @@ internal sealed class ExtensionsPage : Panel
         PerformLayout();
     }
 
+    private bool _relayoutQueued;
+
     protected override void OnLayout(LayoutEventArgs e)
     {
-        base.OnLayout(e);
-        if (!_ready) return; // 建構期間（AutoScroll / 加控件都會觸發排位）
+        if (!_ready) { base.OnLayout(e); return; } // 建構期間（AutoScroll / 加控件都會觸發排位）
+        var before = AutoScrollMinSize;
         try { Arrange(); }
         catch (Exception ex) { AppPaths.LogError("擴充工具排位", ex); }
+        // 排好位先俾 ScrollableControl 計捲軸；高度變咗再排多次，捲軸先會即刻出
+        base.OnLayout(e);
+        if (before != AutoScrollMinSize && IsHandleCreated && !_relayoutQueued)
+        {
+            _relayoutQueued = true;
+            BeginInvoke(() => { _relayoutQueued = false; PerformLayout(); Invalidate(true); });
+        }
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        if (_ready) PerformLayout();
     }
 
     private void OnExtChanged()
@@ -193,7 +270,9 @@ internal sealed class ExtensionsPage : Panel
     private void Arrange()
     {
         int pad = Ui.S(24), gap = Ui.S(14);
-        int w = Math.Max(Ui.S(200), ClientSize.Width - pad * 2);
+        // 永遠預留捲軸闊度，唔係捲軸一出一收欄數會跳
+        int sb = VerticalScroll.Visible ? 0 : SystemInformation.VerticalScrollBarWidth;
+        int w = Math.Max(Ui.S(200), ClientSize.Width - sb - pad * 2);
         int min = Ui.S(240), max = Ui.S(320);
         int cols = Math.Max(1, (w + gap) / (min + gap));
         int tw = Math.Min(max, (w - gap * (cols - 1)) / cols);
@@ -208,11 +287,15 @@ internal sealed class ExtensionsPage : Panel
         _queryHost.Location = new Point(pad + o.X, y + o.Y);
         _queryHost.Width = Math.Min(Ui.S(360), w);
         y += _queryHost.Height + Ui.S(12);
+        _cats.SetBounds(pad + o.X, y + o.Y, w, _cats.Height);
+        y += _cats.Height + Ui.S(8);
         _tabs.SetBounds(pad + o.X, y + o.Y, w, _tabs.Height);
         y += _tabs.Height + Ui.S(16);
         // 搜尋：名或者簡介有齊所有關鍵字先顯示
         var words = _query.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var shown = _tiles.Where(t => words.All(t.Matches) && (_tabs.Index == 0 || (_tabs.Index == 1) == t.IsOn)).ToList();
+        string? cat = _cats.Index == 0 ? null : Extensions.Categories[_cats.Index - 1];
+        var shown = _tiles.Where(t => words.All(t.Matches) && (_tabs.Index == 0 || (_tabs.Index == 1) == t.IsOn) &&
+                                      (cat == null || Extensions.CategoriesOf(t.Id).Contains(cat))).ToList();
         foreach (var t in _tiles) t.Visible = shown.Contains(t);
         _empty.Visible = shown.Count == 0;
         _empty.Location = new Point(pad + o.X, y + o.Y);
@@ -255,10 +338,12 @@ internal sealed class ExtensionsPage : Panel
         private bool Installed => Extensions.IsInstalled(_e.Id) && (_e.Ready?.Invoke() ?? true);
 
         public bool IsOn => Installed;
+        public string Id => _e.Id;
 
         public bool Matches(string word) =>
             _e.Name.Contains(word, StringComparison.OrdinalIgnoreCase) || _e.Desc.Contains(word, StringComparison.OrdinalIgnoreCase) ||
-            _e.Id.Contains(word, StringComparison.OrdinalIgnoreCase);
+            _e.Id.Contains(word, StringComparison.OrdinalIgnoreCase) ||
+            Extensions.CategoriesOf(_e.Id).Any(c => Extensions.CategoryName(c).Contains(word, StringComparison.OrdinalIgnoreCase));
 
         protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); _hover = true; Invalidate(); }
         protected override void OnMouseLeave(EventArgs e)
@@ -371,6 +456,69 @@ internal sealed class ExtensionsPage : Panel
             }
             Extensions.Set(_e.Id, true);
             Refresh_();
+        }
+    }
+}
+
+/// <summary>一排圓角分類掣（揀一個）。</summary>
+internal sealed class ChipRow : Control
+{
+    private readonly string[] _items;
+    private int _sel, _hover = -1;
+    public event Action<int>? Selected;
+
+    public ChipRow(params string[] items)
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        _items = items;
+        Height = Ui.S(34);
+        Cursor = Cursors.Hand;
+    }
+
+    public int Index { get => _sel; set { _sel = value; Invalidate(); Selected?.Invoke(value); } }
+
+    private Rectangle ChipRect(int i)
+    {
+        int x = 0;
+        for (int k = 0; k < _items.Length; k++)
+        {
+            int w = TextRenderer.MeasureText(_items[k], Ui.F(9.75f, FontStyle.Bold)).Width + Ui.S(26);
+            if (k == i) return new Rectangle(x, Ui.S(2), w, Height - Ui.S(4));
+            x += w + Ui.S(8);
+        }
+        return Rectangle.Empty;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        int h = Enumerable.Range(0, _items.Length).FirstOrDefault(i => ChipRect(i).Contains(e.Location), -1);
+        if (h != _hover) { _hover = h; Invalidate(); }
+    }
+
+    protected override void OnMouseLeave(EventArgs e) { _hover = -1; Invalidate(); }
+
+    protected override void OnMouseClick(MouseEventArgs e)
+    {
+        for (int i = 0; i < _items.Length; i++) if (ChipRect(i).Contains(e.Location)) { Index = i; return; }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Parent?.BackColor ?? Ui.Bg);
+        Ui.Smooth(g);
+        for (int i = 0; i < _items.Length; i++)
+        {
+            var r = ChipRect(i);
+            bool sel = i == _sel;
+            using (var p = Ui.Round(new RectangleF(r.X + 0.5f, r.Y + 0.5f, r.Width - 1, r.Height - 1), (r.Height - 1) / 2f))
+            {
+                using var b = new SolidBrush(sel ? Ui.Accent : i == _hover ? Ui.CardHi : Ui.Card);
+                g.FillPath(b, p);
+                if (!sel) { using var pen = new Pen(Ui.Border); g.DrawPath(pen, p); }
+            }
+            TextRenderer.DrawText(g, _items[i], Ui.F(9.75f, sel ? FontStyle.Bold : FontStyle.Regular), r,
+                sel ? Color.White : Ui.TextDim, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
     }
 }
