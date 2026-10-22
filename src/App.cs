@@ -141,6 +141,7 @@ internal sealed class MainForm : Form
         AddPage(Lang.T("轉檔工具"), Tools.ConvertPage.Build, "convert", Extensions.Convert);
         AddPage(Lang.T("遊戲伺服器"), Tools.GameServerPage.Build, "gameserver", Extensions.GameServer);
         AddPage(Lang.T("影片下載"), Tools.DownloadPage.Build, "download", Extensions.Download);
+        AddPage(Lang.T("遠端桌面（測試）"), Tools.RemotePage.Build, "remote", Extensions.Remote);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");
         AddPage(Lang.T("工具庫"), () => new ExtensionsPage(), "extensions");
         AddPage(Lang.T("設定"), BuildAboutPage, "settings");

@@ -26,6 +26,7 @@ internal static class Extensions
     public const string Convert = "convert";
     public const string GameServer = "gameserver";
     public const string Download = "download";
+    public const string Remote = "remote";
 
     /// <summary>用 ffmpeg 嘅工具：最後一個移除先刪 ffmpeg。</summary>
     private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert, Download };
@@ -70,6 +71,9 @@ internal static class Extensions
         new(Download, Lang.T("影片下載"),
             Lang.T("貼上 YouTube、Bilibili、Twitch、TikTok、X、Vimeo、SoundCloud 等 1000 幾個網站嘅連結，存做 MP3 或者 MP4，支援播放清單。需要下載 yt-dlp 同 ffmpeg。"), false,
             (p, ct) => Tools.YtDlp.InstallAsync(p, ct), () => Tools.YtDlp.Ready, () => { Tools.YtDlp.Delete(); RemoveFfmpeg(Download); }, "~120 MB"),
+        new(Remote, Lang.T("遠端桌面（測試）"),
+            Lang.T("MultiTool 內置嘅遠端桌面：用 ID + 密碼控制其他電腦或者俾人連入嚟，全程加密。冇中轉伺服器：被控電腦用流動數據、CGNAT 或者公共網絡就連唔到。"), false,
+            Remove: () => Tools.RemoteHost.Stop()),
     };
 
     private static string File_ => Path.Combine(AppPaths.Data, "extensions.txt");
@@ -111,6 +115,7 @@ internal static class Extensions
         Convert => ("⇄", Ui.Success),
         GameServer => ("◆", Ui.Success),
         Download => ("⇩", Ui.Danger),
+        Remote => ("⇆", Ui.Accent),
         "ai" => ("✦", Ui.Accent2),
         "add" => ("+", Ui.Accent),
         _ => ("★", Ui.Accent2)

@@ -196,9 +196,9 @@ internal sealed class DhtClient : IDisposable
     private static int Cmp(byte[] a, byte[] b) { for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return a[i].CompareTo(b[i]); return 0; }
 
     /// <summary>喺 DHT 搵登記咗嘅人；announcePort &gt; 0 就順手登記自己。回傳 (對方 IP:port 清單, 我自己嘅外部 IP)。</summary>
-    public async Task<(List<IPEndPoint> Peers, IPAddress? MyIp)> LookupAsync(int announcePort, TimeSpan timeout, CancellationToken ct)
+    public async Task<(List<IPEndPoint> Peers, IPAddress? MyIp)> LookupAsync(int announcePort, TimeSpan timeout, CancellationToken ct, byte[]? key = null)
     {
-        var target = InfoHash;
+        var target = key ?? InfoHash;
         var nodes = new Dictionary<string, (IPEndPoint Ep, byte[] Id)>();
         var queried = new HashSet<string>();
         var tokens = new Dictionary<string, (IPEndPoint Ep, byte[] Id, byte[] Token)>();
