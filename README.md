@@ -70,8 +70,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 **Tool library 工具庫** — choose which tools appear in the sidebar / 選擇側欄顯示的工具
 
-- Tools are shown as tiles with a search box. **Install** adds a tool to the sidebar and **Remove** hides it again; your scripts and videos are kept. **My Scripts** is installed by default.
-  工具以方格排列，並設有搜尋欄。按**安裝**會在側欄加入該工具，按**移除**則會隱藏；你的腳本及影片會保留。**我的腳本**預設已安裝。
+- Tools are shown as tiles with a search box. **Install** adds a tool to the sidebar and **Remove** hides it again; your scripts and videos are kept. A fresh download starts with no tools installed; when upgrading from an older version, **My Scripts** stays installed.
+  工具以方格排列，並設有搜尋欄。按**安裝**會在側欄加入該工具，按**移除**則會隱藏；你的腳本及影片會保留。全新下載時預設未安裝任何工具；由舊版更新時，**我的腳本**會保持已安裝。
 - Tools that need extra files download them when installed (e.g. the recorder downloads FFmpeg, about 100 MB). No server of our own is involved.
   需要額外檔案的工具會於安裝時下載（例如錄影工具會下載約 100 MB 的 FFmpeg），不經任何自設伺服器。
 

@@ -831,6 +831,19 @@ internal sealed class AssistPanel : Panel
     public void SetTitle(string t) => _title.Text = t;
     public void FocusInput() => _input.Focus();
 
+    /// <summary>未有對話時顯示嘅說明（唔設就用腳本助手嘅）。</summary>
+    public string? Intro;
+
+    /// <summary>「套用」掣嘅字（預設「套用到腳本」）。</summary>
+    public string ApplyText
+    {
+        set
+        {
+            _apply.Text = value;
+            _apply.Width = Math.Max(Ui.S(110), TextRenderer.MeasureText(value, _apply.Font).Width + Ui.S(30));
+        }
+    }
+
     public string TakeInput()
     {
         string t = _input.Text.Trim();
@@ -850,7 +863,8 @@ internal sealed class AssistPanel : Panel
     public void Render(AssistState st, string aiName)
     {
         _log.Clear();
-        if (st.Msgs.Count == 0)
+        if (st.Msgs.Count == 0 && Intro != null) Line(null, Intro, Ui.TextFaint, 9f);
+        else if (st.Msgs.Count == 0)
             Line(null, Lang.T("話我知你想個腳本做啲咩，例如：「每 5 秒撳一下 F1，搵到怪物圖就點佢」。\n") +
                        Lang.T("我會睇住你而家個腳本幫你改，寫好之後撳「套用到腳本」就會換上（可以復原）。"), Ui.TextFaint, 9f);
         foreach (var (role, text) in st.Msgs)

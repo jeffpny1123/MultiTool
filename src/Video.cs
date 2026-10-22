@@ -320,6 +320,13 @@ internal static class RecSettings
     public static string CodecName(string c) => c switch { "hevc" => "H.265 (HEVC)", "av1" => "AV1", _ => "H.264" };
     public static string QualityName(int q) => q switch { 0 => Lang.T("最高"), 1 => Lang.T("高"), 2 => Lang.T("中"), _ => Lang.T("低") };
 
+    public static RecOpts Snapshot() => new()
+    {
+        Mode = Mode, Monitor = Monitor, Region = Region, WinProcess = WinProcess, WinTitle = WinTitle, Fps = Fps, Res = Res,
+        SysVol = SysVol, MicVol = MicVol, Quality = Quality, SysAudio = SysAudio, Mic = Mic, Cursor = Cursor, Hw = Hw,
+        Codec = Codec, Format = Format, Folder = Folder
+    };
+
     public static string ResName(int r) => r switch
     {
         0 => Lang.T("原始"), 1440 => "2K", 2160 => "4K", _ => r + "P"
@@ -381,6 +388,20 @@ internal static class RecSettings
     }
 }
 
+/// <summary>一次錄影用嘅設定（錄影工具 / 精彩重播各自一份）。</summary>
+internal sealed class RecOpts
+{
+    public CaptureMode Mode;
+    public int Monitor;
+    public Rectangle Region;
+    public string WinProcess = "", WinTitle = "";
+    public int Fps = 30, Res, SysVol = 100, MicVol = 100, Quality = 1;
+    public bool SysAudio = true, Mic, Cursor = true, Hw = true;
+    public string Codec = "h264", Format = "mp4", Folder = "";
+    public string? ReplayDir;      // 有 = 精彩重播（循環錄細段）
+    public int ReplaySeconds = 30;
+}
+
 // ---------------------------------------------------------------------
 //  錄影（一次）
 // ---------------------------------------------------------------------
@@ -395,35 +416,39 @@ internal sealed class RecordSession
     private readonly StringBuilder _log = new();
     public string OutFile { get; private set; } = "";
     public DateTime Started { get; private set; }
+    public const int ReplaySeg = 2;
     public bool Running => _ff is { HasExited: false };
+    private readonly RecOpts _o;
+
+    public RecordSession(RecOpts? o = null) { _o = o ?? RecSettings.Snapshot(); }
 
     /// <summary>而家要錄嘅範圍（螢幕座標）。</summary>
-    public static Rectangle? TargetRect(out string? error)
+    public static Rectangle? TargetRect(RecOpts _o, out string? error)
     {
         error = null;
         var screens = Screen.AllScreens;
-        switch (RecSettings.Mode)
+        switch (_o.Mode)
         {
             case CaptureMode.Region:
-                if (RecSettings.Region.Width < 16 || RecSettings.Region.Height < 16) { error = Lang.T("未揀錄影範圍"); return null; }
-                return RecSettings.Region;
+                if (_o.Region.Width < 16 || _o.Region.Height < 16) { error = Lang.T("未揀錄影範圍"); return null; }
+                return _o.Region;
             case CaptureMode.Window:
             {
-                var w = Scripts.Win.List().FirstOrDefault(x => x.Process == RecSettings.WinProcess && x.Title == RecSettings.WinTitle)
-                        ?? Scripts.Win.List().FirstOrDefault(x => x.Process == RecSettings.WinProcess);
-                if (w == null) { error = Lang.F("搵唔到視窗（{0}），佢係咪閂咗？", RecSettings.WinProcess); return null; }
+                var w = Scripts.Win.List().FirstOrDefault(x => x.Process == _o.WinProcess && x.Title == _o.WinTitle)
+                        ?? Scripts.Win.List().FirstOrDefault(x => x.Process == _o.WinProcess);
+                if (w == null) { error = Lang.F("搵唔到視窗（{0}），佢係咪閂咗？", _o.WinProcess); return null; }
                 if (DwmGetWindowAttribute(w.Handle, 9, out var r, Marshal.SizeOf<RECT>()) != 0) GetWindowRect(w.Handle, out r);
                 return Rectangle.FromLTRB(r.L, r.T, r.R, r.B);
             }
             default:
-                return screens[Math.Clamp(RecSettings.Monitor, 0, screens.Length - 1)].Bounds;
+                return screens[Math.Clamp(_o.Monitor, 0, screens.Length - 1)].Bounds;
         }
     }
 
     /// <summary>開始錄。失敗就 throw（訊息俾用戶睇）。</summary>
     public async Task StartAsync()
     {
-        var rect = TargetRect(out var err) ?? throw new InvalidOperationException(err);
+        var rect = TargetRect(_o, out var err) ?? throw new InvalidOperationException(err);
         // 只可以喺一個螢幕入面錄：揀包含中心點嗰個，超出部分截走
         var screens = Screen.AllScreens;
         var center = new Point(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
@@ -436,10 +461,11 @@ internal sealed class RecordSession
         rect.Height -= rect.Height % 2;
         bool full = rect == sb;
 
-        Directory.CreateDirectory(RecSettings.Folder);
-        OutFile = Path.Combine(RecSettings.Folder, $"MultiTool {DateTime.Now:yyyy-MM-dd HH-mm-ss}.{RecSettings.Format}");
+        if (_o.ReplayDir != null) Directory.CreateDirectory(_o.ReplayDir);
+        Directory.CreateDirectory(_o.Folder);
+        OutFile = Path.Combine(_o.Folder, $"MultiTool {DateTime.Now:yyyy-MM-dd HH-mm-ss}.{_o.Format}");
 
-        string codec = RecSettings.Codec, enc = await Task.Run(() => Ffmpeg.Encoder(codec, RecSettings.Hw));
+        string codec = _o.Codec, enc = await Task.Run(() => Ffmpeg.Encoder(codec, _o.Hw));
         try { await RunAsync(rect, sb, mon, full, enc, useDda: true); }
         catch (InvalidOperationException) when (_log.ToString().Contains("ddagrab", StringComparison.OrdinalIgnoreCase) ||
                                                 _log.ToString().Contains("Desktop Duplication", StringComparison.OrdinalIgnoreCase))
@@ -453,7 +479,7 @@ internal sealed class RecordSession
     {
         Cleanup();
         _log.Clear();
-        int fps = RecSettings.Fps;
+        int fps = _o.Fps;
         // 品質：數字越細越靚（檔案越大）；AV1 / HEVC 嘅刻度唔同 H.264
         int[] qs = enc switch
         {
@@ -462,12 +488,12 @@ internal sealed class RecordSession
             _ when enc.StartsWith("av1") => new[] { 20, 25, 30, 36 },
             _ => new[] { 16, 19, 23, 28 }
         };
-        int q = qs[Math.Clamp(RecSettings.Quality, 0, 3)];
+        int q = qs[Math.Clamp(_o.Quality, 0, 3)];
         var args = new StringBuilder("-hide_banner -loglevel warning -y ");
 
         // 聲音（named pipe）
-        if (RecSettings.SysAudio) _audio.Add(new AudioSource(loopback: true));
-        if (RecSettings.Mic) _audio.Add(new AudioSource(loopback: false));
+        if (_o.SysAudio) _audio.Add(new AudioSource(loopback: true));
+        if (_o.Mic) _audio.Add(new AudioSource(loopback: false));
         var vols = new List<double>();
         foreach (var a in _audio.ToList())
             if (!a.Start()) { AppPaths.LogError("錄音", new Exception(a.Error)); a.Dispose(); _audio.Remove(a); }
@@ -477,12 +503,12 @@ internal sealed class RecordSession
         if (useDda)
         {
             string crop = full ? "" : $":offset_x={rect.X - screen.X}:offset_y={rect.Y - screen.Y}:video_size={rect.Width}x{rect.Height}";
-            vsrc = $"ddagrab=output_idx={mon}:framerate={fps}:draw_mouse={(RecSettings.Cursor ? 1 : 0)}{crop},hwdownload,format=bgra";
+            vsrc = $"ddagrab=output_idx={mon}:framerate={fps}:draw_mouse={(_o.Cursor ? 1 : 0)}{crop},hwdownload,format=bgra";
             vIndex = -1;
         }
         else
         {
-            args.Append($"-f gdigrab -framerate {fps} -draw_mouse {(RecSettings.Cursor ? 1 : 0)} -offset_x {rect.X} -offset_y {rect.Y} -video_size {rect.Width}x{rect.Height} -thread_queue_size 512 -i desktop ");
+            args.Append($"-f gdigrab -framerate {fps} -draw_mouse {(_o.Cursor ? 1 : 0)} -offset_x {rect.X} -offset_y {rect.Y} -video_size {rect.Width}x{rect.Height} -thread_queue_size 512 -i desktop ");
             vsrc = "[0:v]null";
             vIndex = 0;
         }
@@ -492,11 +518,11 @@ internal sealed class RecordSession
         {
             args.Append($"-thread_queue_size 2048 -f f32le -ar {a.Rate} -ac {a.Channels} -i \"{a.PipePath}\" ");
             aLabels.Add($"[{ai++}:a]");
-            vols.Add((a.Loopback ? RecSettings.SysVol : RecSettings.MicVol) / 100.0);
+            vols.Add((a.Loopback ? _o.SysVol : _o.MicVol) / 100.0);
         }
         bool hw = !enc.StartsWith("lib");
         // 解像度：只會縮細（原本細過揀嘅就保持原本），闊度跟比例、雙數
-        string scale = RecSettings.Res > 0 ? $",scale=-2:'min(ih,{RecSettings.Res})':flags=lanczos" : "";
+        string scale = _o.Res > 0 ? $",scale=-2:'min(ih,{_o.Res})':flags=lanczos" : "";
         var fc = new StringBuilder($"{vsrc}{scale},format={(hw ? "nv12" : "yuv420p")}[v]");
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         for (int k = 0; k < aLabels.Count; k++)
@@ -518,7 +544,14 @@ internal sealed class RecordSession
             _ => $"-c:v libx264 -preset veryfast -crf {q} "
         });
         if (fmt == "mp4" && enc.Contains("hevc") || enc == "libx265" && fmt == "mp4") args.Append("-tag:v hvc1 ");
-        args.Append($"-r {fps} " + (fmt == "mp4" ? "-movflags +faststart " : "") + $"\"{OutFile}\"");
+        args.Append($"-g {fps * 2} ");
+        if (_o.ReplayDir != null)
+        {
+            // 精彩重播：一直錄成好多段 2 秒嘅細檔，循環覆蓋，儲存時先駁埋
+            int wrap = _o.ReplaySeconds / ReplaySeg + 3;
+            args.Append($"-r {fps} -f segment -segment_time {ReplaySeg} -segment_wrap {wrap} -reset_timestamps 1 -segment_format mpegts \"{Path.Combine(_o.ReplayDir, "rp%03d.ts")}\"");
+        }
+        else args.Append($"-r {fps} " + (fmt == "mp4" ? "-movflags +faststart " : "") + $"\"{OutFile}\"");
 
         var psi = new ProcessStartInfo(Ffmpeg.Exe, args.ToString())
         {
@@ -590,8 +623,11 @@ internal sealed class RegionPicker : Form
     private bool _drag;
     public Rectangle Result { get; private set; }
 
-    public RegionPicker()
+    private readonly string _prompt;
+
+    public RegionPicker(string? prompt = null)
     {
+        _prompt = prompt ?? Lang.T("拉一個框揀錄影範圍（Esc 取消）");
         var vs = SystemInformation.VirtualScreen;
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.Manual;
@@ -635,7 +671,7 @@ internal sealed class RegionPicker : Form
     {
         var g = e.Graphics;
         using var f = new Font(Ui.UiFamily, 14f, FontStyle.Bold);
-        TextRenderer.DrawText(g, Lang.T("拉一個框揀錄影範圍（Esc 取消）"), f, new Rectangle(0, Height / 2 - 40, Width, 40), Color.White,
+        TextRenderer.DrawText(g, _prompt, f, new Rectangle(0, Height / 2 - 40, Width, 40), Color.White,
             TextFormatFlags.HorizontalCenter);
         if (_rect.Width > 0)
         {
@@ -771,7 +807,9 @@ public sealed class RecordPage : Panel
         _folderLabel = Ui.Text_("", Ui.Text, Ui.F(9.5f), new Padding(0, Ui.S(9), Ui.S(8), 0));
         _folderBtn = Btn(Lang.T("更改…"), ChangeFolder, 80);
         var openFolder = Btn(Lang.T("開啟資料夾"), () => Open(RecSettings.Folder, folder: true), 110);
-        _hotkey = new HotkeyBox(Path.Combine(AppPaths.Data, "recorder_hotkey.txt"));
+        _hotkey = new HotkeyBox();
+        HotkeyHub.Bind(_hotkey, "recorder.toggle");
+        HotkeyHub.Get("recorder.toggle").Action = () => _ = ToggleAsync();
         var hkHost = new InputHost(_hotkey, Ui.S(140));
         _start = new FancyButton { Text = Lang.T("● 開始錄影"), Kind = BtnKind.Danger, Font = Ui.F(10.5f, FontStyle.Bold), Size = new Size(Ui.S(150), Ui.S(40)) };
         _start.Click += async (_, _) => await ToggleAsync();
@@ -1035,12 +1073,7 @@ public sealed class RecordPage : Panel
 
     private async Task TickAsync()
     {
-        // 快捷鍵：喺邊度都用得（有裝錄影工具先生效）
-        bool typing = HotkeyBox.Busy;
-        bool down = !typing && !_hotkey.Hotkey.IsEmpty && _hotkey.Hotkey.IsDown() && Extensions.IsInstalled(Extensions.Recorder);
-        if (down && !_hkWas) await ToggleAsync();
-        _hkWas = down;
-
+        // 快捷鍵由 HotkeyHub 處理（設定頁可以揀頁面外用唔用得）
         if (_session != null)
         {
             var t = DateTime.Now - _session.Started;

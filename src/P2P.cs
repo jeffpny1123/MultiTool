@@ -283,26 +283,33 @@ internal static class Upnp
 {
     private static (string Control, string Service, IPAddress Local)? _gw;
 
-    public static async Task<bool> MapAsync(int port, CancellationToken ct)
+    public static Task<bool> MapAsync(int port, CancellationToken ct) => MapAsync(port, "TCP", "MultiTool", ct);
+
+    /// <summary>喺路由器開端口（TCP / UDP）。</summary>
+    public static async Task<bool> MapAsync(int port, string proto, string desc, CancellationToken ct)
     {
         try
         {
             _gw ??= await DiscoverAsync(ct);
             if (_gw is not { } g) return false;
+            desc = System.Security.SecurityElement.Escape(desc) ?? "MultiTool";
             string body = $"<u:AddPortMapping xmlns:u=\"{g.Service}\"><NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort>" +
-                          $"<NewProtocol>TCP</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{g.Local}</NewInternalClient>" +
-                          "<NewEnabled>1</NewEnabled><NewPortMappingDescription>MultiTool</NewPortMappingDescription><NewLeaseDuration>0</NewLeaseDuration></u:AddPortMapping>";
+                          $"<NewProtocol>{proto}</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{g.Local}</NewInternalClient>" +
+                          $"<NewEnabled>1</NewEnabled><NewPortMappingDescription>{desc}</NewPortMappingDescription><NewLeaseDuration>0</NewLeaseDuration></u:AddPortMapping>";
             return await SoapAsync(g.Control, g.Service, "AddPortMapping", body, ct);
         }
         catch { return false; }
     }
 
-    public static void Unmap(int port)
+    /// <summary>路由器睇到嘅本機 IP（UPnP 搵到先有）。</summary>
+    public static IPAddress? LocalAddress => _gw?.Local;
+
+    public static void Unmap(int port, string proto = "TCP")
     {
         try
         {
             if (_gw is not { } g) return;
-            string body = $"<u:DeletePortMapping xmlns:u=\"{g.Service}\"><NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort><NewProtocol>TCP</NewProtocol></u:DeletePortMapping>";
+            string body = $"<u:DeletePortMapping xmlns:u=\"{g.Service}\"><NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort><NewProtocol>{proto}</NewProtocol></u:DeletePortMapping>";
             SoapAsync(g.Control, g.Service, "DeletePortMapping", body, CancellationToken.None).Wait(1500);
         }
         catch { }

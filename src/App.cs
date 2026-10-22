@@ -11,7 +11,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v1.7";
+    public const string Version = "v1.8";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -133,11 +133,20 @@ internal sealed class MainForm : Form
         AddPage(Lang.T("首頁"), BuildHomePage, "home");
         AddPage(Lang.T("我的腳本"), Scripts.ScriptsPage.Build, "scripts", Extensions.Scripts);
         AddPage(Lang.T("錄影工具"), Video.RecordPage.Build, "recorder", Extensions.Recorder);
+        AddPage(Lang.T("精彩重播"), Video.ReplayPage.Build, "replay", Extensions.Replay);
+        AddPage(Lang.T("遊戲改鍵"), Tools.RemapPage.Build, "remap", Extensions.Remap);
+        AddPage(Lang.T("視窗工具"), Tools.WindowPage.Build, "window", Extensions.Window);
+        AddPage(Lang.T("剪貼簿紀錄"), Tools.ClipboardPage.Build, "clipboard", Extensions.Clipboard);
+        AddPage(Lang.T("文字辨識"), Tools.OcrPage.Build, "ocr", Extensions.Ocr);
+        AddPage(Lang.T("轉檔工具"), Tools.ConvertPage.Build, "convert", Extensions.Convert);
+        AddPage(Lang.T("遊戲伺服器"), Tools.GameServerPage.Build, "gameserver", Extensions.GameServer);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");
         AddPage(Lang.T("工具庫"), () => new ExtensionsPage(), "extensions");
         AddPage(Lang.T("設定"), BuildAboutPage, "settings");
         LoadNavOrder();
         LayoutNav();
+        HotkeyHub.CurrentPage = () => _current >= 0 ? _pageKeys[_current].Key : null;
+        HotkeyHub.Start();
         Extensions.Changed += () => BeginInvoke(() =>
         {
             LayoutNav();
@@ -540,51 +549,8 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>首頁：簡單介紹各個功能，撳「前往」直接跳去。</summary>
-    private Control BuildHomePage()
-    {
-        var stack = new CardStack();
-
-        var welcome = new CardPanel { Title = Lang.T("歡迎使用 ") + Program.AppName, Hint = Program.Version + Lang.T(" · 開發者：") + Program.Author };
-        welcome.SetContent(new WrapText(
-            Lang.T("Windows 自動化小工具：自己砌腳本自動撳鍵盤滑鼠、搵圖、判斷條件，再加埋 AI 助手同語音對話。左邊揀功能；") +
-            Lang.T("所有腳本、設定同圖片都存喺 exe 隔籬嘅 data 資料夾。")));
-        stack.AddRow(welcome);
-
-        stack.AddRow(Feature(Lang.T("我的腳本"), "scripts", Extensions.Scripts,
-            Lang.T("步驟：按鍵、滑鼠（左鍵 / 右鍵 / 滾輪、拖曳）、延遲（可以隨機）、搵圖點擊、輸入文字、循環（次數 / 時限 / 指定時間）、") +
-            Lang.T("IF 條件（AND / OR）、同時運行、系統（開關程式、切換視窗、播音效、關機）、停止腳本；仲有新線程同主線程一齊行。\n") +
-            Lang.T("可以「● 錄製」你嘅操作自動變成步驟，揀運行次數，揀目標視窗（座標跟視窗位置同大細），或者背景執行。") +
-            Lang.T("清單入面撳「▶ 開始」就行，亦可以剔幾個一齊開始。")));
-
-        stack.AddRow(Feature(Lang.T("腳本庫"), "library", Extensions.Scripts,
-            Lang.T("喺「我的腳本」右下角打開。搜尋同下載其他用戶公開咗嘅腳本，亦可以公開你自己嘅（喺我的腳本右鍵）。直接由對方部機傳送，唔經伺服器；") +
-            Lang.T("下載前會列出腳本入面嘅系統動作，俾你確認。")));
-
-        stack.AddRow(Feature(Lang.T("錄影工具"), "recorder", Extensions.Recorder,
-            Lang.T("錄低成個螢幕、一個範圍或者一個視窗，可以錄埋電腦聲同咪高峰，用快捷鍵開始 / 停止，輸出 MP4。") +
-            Lang.T("用顯示卡硬件編碼，錄遊戲都唔會太影響效能。要先喺「工具庫」安裝。")));
-
-        stack.AddRow(Feature(Lang.T("AI 助手"), "ai", null,
-            Lang.T("用你部機已經登入咗嘅 Claude、ChatGPT（Codex）、Gemini，或者免費本地 AI 嚟問嘢；識講時間、開程式同網頁、上網搵資料。") +
-            Lang.T("連接一個資料夾之後，AI 可以喺入面寫程式、執行同 debug。仲有快捷鍵語音對話（支援廣東話），同埋寫腳本時右下角嘅雲朵 AI 幫手。")));
-
-        stack.AddRow(Feature(Lang.T("工具庫"), "extensions", null,
-            Lang.T("搜尋同揀你想用嘅工具：安裝之後先會喺左邊顯示，唔用可以移除。")));
-
-        stack.AddRow(Feature(Lang.T("設定"), "settings", null,
-            Lang.T("開機時啟動、關閉時最少化至系統匣、檢查更新。左下角可以切換日光 / 夜間主題同語言。")));
-
-        var tips = new CardPanel { Title = Lang.T("小貼士") };
-        tips.SetContent(new WrapText(
-            Lang.T("• 緊急停止：腳本行緊時連撳 3 下 Esc，或者將滑鼠推去螢幕左上角，所有腳本即刻停。\n") +
-            Lang.T("• 撳錯刪咗步驟？修改頁右下角「↶ 復原」可以還原上一次改動。\n") +
-            Lang.T("• 搵圖用嘅圖片最好直接喺遊戲畫面截，唔好縮放過，配對會準好多。\n") +
-            Lang.T("• 遊戲用管理員權限開嘅話，MultiTool 會自動偵測，提示你用管理員身份重開。\n") +
-            Lang.T("• 部分 DirectX 遊戲唔收背景輸入，就要用前景執行。\n") +
-            Lang.T("• 出錯會寫入 data\\error.log。")));
-        stack.AddRow(tips);
-        return stack;
-    }
+    /// <summary>首頁：歡迎橫額 + 已安裝工具一格格 + 小貼士。</summary>
+    private Control BuildHomePage() => new HomePage(k => BeginInvoke(() => ShowKey(k)));
 
     private CardPanel Feature(string name, string key, string? ext, string text)
     {
@@ -624,6 +590,15 @@ internal sealed class MainForm : Form
         _trayBox = v => { if (!tray.IsDisposed) tray.Checked = v; };
         set.SetContent(flow);
         stack.AddRow(set);
+
+        // ---- 快捷鍵表 ----
+        var hk = new CardPanel
+        {
+            Title = Lang.T("快捷鍵"),
+            Hint = Lang.T("已安裝工具嘅快捷鍵（喺度改都得）。剔「頁面外使用」= 喺任何地方都用得；冇剔就只喺嗰個工具頁先用得。快捷鍵重複就唔可以剔。")
+        };
+        hk.SetContent(new HotkeyTable());
+        stack.AddRow(hk);
 
         var card = new CardPanel { Title = Program.AppName + " " + Program.Version, Hint = Lang.T("開發者：") + Program.Author + Lang.T("。設定同圖片全部存喺 exe 隔籬嘅 data 資料夾。") };
         var row = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, WrapContents = false };

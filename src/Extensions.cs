@@ -18,6 +18,25 @@ internal static class Extensions
 {
     public const string Scripts = "scripts";
     public const string Recorder = "recorder";
+    public const string Replay = "replay";
+    public const string Remap = "remap";
+    public const string Window = "window";
+    public const string Clipboard = "clipboard";
+    public const string Ocr = "ocr";
+    public const string Convert = "convert";
+    public const string GameServer = "gameserver";
+
+    /// <summary>用 ffmpeg 嘅工具：最後一個移除先刪 ffmpeg。</summary>
+    private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert };
+
+    private static void RemoveFfmpeg(string id)
+    {
+        if (FfmpegUsers.Any(x => x != id && IsInstalled(x))) return;
+        Video.Ffmpeg.Delete();
+    }
+
+    private static Info FfmpegTool(string id, string name, string desc) =>
+        new(id, name, desc, false, (p, ct) => Video.Ffmpeg.InstallAsync(p, ct), () => Video.Ffmpeg.Ready, () => RemoveFfmpeg(id), "~100 MB");
 
     internal sealed record Info(
         string Id, string Name, string Desc, bool DefaultOn,
@@ -30,9 +49,23 @@ internal static class Extensions
     {
         new(Scripts, Lang.T("我的腳本"),
             Lang.T("自己砌自動化腳本（按鍵、滑鼠、搵圖、循環、IF、錄製…），包括腳本庫。"), true),
-        new(Recorder, Lang.T("錄影工具"),
-            Lang.T("錄低螢幕、範圍或者視窗，連電腦聲同咪高峰，輸出 MP4。需要下載 ffmpeg。"), false,
-            (p, ct) => Video.Ffmpeg.InstallAsync(p, ct), () => Video.Ffmpeg.Ready, Video.Ffmpeg.Delete, "~100 MB"),
+        FfmpegTool(Recorder, Lang.T("錄影工具"),
+            Lang.T("錄低螢幕、範圍或者視窗，連電腦聲同咪高峰，輸出 MP4。需要下載 ffmpeg。")),
+        FfmpegTool(Replay, Lang.T("精彩重播"),
+            Lang.T("背景一直錄住最近 15 秒至 5 分鐘，撳快捷鍵先存低，錯過精彩位都唔怕。需要下載 ffmpeg。")),
+        new(Remap, Lang.T("遊戲改鍵"),
+            Lang.T("將一粒鍵變成另一粒鍵，滑鼠側鍵都得，可以只限某個遊戲生效。"), false),
+        new(Window, Lang.T("視窗工具"),
+            Lang.T("將視窗置頂、設透明度、變無邊框全螢幕或者置中，有快捷鍵。"), false),
+        new(Clipboard, Lang.T("剪貼簿紀錄"),
+            Lang.T("記低你複製過嘅文字同圖片，快捷鍵叫出細視窗，撳 1-9 就貼上。"), false),
+        new(Ocr, Lang.T("文字辨識"),
+            Lang.T("框住畫面上嘅文字就抽出嚟複製，用 Windows 內置辨識，唔使上網。"), false),
+        FfmpegTool(Convert, Lang.T("轉檔工具"),
+            Lang.T("影片、聲音、圖片互相轉換（MP4、GIF、MP3、PNG…），可以剪頭尾同縮細。需要下載 ffmpeg。")),
+        new(GameServer, Lang.T("遊戲伺服器"),
+            Lang.T("一撳架設 Palworld、Valheim、7 Days to Die 等 Steam 遊戲伺服器，有設定、自動備份同開端口。需要下載 SteamCMD。"), false,
+            (p, ct) => Tools.SteamCmd.InstallAsync(p, ct), () => Tools.SteamCmd.Ready, Tools.SteamCmd.Delete, "~5 MB"),
     };
 
     private static string File_ => Path.Combine(AppPaths.Data, "extensions.txt");
@@ -60,6 +93,23 @@ internal static class Extensions
     }
 
     public static bool IsInstalled(string id) => Installed.Contains(id);
+
+    /// <summary>每個工具嘅圖示同顏色（工具庫同首頁用）。</summary>
+    public static (string Glyph, Color Hue) Look(string id) => id switch
+    {
+        Scripts => ("▶", Ui.Accent),
+        Recorder => ("●", Ui.Danger),
+        Replay => ("↺", Ui.Danger),
+        Remap => ("⌨", Ui.Accent2),
+        Window => ("▣", Ui.Accent),
+        Clipboard => ("≡", Ui.Success),
+        Ocr => ("T", Ui.Accent2),
+        Convert => ("⇄", Ui.Success),
+        GameServer => ("◆", Ui.Success),
+        "ai" => ("✦", Ui.Accent2),
+        "add" => ("+", Ui.Accent),
+        _ => ("★", Ui.Accent2)
+    };
 
     public static void Set(string id, bool on)
     {
@@ -175,12 +225,7 @@ internal sealed class ExtensionsPage : Panel
             Refresh_();
         }
 
-        private (string Glyph, Color Hue) Look => _e.Id switch
-        {
-            Extensions.Scripts => ("▶", Ui.Accent),
-            Extensions.Recorder => ("●", Ui.Danger),
-            _ => ("★", Ui.Accent2)
-        };
+        private (string Glyph, Color Hue) Look => Extensions.Look(_e.Id);
 
         private bool Installed => Extensions.IsInstalled(_e.Id) && (_e.Ready?.Invoke() ?? true);
 

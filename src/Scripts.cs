@@ -1677,7 +1677,20 @@ public sealed class ScriptsPage : Panel
         _stopAll = stopAll;
         stopAll.Size = new Size(Math.Max(Ui.S(110), stopAll.GetPreferredSize(Size.Empty).Width), Ui.S(34));
         stopAll.Click += (_, _) => StopAllScripts();
-        _stopAllKey = new HotkeyBox(Path.Combine(AppPaths.Data, "stopall_hotkey.txt"));
+        _stopAllKey = new HotkeyBox();
+        HotkeyHub.Bind(_stopAllKey, "scripts.stopall");
+        HotkeyHub.Get("scripts.stopall").Action = () =>
+        {
+            // 同一粒快捷鍵：有嘢行緊就全部停；冇就開始剔咗嘅腳本
+            if (_handling) return;
+            _handling = true;
+            try
+            {
+                if (_scripts.Any(ScriptRunner.IsRunning)) StopAllScripts();
+                else StartSelected();
+            }
+            finally { _handling = false; }
+        };
         var stopKeyHost = new InputHost(_stopAllKey, Ui.S(130));
         var stopKeyLabel = Ui.Text_(Lang.T("開始已選 / 全部停止 快捷鍵"), Ui.TextDim, Ui.F(9.5f), new Padding(0));
         _grid.SelectionChanged += UpdateSelButton;
@@ -1711,25 +1724,13 @@ public sealed class ScriptsPage : Panel
             if (_handling) return; // 彈緊提示視窗（modal 期間 timer 照跳）：唔好再觸發
             if (!MultiTool.Extensions.IsInstalled(MultiTool.Extensions.Scripts)) return; // 「我的腳本」已移除：快捷鍵唔生效
             // 全部停止快捷鍵：喺邊度都用得
-            bool stopDown = !typing && !_stopAllKey.Hotkey.IsEmpty && _stopAllKey.Hotkey.IsDown();
-            if (stopDown && !_stopWasDown && !Keyboard.RecentlyInjected)
-            {
-                // 同一粒快捷鍵：有嘢行緊就全部停；冇就開始剔咗嘅腳本
-                _handling = true;
-                try
-                {
-                    if (_scripts.Any(ScriptRunner.IsRunning)) StopAllScripts();
-                    else StartSelected();
-                }
-                finally { _handling = false; }
-            }
-            _stopWasDown = stopDown;
+            // 「開始已選 / 全部停止」快捷鍵由 HotkeyHub 處理
             foreach (var sc in _scripts.ToList())
             {
                 // 喺其他頁（AI 助手、錄影工具…）或者最少化：所有腳本快捷鍵都用得；
                 // 喺「我的腳本」頁入面就淨係預覽緊嗰個可以開始（費事改緊其他腳本時誤觸）；行緊嘅腳本喺邊度都可以停
                 bool viewing = Visible && _editor is ScriptViewer v && v.Script == sc;
-                bool usable = viewing || !Visible || ScriptRunner.IsRunning(sc);
+                bool usable = viewing || (!Visible && HotkeyHub.EffectiveGlobal("scripts.each")) || ScriptRunner.IsRunning(sc);
                 bool down = usable && !typing && !sc.Hotkey.IsEmpty && sc.Hotkey.IsDown();
                 _wasDown.TryGetValue(sc.Id, out bool was);
                 _wasDown[sc.Id] = down; // 先記低，就算下面彈視窗都唔會當再撳一次
