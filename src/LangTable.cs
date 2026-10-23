@@ -1318,5 +1318,13 @@ public static partial class Lang
         ["媒體"] = new[] { "媒體", "媒体", "Media" },
         ["效率"] = new[] { "效率", "效率", "Productivity" },
         ["全部類別"] = new[] { "全部類別", "全部类别", "All categories" },
+        ["← 返回清單"] = new[] { "← 返回清單", "← 返回清单", "← Back to list" },
+        ["監視模式"] = new[] { "監視模式", "监视模式", "Monitor mode" },
+        ["📺 監視模式"] = new[] { "📺 監視模式", "📺 监视模式", "📺 Monitor mode" },
+        ["未有可以監視嘅腳本：腳本要揀咗目標程式視窗，而且個程式開緊，先會喺度顯示。"] = new[] { "未有可監視的腳本：腳本需選擇目標程式視窗，且該程式正在開啟，才會在此顯示。", "未有可监视的脚本：脚本需选择目标程序窗口，且该程序正在打开，才会在此显示。", "No scripts to monitor: a script shows here once it has a target program window and that program is open." },
+        ["程式最小化咗，還原先睇到畫面"] = new[] { "程式已最小化，還原後才能看到畫面", "程序已最小化，还原后才能看到画面", "The program is minimized — restore it to see its screen" },
+        ["捲返入嚟睇畫面"] = new[] { "捲動回來即可看到畫面", "卷动回来即可看到画面", "Scroll into view to see the screen" },
+        ["未開始"] = new[] { "未開始", "未开始", "Not started" },
+        ["冇運行：唔顯示畫面（慳資源）"] = new[] { "未運行：不顯示畫面（節省資源）", "未运行：不显示画面（节省资源）", "Not running: screen hidden to save resources" },
     };
 }

@@ -1695,8 +1695,11 @@ public sealed class ScriptsPage : Panel
         var stopKeyLabel = Ui.Text_(Lang.T("開始已選 / 全部停止 快捷鍵"), Ui.TextDim, Ui.F(9.5f), new Padding(0));
         _grid.SelectionChanged += UpdateSelButton;
         UpdateSelButton();
+        var monitor = new FancyButton { Text = Lang.T("📺 監視模式"), Kind = BtnKind.Primary, Font = Ui.F(9.75f) };
+        monitor.Size = new Size(Math.Max(Ui.S(110), monitor.GetPreferredSize(Size.Empty).Width), Ui.S(34));
+        monitor.Click += (_, _) => OpenMonitor();
         var bar = new BareRow { Padding = new Padding(0) };
-        bar.SetContent(new FlowRow(new Control[] { _startSel, stopAll }, new Control[] { stopKeyHost, stopKeyLabel }));
+        bar.SetContent(new FlowRow(new Control[] { _startSel, stopAll, monitor }, new Control[] { stopKeyHost, stopKeyLabel }));
         _listView.AddRow(bar);
 
         var card = new CardPanel { Title = Lang.T("我的腳本"), Hint = Lang.T("撳「+」新增腳本；撳腳本睇預覽，再撳「修改」入去改；右鍵可以複製 / 刪除。入咗預覽頁先可以用快捷鍵開始 / 停止。") + Lang.T("剔右上角個格可以揀幾個腳本一齊開始。") };
@@ -1729,7 +1732,7 @@ public sealed class ScriptsPage : Panel
             {
                 // 喺其他頁（AI 助手、錄影工具…）或者最少化：所有腳本快捷鍵都用得；
                 // 喺「我的腳本」頁入面就淨係預覽緊嗰個可以開始（費事改緊其他腳本時誤觸）；行緊嘅腳本喺邊度都可以停
-                bool viewing = Visible && _editor is ScriptViewer v && v.Script == sc;
+                bool viewing = Visible && (_editor is ScriptViewer v && v.Script == sc || _editor is MonitorView);
                 bool usable = viewing || (!Visible && HotkeyHub.EffectiveGlobal("scripts.each")) || ScriptRunner.IsRunning(sc);
                 bool down = usable && !typing && !sc.Hotkey.IsEmpty && sc.Hotkey.IsDown();
                 _wasDown.TryGetValue(sc.Id, out bool was);
@@ -1844,6 +1847,14 @@ public sealed class ScriptsPage : Panel
         Controls.Add(view);
         view.BringToFront();
         PlaceLibButton();
+    }
+
+    /// <summary>監視模式：即時睇住各腳本嘅程式畫面，剔咗可以一齊開始。</summary>
+    private void OpenMonitor()
+    {
+        var m = new MonitorView(_scripts, _grid.Selected, () => { UpdateSelButton(); _grid.Invalidate(); }, StartSelected, StopAllScripts);
+        m.Back += () => ShowView(null);
+        ShowView(m);
     }
 
     /// <summary>撳腳本：先睇預覽（唔可以改），上面有「修改」同「開始」。</summary>

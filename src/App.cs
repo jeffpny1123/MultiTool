@@ -11,7 +11,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v1.9";
+    public const string Version = "v2.0";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -41,6 +41,8 @@ internal sealed class MainForm : Form
 {
     private readonly Panel _sidebar = new();
     private readonly Panel _content = new();
+    private readonly NavHost _navHost = new();
+    private int _step = Ui.S(44), _navOffset;
     private readonly System.Collections.Generic.List<(NavItem Nav, Func<Control> Build, Control? Page)> _pages = new();
     private readonly System.Collections.Generic.List<(string Key, string? Ext)> _pageKeys = new(); // 同 _pages 一一對應
     private int _current = -1;
@@ -126,8 +128,16 @@ internal sealed class MainForm : Form
             lang.Location = new Point(Ui.S(20), by.Top - lang.PreferredHeight - Ui.S(8));
             theme.Location = new Point(Ui.S(20), lang.Top - theme.PreferredHeight - Ui.S(8));
         }
-        _sidebar.Resize += (_, _) => PlaceBy();
+        _sidebar.Controls.Add(_navHost);
+        _navHost.MouseWheel += (_, e) => ScrollNav(e.Delta);
+        void PlaceNavHost()
+        {
+            _navHost.SetBounds(0, Ui.S(70), _sidebar.Width, Math.Max(Ui.S(40), theme.Top - Ui.S(10) - Ui.S(70)));
+            LayoutNav();
+        }
+        _sidebar.Resize += (_, _) => { PlaceBy(); PlaceNavHost(); };
         PlaceBy();
+        PlaceNavHost();
 
         // ---- 功能清單（以後喺度加）----
         AddPage(Lang.T("首頁"), BuildHomePage, "home");
@@ -325,7 +335,7 @@ internal sealed class MainForm : Form
     {
         var nav = new NavItem(name);
         int index = _pages.Count;
-        nav.SetBounds(0, Ui.S(70) + index * Ui.S(44), _sidebar.Width, Ui.S(40));
+        nav.SetBounds(0, index * Ui.S(44), _sidebar.Width, Ui.S(40));
         nav.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
         nav.Click += (_, _) =>
         {
@@ -351,7 +361,7 @@ internal sealed class MainForm : Form
                 nav.Cursor = Cursors.SizeNS;
             }
             var vis = VisibleOrder();
-            int minTop = Ui.S(70), maxTop = Ui.S(70) + (vis.Count - 1) * Ui.S(44);
+            int minTop = -_navOffset, maxTop = -_navOffset + (vis.Count - 1) * _step;
             nav.Top = Math.Max(minTop, Math.Min(maxTop, nav.Top + e.Y - _dragY));
             PreviewDrag(index, nav.Top + nav.Height / 2);
         };
@@ -372,7 +382,8 @@ internal sealed class MainForm : Form
         {
             if (e.Button == MouseButtons.Right) ShowNavMenu(index, nav, e.Location);
         };
-        _sidebar.Controls.Add(nav);
+        nav.MouseWheel += (_, e) => ScrollNav(e.Delta);
+        _navHost.Controls.Add(nav);
         _pages.Add((nav, build, null));
         _pageKeys.Add((key, ext));
         _order.Add(index);
@@ -426,14 +437,14 @@ internal sealed class MainForm : Form
     {
         var vis = VisibleOrder();
         vis.Remove(dragged);
-        int slot = Math.Max(0, Math.Min(vis.Count, (centerY - Ui.S(70)) / Ui.S(44)));
-        int y = Ui.S(70);
+        int slot = Math.Max(0, Math.Min(vis.Count, (centerY + _navOffset) / _step));
+        int y = -_navOffset;
         for (int k = 0; k < vis.Count; k++)
         {
-            if (k == slot) y += Ui.S(44);
+            if (k == slot) y += _step;
             var n = _pages[vis[k]].Nav;
             if (n.Top != y) n.Top = y;
-            y += Ui.S(44);
+            y += _step;
         }
     }
 
@@ -441,7 +452,7 @@ internal sealed class MainForm : Form
     {
         var vis = VisibleOrder();
         vis.Remove(dragged);
-        int slot = Math.Max(0, Math.Min(vis.Count, (centerY - Ui.S(70)) / Ui.S(44)));
+        int slot = Math.Max(0, Math.Min(vis.Count, (centerY + _navOffset) / _step));
         MoveNav(dragged, slot < vis.Count ? vis[slot] : -1, slot >= vis.Count && vis.Count > 0 ? vis[^1] : -1);
     }
 
@@ -490,19 +501,36 @@ internal sealed class MainForm : Form
     private bool PageVisible(int i) => _pageKeys[i].Ext is not { } e || Extensions.IsInstalled(e);
 
     /// <summary>側欄：跟用家排嘅次序，淨係顯示已安裝嘅擴充工具。</summary>
+    /// <summary>側欄項目：太多就逐格縮細少少，再唔夠位就可以用滑鼠滾輪捲。</summary>
     private void LayoutNav()
     {
-        int y = Ui.S(70);
+        if (_pages.Count == 0) return;
+        int n = _order.Count(PageVisible), avail = _navHost.Height;
+        _step = n == 0 ? Ui.S(44) : Math.Clamp(avail / n, Ui.S(34), Ui.S(44));
+        int total = n * _step;
+        _navOffset = Math.Clamp(_navOffset, 0, Math.Max(0, total - avail));
+        bool overflow = total > avail;
+        int w = _navHost.Width - (overflow ? Ui.S(6) : 0);
+        int y = -_navOffset;
         foreach (int i in _order)
         {
             bool vis = PageVisible(i);
             _pages[i].Nav.Visible = vis;
             if (!vis) continue;
-            _pages[i].Nav.SetBounds(0, y, _sidebar.Width, Ui.S(40));
-            y += Ui.S(44);
+            _pages[i].Nav.SetBounds(0, y, w, _step - Ui.S(4));
+            y += _step;
         }
+        _navHost.SetScroll(overflow ? _navOffset : -1, total, avail);
         // 而家顯示緊嘅頁被移除咗：返去首頁
         if (_current >= 0 && !PageVisible(_current)) Show(0);
+    }
+
+    private void ScrollNav(int delta)
+    {
+        int before = _navOffset;
+        _navOffset -= Math.Sign(delta) * _step;
+        LayoutNav();
+        if (before != _navOffset) _navHost.Invalidate();
     }
 
     private void EnsureBuilt(int i)
@@ -879,5 +907,36 @@ internal sealed class TitleBar : Control
     {
         _form.WindowState = Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
         Invalidate();
+    }
+}
+
+/// <summary>側欄項目嘅容器：超出範圍時喺右邊畫細捲軸。</summary>
+internal sealed class NavHost : Panel
+{
+    private int _offset = -1, _total, _view;
+
+    public NavHost()
+    {
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+        BackColor = Ui.Panel;
+    }
+
+    public void SetScroll(int offset, int total, int view)
+    {
+        if (offset == _offset && total == _total && view == _view) return;
+        _offset = offset; _total = total; _view = view;
+        Invalidate();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        e.Graphics.Clear(BackColor);
+        if (_offset < 0 || _total <= _view || _view <= 0) return;
+        Ui.Smooth(e.Graphics);
+        float h = Math.Max(Ui.S(24f), Height * (float)_view / _total);
+        float y = (Height - h) * _offset / Math.Max(1, _total - _view);
+        using var p = Ui.Round(new RectangleF(Width - Ui.S(5f), y, Ui.S(3f), h), Ui.S(1.5f));
+        using var b = new SolidBrush(Ui.BorderHi);
+        e.Graphics.FillPath(b, p);
     }
 }

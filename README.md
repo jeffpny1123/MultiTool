@@ -44,6 +44,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **管理員權限偵測**：如目標程式以系統管理員權限執行，MultiTool 會提示以系統管理員身分重新啟動（否則 Windows 會阻擋輸入）。
 - **Script list**: each script has its own **▶ Start / ■ Stop** button and a **run count** (once, N times or forever). Running scripts get a green frame and show their current round and step.
   **腳本列表**：每個腳本有獨立的 **▶ 開始／■ 停止** 按鈕及**運行次數**（一次、N 次或持續運行）。運行中的腳本會以綠色外框標示，並顯示目前輪數及步驟。
+- **Monitor mode**: click **📺 Monitor mode** to see a live view of each script's target program (only scripts with a target window whose program is open). Tick scripts and start them together; each tile also has its own Start / Stop and shows the current step. Double-click a view to switch to that program. Views use Windows' DWM thumbnails (drawn by the GPU, no screenshots). Once scripts are running, ticked / running scripts move to the front and idle tiles stop showing their view to save resources. Views are only loaded while monitor mode is open.
+  **監視模式**：按 **📺 監視模式** 即可即時查看各腳本目標程式的畫面（只顯示已設定目標視窗且程式正在開啟的腳本）。可勾選多個腳本一併開始；每格亦設有獨立的開始／停止按鈕並顯示目前步驟，雙擊畫面可切換至該程式。畫面使用 Windows DWM 縮圖（由顯示卡繪製，無須截圖）。腳本開始後，已勾選／運行中的腳本會排在最前，未運行的格不再顯示畫面以節省資源。只有在監視模式中才會載入畫面。
 - **Emergency stop**: while scripts run, press **Esc 3 times** or push the mouse to the **top-left corner** of the screen to stop everything (only your own input counts, not the script's).
   **緊急停止**：腳本運行時連按 **3 下 Esc**，或將滑鼠移至螢幕**左上角**，即可停止所有腳本（只計你自己的操作，不計腳本模擬的輸入）。
 - **Start several scripts together**: tick scripts in the list and click **Start selected**; **Stop all** stops every running script. One global hotkey does both: it starts the ticked scripts when nothing is running and stops all when something is.
@@ -208,6 +210,16 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v2.0
+- **New: Monitor mode** in My Scripts — live views of every script's target program in tiles; tick and start several scripts together, with per-tile Start / Stop and status. Ticked / running scripts move to the front and idle tiles hide their view to save resources; views load only while monitor mode is open.
+  **新增：監視模式**（我的腳本）——以方格即時顯示各腳本目標程式的畫面；可勾選多個腳本一併開始，每格設有開始／停止及運行狀態。已勾選／運行中的腳本排在最前，未運行的格隱藏畫面以節省資源；只在監視模式中載入畫面。
+- **Fixed:** sidebar items overlapped the theme / language / developer lines when many tools were installed or the window was short. Items now shrink to fit and the sidebar scrolls with the mouse wheel when needed.
+  **修正：**安裝較多工具或視窗較矮時，側欄項目與主題／語言／開發者字樣重疊。項目現會自動縮小，必要時可用滑鼠滾輪捲動。
+
+### v1.9.1 (Hotfix)
+- **Fixed:** in My Scripts, recording could not be stopped with **■ Stop recording** or F10 after MultiTool was minimized.
+  **修正：**我的腳本錄製時，MultiTool 縮細後無法以 **■ 停止錄製** 或 F10 停止錄製。
 
 ### v1.9
 - **New: Video Downloader** — save links from YouTube, Bilibili, Twitch, TikTok and 1000+ sites as MP3 / MP4 (yt-dlp).
@@ -390,7 +402,7 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 錄影工具；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Tools, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗工具、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs` Performance Monitor 效能監看；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 錄影工具；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Tools, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗工具、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs` Performance Monitor 效能監看；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
 | `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
 | `release/` | User guide shipped with releases 隨發佈版本附上的使用說明（`使用說明.txt`） |
