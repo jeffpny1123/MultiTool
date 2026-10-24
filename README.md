@@ -214,6 +214,10 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 ## Changelog 更新紀錄
 
+### v2.2
+- **Changed:** releases are now published in **[MultiTool-Releases](https://github.com/jeffpny1123/MultiTool-Releases/releases)**; auto update checks there.
+  **變更：**新版本改於 **MultiTool-Releases** 發佈，自動更新會從該處檢查。
+
 ### v2.1
 - **New: Show mouse clicks** in the Screen recorder — an expanding ring at each click, recorded into the video.
   **新增：錄製滑鼠點擊**（錄影工具）——每次點擊位置出現擴散圓圈，並錄入影片。

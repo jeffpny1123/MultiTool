@@ -36,7 +36,8 @@ def call(method, url, body=None, data=None, ctype="application/json"):
 def find_release(tag):
     # 包埋草稿（草稿冇 tag，用 tag_name 對）
     for r in call("GET", API + "/releases?per_page=50"):
-        if r["tag_name"] == tag:
+        # 用網頁改過嘅草稿 tag_name 可能變咗 untagged-xxx，所以都用標題對
+        if r["tag_name"] == tag or (r["draft"] and r["name"] == "MultiTool " + tag):
             return r
     return None
 
@@ -53,7 +54,8 @@ def draft(tag, notes_path):
         rel = call("POST", API + "/releases", {"tag_name": tag, "target_commitish": "main",
                                              "name": "MultiTool " + tag, "body": notes, "draft": True})
     else:
-        rel = call("PATCH", f"{API}/releases/{rel['id']}", {"name": "MultiTool " + tag, "body": notes})
+        rel = call("PATCH", f"{API}/releases/{rel['id']}", {"tag_name": tag, "target_commitish": "main",
+                                                         "name": "MultiTool " + tag, "body": notes})
     name = os.path.basename(zip_path)
     for a in rel.get("assets", []):
         if a["name"] == name:  # 舊嘅同名附件先刪走再上載
@@ -71,7 +73,8 @@ def publish(tag):
         sys.exit("搵唔到草稿 " + tag)
     if not any(a["name"].endswith(".zip") for a in rel["assets"]):
         sys.exit("草稿冇 zip，唔發佈")
-    r = call("PATCH", f"{API}/releases/{rel['id']}", {"draft": False, "make_latest": "true"})
+    r = call("PATCH", f"{API}/releases/{rel['id']}", {"tag_name": tag, "target_commitish": "main",
+                                                     "draft": False, "make_latest": "true"})
     print("已發佈：", r["html_url"])
 
 
