@@ -19,7 +19,7 @@ namespace MultiTool.Scripts;
 //  資料
 // =====================================================================
 
-public enum StepKind { Key, Click, Wait, Image, If, Loop, Break, Drag, StopScript, Thread, Parallel, System, Text, Scroll }
+public enum StepKind { Key, Click, Wait, Image, If, Loop, Break, Drag, StopScript, Thread, Parallel, System, Text, Scroll, Move }
 
 /// <summary>按鍵 / 滑鼠嘅動作：撳住（按下 → 等 → 彈起）、淨係按下、淨係彈起。</summary>
 public enum PressMode { Hold, Down, Up }
@@ -84,6 +84,7 @@ public sealed class Step
         StepKind.System => Lang.T("系統"),
         StepKind.Text => Lang.T("輸入文字"),
         StepKind.Scroll => Lang.T("滑鼠"),
+        StepKind.Move => Lang.T("滑鼠移動"),
         _ => Lang.T("搵圖點擊")
     };
 
@@ -113,6 +114,7 @@ public sealed class Step
         StepKind.If => "if|" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes((Sub ?? new IfBlock()).SerializeFull())),
         StepKind.Break => "break",
         StepKind.Drag => $"drag|{(Right ? "R" : "L")}|{X}|{Y}|{X2}|{Y2}|{D(Hold)}",
+        StepKind.Move => $"move|{X}|{Y}|{X2}|{Y2}|{D(Hold)}",
         StepKind.Loop => $"loop|{Count}|" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
             string.Join("\n", Body.Select(b => b.Serialize())))) + $"|0|{Until.Replace('|', ' ')}|{D(LimitSec)}|{(Collapsed ? 1 : 0)}",
         StepKind.StopScript => "stop",
@@ -168,6 +170,10 @@ public sealed class Step
                     Kind = StepKind.Thread,
                     Body = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(At(1)))
                         .Split('\n').Where(l => l.Length > 0).Select(Parse).Where(x => x != null).Select(x => x!).ToList()
+                },
+                "move" => new Step
+                {
+                    Kind = StepKind.Move, X = Int(At(1), 0), Y = Int(At(2), 0), X2 = Int(At(3), 0), Y2 = Int(At(4), 0), Hold = Dec(At(5), 0.5m)
                 },
                 "drag" => new Step
                 {
@@ -1333,6 +1339,9 @@ public static class ScriptRunner
             }
             case StepKind.Drag:
                 await exclude.DragAsync(exclude.Pt(st.X, st.Y), exclude.Pt(st.X2, st.Y2), st.Right, Scaled((double)st.Hold), ct);
+                break;
+            case StepKind.Move:
+                await exclude.MoveAsync(exclude.Pt(st.X, st.Y), exclude.Pt(st.X2, st.Y2), Scaled((double)st.Hold), ct);
                 break;
             case StepKind.If:
                 // IF 入面嘅 IF：行到呢步就檢查一次，成立先行入面嘅步驟
@@ -2640,6 +2649,7 @@ internal sealed class StepList : Panel, ISizeCache
         _inLoop = inLoop;
         _kinds.AddRange(new[] { StepKind.Key, StepKind.Click, StepKind.Wait, StepKind.Image, StepKind.Loop });
         if (nestedIf) _kinds.Add(StepKind.If);
+        _kinds.Add(StepKind.Move);
         _kinds.Add(StepKind.Text);
         _kinds.Add(StepKind.Parallel);
         _kinds.Add(StepKind.System);
@@ -2661,7 +2671,7 @@ internal sealed class StepList : Panel, ISizeCache
         {
             var more = new FancyButton { Text = Lang.T("+ 更多 ▾"), Kind = BtnKind.Ghost, Dashed = true, Font = Ui.F(9.5f) };
             more.Size = new Size(Ui.S(116), Ui.S(34));
-            _tip.SetToolTip(more, Lang.T("輸入文字、IF 條件、同時運行、系統、中斷循環、停止腳本"));
+            _tip.SetToolTip(more, Lang.T("滑鼠移動、輸入文字、IF 條件、同時運行、系統、中斷循環、停止腳本"));
             more.Click += (_, _) => ShowMoreMenu(more);
             _addButtons.Add(more);
             Controls.Add(more);
@@ -2709,6 +2719,7 @@ internal sealed class StepList : Panel, ISizeCache
             Item(Lang.T("左鍵"), st.Kind == StepKind.Click && !st.Right, () => { st.Kind = StepKind.Click; st.Right = false; });
             Item(Lang.T("右鍵"), st.Kind == StepKind.Click && st.Right, () => { st.Kind = StepKind.Click; st.Right = true; });
             Item(Lang.T("滾輪"), st.Kind == StepKind.Scroll, () => { if (st.Kind != StepKind.Scroll && st.Count == 0) st.Count = -3; st.Kind = StepKind.Scroll; });
+            Item(Lang.T("移動（唔撳）"), false, () => { st.Kind = StepKind.Move; st.X2 = st.X + 100; st.Y2 = st.Y; st.Hold = 0.5m; });
             ShowMenu(m, b);
         };
         return b;
@@ -2871,7 +2882,7 @@ internal sealed class StepList : Panel, ISizeCache
         try { menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
         menu.BackColor = Ui.CardHi;
         menu.ForeColor = Ui.Text;
-        foreach (var k in _kinds.Where(k => k is StepKind.Text or StepKind.If or StepKind.Parallel or StepKind.System or StepKind.Break or StepKind.StopScript))
+        foreach (var k in _kinds.Where(k => k is StepKind.Move or StepKind.Text or StepKind.If or StepKind.Parallel or StepKind.System or StepKind.Break or StepKind.StopScript))
         {
             var kind = k;
             menu.Items.Add(Step.KindName(kind), null, (_, _) => BeginInvoke(() => AddStep(kind)));
@@ -3009,12 +3020,12 @@ internal sealed class StepList : Panel, ISizeCache
         if (kind == StepKind.Parallel) { st.Branches.Add(new List<Step>()); st.Branches.Add(new List<Step>()); }
         if (kind == StepKind.System) st.Seconds = 60m;
         if (kind == StepKind.Scroll) st.Count = -3;
-        if (kind is StepKind.Click or StepKind.Drag or StepKind.Scroll)
+        if (kind is StepKind.Click or StepKind.Drag or StepKind.Scroll or StepKind.Move)
         {
             var p = ScriptCoords.FromScreen(_sc, Cursor.Position) ?? Point.Empty;
             st.X = p.X;
             st.Y = p.Y;
-            if (kind == StepKind.Drag) { st.X2 = p.X + 100; st.Y2 = p.Y; st.Hold = 0.5m; }
+            if (kind is StepKind.Drag or StepKind.Move) { st.X2 = p.X + 100; st.Y2 = p.Y; st.Hold = 0.5m; }
         }
         _steps.Insert(Math.Clamp(at, 0, _steps.Count), st);
         Changed(true);
@@ -3204,7 +3215,7 @@ internal sealed class StepList : Panel, ISizeCache
             {
                 // 一格搞掂：撳一下，再撳鍵（可以組合鍵，例如 Shift + Alt + T）
                 var keyBox = new KeyCaptureBox(Ui.S(190)) { Vk = st.Vk, Mods = st.Mods };
-                _tip.SetToolTip(keyBox, Lang.T("撳一下，再撳要按嘅鍵或者組合鍵（例如 Shift + Alt + T）。右鍵可以清除。"));
+                _tip.SetToolTip(keyBox, Lang.T("撳一下，再撳要按嘅鍵或者組合鍵（例如 Shift + Alt + T），滑鼠中鍵同側鍵都得。右鍵可以清除或者揀滑鼠掣。"));
                 keyBox.Changed += () => { st.Vk = keyBox.Vk; st.Mods = keyBox.Mods; Changed(false); };
                 list.Add(keyBox);
                 AddModeControls(list, st);
@@ -3239,6 +3250,31 @@ internal sealed class StepList : Panel, ISizeCache
                 ms.ValueChanged += (_, _) => { st.Hold = ms.Value / 1000m; Changed(false); };
                 _tip.SetToolTip(ms, Lang.T("由起點拖去終點用幾耐"));
                 list.AddRange(new Control[] { btn, pos, pick, L(Lang.T("用時")), ms, L("ms") });
+                break;
+            }
+            case StepKind.Move:
+            {
+                NumberBox Num(int v, Action<int> set)
+                {
+                    var n = new NumberBox(Ui.S(76)) { Minimum = -10000, Maximum = 20000 };
+                    n.Value = v;
+                    n.ValueChanged += (_, _) => { set((int)n.Value); Changed(false); };
+                    return n;
+                }
+                FancyButton Pick(NumberBox nx, NumberBox ny)
+                {
+                    var b = new FancyButton { Text = Lang.T("座標"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(58), Ui.S(34)) };
+                    _tip.SetToolTip(b, Lang.T("撳完 3 秒內將滑鼠移去目標位置"));
+                    b.Click += (_, _) => PickPosition(b, nx, ny);
+                    return b;
+                }
+                var ax = Num(st.X, v => st.X = v); var ay = Num(st.Y, v => st.Y = v);
+                var bx = Num(st.X2, v => st.X2 = v); var by = Num(st.Y2, v => st.Y2 = v);
+                var ms = new NumberBox(Ui.S(90)) { Minimum = 0m, Maximum = 60_000m, DecimalPlaces = 0, Increment = 50m };
+                ms.Value = Math.Round(st.Hold * 1000m);
+                ms.ValueChanged += (_, _) => { st.Hold = ms.Value / 1000m; Changed(false); };
+                _tip.SetToolTip(ms, Lang.T("由 A 移去 B 用幾耐（0 = 即刻跳過去）"));
+                list.AddRange(new Control[] { L("A"), L("X"), ax, L("Y"), ay, Pick(ax, ay), L("→  B"), L("X"), bx, L("Y"), by, Pick(bx, by), L(Lang.T("用時")), ms, L("ms") });
                 break;
             }
             case StepKind.Loop:
@@ -3813,6 +3849,12 @@ internal sealed class KeyCaptureBox : Control
         _menu.BackColor = Ui.CardHi;
         _menu.ForeColor = Ui.Text;
         _menu.Items.Add(Lang.T("清除"), null, (_, _) => Set(0, Keys.None));
+        _menu.Items.Add(new ToolStripSeparator());
+        foreach (int mvk in new[] { 0x04, 0x05, 0x06 })
+        {
+            int v = mvk;
+            _menu.Items.Add(MouseVkName(v)!, null, (_, _) => Set(v, Keys.None));
+        }
     }
 
     public int Vk { get => _vk; set { _vk = value; Invalidate(); } }
@@ -3825,9 +3867,17 @@ internal sealed class KeyCaptureBox : Control
         if (mods.HasFlag(Keys.Control)) parts.Add("Ctrl");
         if (mods.HasFlag(Keys.Shift)) parts.Add("Shift");
         if (mods.HasFlag(Keys.Alt)) parts.Add("Alt");
-        parts.Add(Hotkey.KeyName(vk));
+        parts.Add(MouseVkName(vk) ?? Hotkey.KeyName(vk));
         return string.Join(" + ", parts);
     }
+
+    public static string? MouseVkName(int vk) => vk switch
+    {
+        0x04 => Lang.T("滑鼠中鍵"),
+        0x05 => Lang.T("滑鼠側鍵 1（後退）"),
+        0x06 => Lang.T("滑鼠側鍵 2（前進）"),
+        _ => null
+    };
 
     private static string ModsText(Keys mods)
     {
@@ -3922,6 +3972,9 @@ internal sealed class KeyCaptureBox : Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
+        // 滑鼠中鍵 / 側鍵 = 直接設定為呢粒掣（撳住 Ctrl / Shift / Alt 就當組合鍵）
+        int vk = e.Button switch { MouseButtons.Middle => 0x04, MouseButtons.XButton1 => 0x05, MouseButtons.XButton2 => 0x06, _ => 0 };
+        if (vk != 0) { Focus(); Set(vk, Control.ModifierKeys); return; }
         if (e.Button == MouseButtons.Left) Focus();
         else if (e.Button == MouseButtons.Right) _menu.Show(this, e.Location);
     }
@@ -4820,6 +4873,7 @@ internal static class Describe
         StepKind.Text => "「" + (st.Target.Length > 40 ? st.Target[..40] + "…" : st.Target).Replace("\n", " ") + "」",
         StepKind.Scroll => Lang.F("{0} {1} 格 ({2}, {3})", st.Count >= 0 ? Lang.T("向上") : Lang.T("向下"), Math.Abs(st.Count), st.X, st.Y),
         StepKind.Drag => $"{(st.Right ? Lang.T("右鍵") : Lang.T("左鍵"))} ({st.X}, {st.Y}) → ({st.X2}, {st.Y2}) · {Math.Round(st.Hold * 1000m)} ms",
+        StepKind.Move => $"({st.X}, {st.Y}) → ({st.X2}, {st.Y2}) · {Math.Round(st.Hold * 1000m)} ms",
         StepKind.Image => st.Image.Length == 0 ? Lang.T("（未揀圖）") : Lang.F("{0}相似度 {1}%，搵到最似嗰張就點", Count(st.Image), st.Similarity),
         StepKind.Loop => (st.Count == 0 ? Lang.T("一直重複") : Lang.F("重複 {0} 次", st.Count))
             + (st.LimitSec > 0 ? Lang.F("，最多 {0} 秒", D(st.LimitSec)) : "")
@@ -4998,10 +5052,10 @@ internal static class ScriptCoords
     {
         foreach (var st in steps)
         {
-            if (st.Kind is StepKind.Click or StepKind.Drag or StepKind.Scroll)
+            if (st.Kind is StepKind.Click or StepKind.Drag or StepKind.Scroll or StepKind.Move)
             {
                 var a = f(new Point(st.X, st.Y)); st.X = a.X; st.Y = a.Y;
-                if (st.Kind == StepKind.Drag) { var b = f(new Point(st.X2, st.Y2)); st.X2 = b.X; st.Y2 = b.Y; }
+                if (st.Kind is StepKind.Drag or StepKind.Move) { var b = f(new Point(st.X2, st.Y2)); st.X2 = b.X; st.Y2 = b.Y; }
             }
             if (st.Sub != null) { Cond(st.Sub, f); Each(st.Sub.Steps, f); }
             Each(st.Body, f);
@@ -5779,6 +5833,33 @@ internal sealed class RunCtx
         finally { Mouse.Up(b.X, b.Y, right); }
     }
 
+    /// <summary>淨係移動滑鼠（唔撳任何掣）：由 a 慢慢移去 b。背景用視窗訊息。</summary>
+    public async Task MoveAsync(Point a, Point b, TimeSpan duration, CancellationToken ct)
+    {
+        Guard();
+        Focus();
+        int steps = duration.TotalMilliseconds <= 0 ? 1 : Math.Clamp((int)(duration.TotalMilliseconds / 15), 2, 400);
+        var stepDelay = TimeSpan.FromMilliseconds(Math.Max(1, duration.TotalMilliseconds / steps));
+        if (Bg)
+        {
+            var (target, pa) = Win.ChildAt(Hwnd, a);
+            int dx = pa.X - a.X, dy = pa.Y - a.Y;
+            Win.Send(target, 0x200, 0, pa);
+            for (int i = 1; i <= steps; i++)
+            {
+                if (duration.TotalMilliseconds > 0) await Task.Delay(stepDelay, ct);
+                Win.Send(target, 0x200, 0, new Point(a.X + (b.X - a.X) * i / steps + dx, a.Y + (b.Y - a.Y) * i / steps + dy));
+            }
+            return;
+        }
+        Mouse.Move(a.X, a.Y);
+        for (int i = 1; i <= steps; i++)
+        {
+            if (duration.TotalMilliseconds > 0) await Task.Delay(stepDelay, ct);
+            Mouse.Move(a.X + (b.X - a.X) * i / steps, a.Y + (b.Y - a.Y) * i / steps);
+        }
+    }
+
     /// <summary>目標程式用咗管理員權限而我哋冇：Windows 會擋晒點擊 / 按鍵，即刻講。</summary>
     private void Guard()
     {
@@ -5790,13 +5871,30 @@ internal sealed class RunCtx
     {
         Guard();
         Focus();
-        if (Bg) Win.PostKey(Hwnd, vk, false, alt); else Keyboard.Down(vk);
+        if (Bg && Keyboard.IsMouseVk(vk)) PostMouseButton(vk, true);
+        else if (Bg) Win.PostKey(Hwnd, vk, false, alt); else Keyboard.Down(vk);
     }
 
     public void KeyUp(int vk, bool alt)
     {
         Focus();
-        if (Bg) Win.PostKey(Hwnd, vk, true, alt); else Keyboard.Up(vk);
+        if (Bg && Keyboard.IsMouseVk(vk)) PostMouseButton(vk, false);
+        else if (Bg) Win.PostKey(Hwnd, vk, true, alt); else Keyboard.Up(vk);
+    }
+
+    /// <summary>背景：滑鼠中鍵 / 側鍵當按鍵用，喺滑鼠而家位置（唔喺視窗入面就用中間）送訊息。</summary>
+    private void PostMouseButton(int vk, bool down)
+    {
+        var size = Win.ClientSize(Hwnd);
+        var p = Win.ScreenToClientPt(Hwnd, Cursor.Position);
+        if (p.X < 0 || p.Y < 0 || p.X >= size.Width || p.Y >= size.Height) p = new Point(size.Width / 2, size.Height / 2);
+        var (target, pt) = Win.ChildAt(Hwnd, p);
+        if (vk == 0x04) Win.Send(target, down ? 0x207u : 0x208u, down ? 0x10 : 0, pt);
+        else
+        {
+            int x = vk == 0x05 ? 1 : 2;
+            Win.Send(target, down ? 0x20Bu : 0x20Cu, (nint)((x << 16) | (down ? (x == 1 ? 0x20 : 0x40) : 0)), pt);
+        }
     }
 
     public void MouseDown(int x, int y, bool right)

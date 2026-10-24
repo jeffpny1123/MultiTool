@@ -101,20 +101,18 @@ internal static class Updater
                 return;
             }
 
-            string notes = rel.Notes.Trim();
-            if (notes.Length > 800) notes = notes[..800] + "…";
-            var ans = MessageBox.Show(owner,
-                Lang.F("發現新版本 {0}（而家用緊 {1}）。\n\n{2}", rel.Tag, Program.Version, (notes.Length > 0 ? notes + "\n\n" : "")) +
-                Lang.T("要唔要而家更新？更新完會自動重開，你嘅腳本同設定唔會受影響。"),
-                Lang.T("有新版本"), MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-            if (ans != DialogResult.Yes) return;
-
-            await DownloadAndRestartAsync(owner, rel);
+            // 自動更新：有新版就直接下載、換檔、重開，唔使問
+            if (!await DownloadAndRestartAsync(owner, rel))
+            {
+                if (silent) MultiTool.Tools.Toast.Show(Lang.T("自動更新失敗，下次開程式會再試"), MultiTool.UI.Ui.Danger, 4000);
+                else MessageBox.Show(owner, Lang.T("下載更新失敗，詳情已寫入 data\\error.log"), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
         finally { _busy = false; }
     }
 
-    private static async Task DownloadAndRestartAsync(Form owner, Release rel)
+    /// <summary>下載新版、換 exe、重開。成功（程式即將關閉）回傳 true。</summary>
+    private static async Task<bool> DownloadAndRestartAsync(Form owner, Release rel)
     {
         string exe = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "MultiTool.exe");
         string dir = Path.GetDirectoryName(exe)!;
@@ -158,9 +156,8 @@ internal static class Updater
         {
             progress.Close();
             AppPaths.LogError("下載更新", ex);
-            MessageBox.Show(owner, Lang.T("下載更新失敗：\n") + ex.Message, Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             try { File.Delete(newExe); } catch { }
-            return;
+            return false;
         }
         finally
         {
@@ -189,9 +186,11 @@ internal static class Updater
         {
             AppPaths.LogError("啟動更新", ex);
             MessageBox.Show(owner, Lang.F("自動換檔失敗，請手動將\n{0}\n改名做 MultiTool.exe。", newExe), Program.AppName);
-            return;
+            Application.Exit();
+            return true;
         }
         Application.Exit();
+        return true;
     }
 
     /// <summary>下載進度細視窗。</summary>

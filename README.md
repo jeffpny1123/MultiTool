@@ -17,8 +17,9 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 | Step 步驟 | Description 說明 |
 |---|---|
-| Key press 按鍵 | Any key or key combination (e.g. `Shift + Alt + T`); hold for N milliseconds, press down only, or release only.<br>任何按鍵或組合鍵（例如 `Shift + Alt + T`）；可設定按住 N 毫秒、僅按下或僅彈起。 |
+| Key press 按鍵 | Any key or key combination (e.g. `Shift + Alt + T`), including the middle and side mouse buttons; hold for N milliseconds, press down only, or release only.<br>任何按鍵或組合鍵（例如 `Shift + Alt + T`），包括滑鼠中鍵及側鍵；可設定按住 N 毫秒、僅按下或僅彈起。 |
 | Mouse 滑鼠 | Left button, right button or wheel (chosen from a drop-down) at a position, with a 3-second position picker. Buttons: hold, press down only, or release only. Wheel: up / down N notches. **Drag**: "Down" at A → delay → "Up" at B.<br>於指定座標使用左鍵、右鍵或滾輪（下拉式選單選擇），並提供 3 秒倒數的座標拾取功能。按鍵可按住、僅按下或僅彈起；滾輪可向上／向下捲動 N 格。**拖曳**：在 A 點「按下」→ 延遲 → 在 B 點「彈起」。 |
+| Mouse move 滑鼠移動 | Move the mouse from A to B over N milliseconds without pressing any button (0 = jump instantly); works in background mode too.<br>於 N 毫秒內將滑鼠由 A 點移到 B 點，不按任何按鍵（0 = 立即跳到）；背景執行亦適用。 |
 | Delay 延遲 | Pause for N milliseconds, or a random time between two values.<br>暫停 N 毫秒（ms），或於兩個時間之間隨機暫停。 |
 | Type text 輸入文字 | Types a piece of text (any language); line breaks press Enter.<br>輸入一段文字（支援中文），換行會按 Enter。 |
 | Find image & click 搵圖點擊 | Snip screen regions (up to 6 images per step) and click the best match above the similarity threshold.<br>擷取螢幕區域作為目標圖片（每個步驟最多 6 張），並點擊相似度最高且達到門檻的位置。 |
@@ -56,8 +57,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   預覽頁的**運行速度**（0.5x – 3.0x）會按倍率調整延遲、按住時間、檢查間隔及倒數，運行中亦可即時更改。
 - Scripts are validated before running (missing images, unset keys, empty loops, etc.).
   執行前會自動檢查腳本（例如缺少圖片、未設定按鍵、空白循環等）。
-- **Auto update** checks GitHub Releases on startup and updates with one click.
-  **自動更新**：啟動時檢查 GitHub Releases，一鍵完成更新。
+- **Auto update** checks GitHub Releases on startup and, when a new version is out, downloads it, replaces the program and restarts automatically — no prompt. If it fails (e.g. offline), MultiTool keeps working and tries again next launch.
+  **自動更新**：啟動時檢查 GitHub Releases，有新版本會自動下載、替換程式並重新開啟，無須確認。更新失敗（例如沒有網絡）時仍可照常使用，下次開啟時再試。
 
 **Script library 腳本庫** — share scripts peer-to-peer, no server / 點對點分享腳本，無須伺服器
 
@@ -87,6 +88,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   幀率 15–144 FPS；解像度可選原始／720P／1080P／2K／4K（不會放大）；可選擇是否錄製滑鼠游標。
 - Codec H.264 / H.265 (HEVC) / AV1 with GPU encoding (NVIDIA / Intel / AMD, auto-detected) or CPU only; quality Highest / High / Medium / Low; output MP4, MKV or AVI.
   編碼器 H.264／H.265（HEVC）／AV1，可用顯示卡編碼（自動偵測 NVIDIA／Intel／AMD）或只用 CPU；品質分最高／高／中／低；輸出 MP4、MKV 或 AVI。
+- **Show mouse clicks**: an expanding ring appears where you click (left = orange, right = blue, middle = green) and is recorded into the video.
+  **錄製滑鼠點擊**：點擊位置會出現擴散圓圈（左鍵橙色、右鍵藍色、中鍵綠色），並會錄入影片。
 - Start / stop with a hotkey from anywhere. A small timer appears at the top-right while recording and is not captured in the video.
   可於任何地方以快捷鍵開始／停止。錄影期間右上角會顯示計時器，計時器不會被錄入影片。
 - **Recent recording** shows the latest video with **Play** and **Delete** (moves it to the Recycle Bin).
@@ -210,6 +213,18 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v2.1
+- **New: Show mouse clicks** in the Screen recorder — an expanding ring at each click, recorded into the video.
+  **新增：錄製滑鼠點擊**（錄影工具）——每次點擊位置出現擴散圓圈，並錄入影片。
+- **New: Mouse move step** in My Scripts — move from A to B over a set time without clicking.
+  **新增：滑鼠移動步驟**（我的腳本）——於指定時間內由 A 點移到 B 點，不按任何按鍵。
+- **New:** the Key press step accepts the middle and side mouse buttons.
+  **新增：**按鍵步驟可使用滑鼠中鍵及側鍵。
+- **Changed: Auto update** now updates automatically without asking.
+  **變更：自動更新**改為直接自動更新，無須確認。
+- **Fixed:** Tab can be set as a hotkey.
+  **修正：**快捷鍵可設定為 Tab。
 
 ### v2.0
 - **New: Monitor mode** in My Scripts — live views of every script's target program in tiles; tick and start several scripts together, with per-tile Start / Stop and status. Ticked / running scripts move to the front and idle tiles hide their view to save resources; views load only while monitor mode is open.
@@ -402,7 +417,7 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 錄影工具；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Tools, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗工具、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs` Performance Monitor 效能監看；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 錄影工具；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Tools, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗工具、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs` Performance Monitor 效能監看；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
 | `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
 | `release/` | User guide shipped with releases 隨發佈版本附上的使用說明（`使用說明.txt`） |
@@ -437,8 +452,8 @@ The icon is in `assets/` (`icon.png`, `MultiTool.ico`). To change it, edit and r
    打包產生 `Build/MultiTool.exe`。
 3. Create a GitHub Release whose **tag matches the version** (`v1.2`), attach `MultiTool.exe` or a zip containing it, and mark it as **latest**.
    建立 GitHub Release，**標籤須與版本號相同**（`v1.2`），附上 `MultiTool.exe` 或包含該檔案的壓縮檔，並設為 **latest**。
-4. Existing users will be prompted to update the next time they launch the app.
-   現有用戶下次啟動程式時便會收到更新提示。
+4. Existing users are updated automatically the next time they launch the app.
+   現有用戶下次啟動程式時便會自動更新。
 
 ---
 

@@ -11,7 +11,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v2.0";
+    public const string Version = "v2.1";
     public const string Author = "白兔糖v3v";
 
     [STAThread]

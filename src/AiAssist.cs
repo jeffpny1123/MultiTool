@@ -51,6 +51,7 @@ internal static class ScriptJson
           {"type":"text","text":"你好"}                              // 輸入文字（中文都得）
           {"type":"scroll","x":100,"y":200,"notches":-3}             // 滑鼠滾輪：喺 (x,y) 碌 notches 格；正數向上，負數向下
           {"type":"drag","button":"left","x":100,"y":200,"x2":300,"y2":200,"seconds":0.5}   // 由 (x,y) 撳住拖去 (x2,y2)，用時 seconds
+          {"type":"move","x":100,"y":200,"x2":300,"y2":200,"seconds":0.5}   // 淨係移動滑鼠（唔撳）：由 (x,y) 移去 (x2,y2)，用時 seconds
           {"type":"image","images":["怪物.png"],"similarity":80}   // 喺畫面搵其中一張圖（最多 6 張），搵到就點擊佢，搵唔到就跳過繼續
           {"type":"loop","count":0,"limit_seconds":0,"until":"","steps":[...]}   // 重複 count 次；0 = 一直重複；limit_seconds = 行咗幾多秒就停（0 = 唔限）；until = 到呢個現實時間 "HH:mm" 就停（空 = 唔限）
           {"type":"system","action":"open_app","target":"C:\\...\\app.exe","name":"App"}   // 系統：play_sound 播音效（target = wav/mp3 路徑，repeat = true 一直重複到腳本停）；open_app 開程式（target = 路徑）；close_app 閂程式（target = process 名，例如 notepad）；switch_window 切換視窗（target = process 名，name = 視窗標題，可空）；shutdown 關機（seconds = 幾多秒後）
@@ -132,6 +133,8 @@ internal static class ScriptJson
                     ["type"] = "drag", ["button"] = s.Right ? "right" : "left", ["x"] = s.X, ["y"] = s.Y,
                     ["x2"] = s.X2, ["y2"] = s.Y2, ["seconds"] = s.Hold
                 };
+            case StepKind.Move:
+                return new JsonObject { ["type"] = "move", ["x"] = s.X, ["y"] = s.Y, ["x2"] = s.X2, ["y2"] = s.Y2, ["seconds"] = s.Hold };
             case StepKind.Loop: return new JsonObject { ["type"] = "loop", ["count"] = s.Count, ["limit_seconds"] = s.LimitSec, ["until"] = s.Until, ["steps"] = StepsArr(s.Body) };
             case StepKind.StopScript: return new JsonObject { ["type"] = "stop" };
             case StepKind.System:
@@ -347,6 +350,13 @@ internal static class ScriptJson
                     list.Add(st);
                     break;
                 }
+                case "move":
+                    list.Add(new Step
+                    {
+                        Kind = StepKind.Move, X = Int(o, "x", 0), Y = Int(o, "y", 0), X2 = Int(o, "x2", 0), Y2 = Int(o, "y2", 0),
+                        Hold = Math.Max(0m, Dec(o, "seconds", 0.5m))
+                    });
+                    break;
                 case "drag":
                     list.Add(new Step
                     {

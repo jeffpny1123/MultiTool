@@ -1326,5 +1326,18 @@ public static partial class Lang
         ["捲返入嚟睇畫面"] = new[] { "捲動回來即可看到畫面", "卷动回来即可看到画面", "Scroll into view to see the screen" },
         ["未開始"] = new[] { "未開始", "未开始", "Not started" },
         ["冇運行：唔顯示畫面（慳資源）"] = new[] { "未運行：不顯示畫面（節省資源）", "未运行：不显示画面（节省资源）", "Not running: screen hidden to save resources" },
+        ["錄製滑鼠點擊"] = new[] { "錄製滑鼠點擊", "录制鼠标点击", "Show mouse clicks" },
+        ["撳滑鼠嗰陣，點擊位置會出一個擴散圓圈（左鍵橙、右鍵藍），睇片更易見到撳咗邊度。"] = new[] { "按下滑鼠時，點擊位置會出現擴散圓圈（左鍵橙色、右鍵藍色），觀看影片時更易看到點擊位置。", "按下鼠标时，点击位置会出现扩散圆圈（左键橙色、右键蓝色），观看视频时更易看到点击位置。", "Shows an expanding ring where you click (left = orange, right = blue) so clicks are easy to see in the video." },
+        ["滑鼠移動"] = new[] { "滑鼠移動", "鼠标移动", "Mouse move" },
+        ["滑鼠移動、輸入文字、IF 條件、同時運行、系統、中斷循環、停止腳本"] = new[] { "滑鼠移動、輸入文字、IF 條件、同時運行、系統、中斷循環、停止腳本", "鼠标移动、输入文本、IF 条件、同时运行、系统、中断循环、停止脚本", "Mouse move, type text, IF condition, parallel, system, break loop, stop script" },
+        ["移動（唔撳）"] = new[] { "移動（不按下）", "移动（不按下）", "Move (no click)" },
+        ["撳一下，再撳要按嘅鍵或者組合鍵（例如 Shift + Alt + T），滑鼠中鍵同側鍵都得。右鍵可以清除或者揀滑鼠掣。"] = new[] { "按一下，再按要按的鍵或組合鍵（例如 Shift + Alt + T），滑鼠中鍵及側鍵亦可。右鍵可清除或選擇滑鼠按鍵。", "按一下，再按要按的键或组合键（例如 Shift + Alt + T），鼠标中键及侧键亦可。右键可清除或选择鼠标按键。", "Click, then press the key or combination (e.g. Shift + Alt + T); the middle and side mouse buttons work too. Right-click to clear or pick a mouse button." },
+        ["由 A 移去 B 用幾耐（0 = 即刻跳過去）"] = new[] { "由 A 移到 B 所需時間（0 = 立即跳到）", "由 A 移到 B 所需时间（0 = 立即跳到）", "How long to move from A to B (0 = jump instantly)" },
+        ["滑鼠側鍵 1（後退）"] = new[] { "滑鼠側鍵 1（後退）", "鼠标侧键 1（后退）", "Mouse side button 1 (Back)" },
+        ["滑鼠側鍵 2（前進）"] = new[] { "滑鼠側鍵 2（前進）", "鼠标侧键 2（前进）", "Mouse side button 2 (Forward)" },
+        ["呢個版本要更新先可以繼續用。撳「確定」開始更新，更新完會自動重開，你嘅腳本同設定唔會受影響。"] = new[] { "此版本需要更新後才能繼續使用。按「確定」開始更新，完成後會自動重新開啟，你的腳本及設定不受影響。", "此版本需要更新后才能继续使用。按“确定”开始更新，完成后会自动重新打开，你的脚本及设置不受影响。", "This version must be updated before you can continue. Click OK to update; MultiTool restarts automatically and your scripts and settings are kept." },
+        ["更新未完成。要再試一次嗎？撳「取消」會關閉 MultiTool。"] = new[] { "更新未完成。要再試一次嗎？按「取消」會關閉 MultiTool。", "更新未完成。要再试一次吗？按“取消”会关闭 MultiTool。", "The update didn't finish. Try again? Cancel closes MultiTool." },
+        ["自動更新失敗，下次開程式會再試"] = new[] { "自動更新失敗，下次開啟程式時會再試", "自动更新失败，下次打开程序时会再试", "Auto update failed — it will retry next launch" },
+        ["下載更新失敗，詳情已寫入 data\\error.log"] = new[] { "下載更新失敗，詳情已寫入 data\\error.log", "下载更新失败，详情已写入 data\\error.log", "Update download failed — details written to data\\error.log" },
     };
 }

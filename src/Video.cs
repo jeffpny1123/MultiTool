@@ -310,6 +310,7 @@ internal static class RecSettings
     public static bool SysAudio = true, Mic;
     public static int SysVol = 100, MicVol = 100; // 收音音量 %
     public static bool Cursor = true; // 錄埋滑鼠鼠標
+    public static bool Clicks;        // 點擊位置加效果
     public static string Codec = "h264";  // h264 / hevc / av1
     public static bool Hw = true;         // 用顯示卡編碼（自動偵測）
     public static int Quality = 1;        // 0 最高 1 高 2 中 3 低
@@ -323,7 +324,7 @@ internal static class RecSettings
     public static RecOpts Snapshot() => new()
     {
         Mode = Mode, Monitor = Monitor, Region = Region, WinProcess = WinProcess, WinTitle = WinTitle, Fps = Fps, Res = Res,
-        SysVol = SysVol, MicVol = MicVol, Quality = Quality, SysAudio = SysAudio, Mic = Mic, Cursor = Cursor, Hw = Hw,
+        SysVol = SysVol, MicVol = MicVol, Quality = Quality, SysAudio = SysAudio, Mic = Mic, Cursor = Cursor, Clicks = Clicks, Hw = Hw,
         Codec = Codec, Format = Format, Folder = Folder
     };
 
@@ -357,6 +358,7 @@ internal static class RecSettings
                     case "fps": Fps = Math.Clamp(I(30), 5, 240); break;
                     case "res": Res = ResList.Contains(I(0)) ? I(0) : 0; break;
                     case "cursor": Cursor = v != "0"; break;
+                    case "clicks": Clicks = v == "1"; break;
                     case "codec": if (Codecs.Contains(v)) Codec = v; break;
                     case "hw": Hw = v != "0"; break;
                     case "quality2": Quality = Math.Clamp(I(1), 0, 3); break;
@@ -381,7 +383,7 @@ internal static class RecSettings
             {
                 "mode=" + (int)Mode, "monitor=" + Monitor, $"region={Region.X},{Region.Y},{Region.Width},{Region.Height}",
                 "winproc=" + WinProcess, "wintitle=" + WinTitle.Replace('\n', ' '), "fps=" + Fps, "res=" + Res,
-                "sys=" + (SysAudio ? 1 : 0), "mic=" + (Mic ? 1 : 0), "sysvol=" + SysVol, "cursor=" + (Cursor ? 1 : 0), "codec=" + Codec, "hw=" + (Hw ? 1 : 0), "quality2=" + Quality, "format=" + Format, "micvol=" + MicVol, "folder=" + Folder
+                "sys=" + (SysAudio ? 1 : 0), "mic=" + (Mic ? 1 : 0), "sysvol=" + SysVol, "cursor=" + (Cursor ? 1 : 0), "clicks=" + (Clicks ? 1 : 0), "codec=" + Codec, "hw=" + (Hw ? 1 : 0), "quality2=" + Quality, "format=" + Format, "micvol=" + MicVol, "folder=" + Folder
             });
         }
         catch { }
@@ -396,7 +398,7 @@ internal sealed class RecOpts
     public Rectangle Region;
     public string WinProcess = "", WinTitle = "";
     public int Fps = 30, Res, SysVol = 100, MicVol = 100, Quality = 1;
-    public bool SysAudio = true, Mic, Cursor = true, Hw = true;
+    public bool SysAudio = true, Mic, Cursor = true, Clicks, Hw = true;
     public string Codec = "h264", Format = "mp4", Folder = "";
     public string? ReplayDir;      // 有 = 精彩重播（循環錄細段）
     public int ReplaySeconds = 30;
@@ -473,6 +475,7 @@ internal sealed class RecordSession
             // 部分電腦（例如遠端桌面 / 舊顯示卡）冇 Desktop Duplication：改用 gdigrab
             await RunAsync(rect, sb, mon, full, enc, useDda: false);
         }
+        if (_o.Clicks && _o.ReplayDir == null) { ClickFx.Start(); _clicks = true; }
     }
 
     private async Task RunAsync(Rectangle rect, Rectangle screen, int mon, bool full, string enc, bool useDda)
@@ -588,8 +591,11 @@ internal sealed class RecordSession
     }
 
     /// <summary>停：叫 ffmpeg 收尾（寫好 MP4），最多等 15 秒。</summary>
+    private bool _clicks;
+
     public async Task StopAsync()
     {
+        if (_clicks) { _clicks = false; ClickFx.Stop(); }
         if (_ff == null) return;
         try
         {
@@ -822,6 +828,11 @@ public sealed class RecordPage : Panel
         var picRow = Row(L(Lang.T("畫面")), _fps, _res);
         _cursor.Margin = new Padding(Ui.S(6), Ui.S(8), Ui.S(12), 0);
         picRow.Controls.Add(_cursor);
+        var clicks = new CheckBox { Text = Lang.T("錄製滑鼠點擊"), Checked = RecSettings.Clicks, AutoSize = true, ForeColor = Ui.Text, BackColor = Ui.Card, Font = Ui.F(9.75f),
+            Margin = new Padding(0, Ui.S(8), Ui.S(12), 0) };
+        clicks.CheckedChanged += (_, _) => { RecSettings.Clicks = clicks.Checked; RecSettings.Save(); };
+        new ToolTip().SetToolTip(clicks, Lang.T("撳滑鼠嗰陣，點擊位置會出一個擴散圓圈（左鍵橙、右鍵藍），睇片更易見到撳咗邊度。"));
+        picRow.Controls.Add(clicks);
         col.Controls.Add(picRow);
         col.Controls.Add(Row(L(Lang.T("編碼")), _codec, _qual, _format));
         _sys.Margin = new Padding(0, Ui.S(8), Ui.S(6), 0);

@@ -450,16 +450,28 @@ internal static class Keyboard
         Interlocked.Exchange(ref _lastInjectTicks, Environment.TickCount64);
     }
 
+    /// <summary>滑鼠中鍵 / 側鍵（當按鍵用）。</summary>
+    public static bool IsMouseVk(int vk) => vk is 0x04 or 0x05 or 0x06;
+
+    private static void SendMouseButton(int vk, bool up)
+    {
+        uint flags = vk == 0x04 ? (up ? 0x0040u : 0x0020u) : (up ? 0x0100u : 0x0080u);
+        uint data = vk == 0x05 ? 1u : vk == 0x06 ? 2u : 0u;
+        var inp = new INPUT { type = 0 };
+        inp.u.mi = new MOUSEINPUT { dwFlags = flags, mouseData = data };
+        SendInput(1, new[] { inp }, Marshal.SizeOf<INPUT>());
+    }
+
     /// <summary>淨係按下 / 淨係彈起（腳本用）。</summary>
     public static void Down(int vk)
     {
         Interlocked.Exchange(ref _lastInjectTicks, Environment.TickCount64);
-        Send(vk, false);
+        if (IsMouseVk(vk)) SendMouseButton(vk, false); else Send(vk, false);
     }
 
     public static void Up(int vk)
     {
-        Send(vk, true);
+        if (IsMouseVk(vk)) SendMouseButton(vk, true); else Send(vk, true);
         Interlocked.Exchange(ref _lastInjectTicks, Environment.TickCount64);
     }
 
@@ -624,7 +636,7 @@ internal sealed class HotkeyBox : TextBox
         if (!Capturing) return base.ProcessCmdKey(ref msg, keyData); // 未撳過個格仔：唔當設定
         var code = keyData & Keys.KeyCode;
         var mods = keyData & Keys.Modifiers;
-        if (code == Keys.Tab && mods == Keys.None) return base.ProcessCmdKey(ref msg, keyData);
+        // Tab 都可以做快捷鍵（設定緊時唔再用嚟跳去下一格）
 
         if ((code is Keys.Back or Keys.Delete) && mods == Keys.None)
         {
