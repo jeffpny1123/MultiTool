@@ -19,7 +19,7 @@ namespace MultiTool;
 /// </summary>
 internal static class Updater
 {
-    public const string Repo = "jeffpny1123/MultiTool";
+    public const string Repo = "jeffpny1123/MultiTool-Releases"; // 程式碼 repo 係 private；發佈放喺呢個公開 repo
     public static string RepoUrl => "https://github.com/" + Repo;
 
     private static bool _busy;

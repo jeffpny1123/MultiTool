@@ -402,8 +402,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 ## Download 下載
 
-Download the latest `MultiTool.exe` (or zip) from **Releases**, extract it and run. No .NET installation is required.
-從 **Releases** 下載最新的 `MultiTool.exe`（或壓縮檔），解壓後直接執行，無須安裝 .NET。
+Download the latest zip from **[MultiTool-Releases](https://github.com/jeffpny1123/MultiTool-Releases/releases/latest)**, extract it and run `MultiTool.exe`. No .NET installation is required.
+從 **[MultiTool-Releases](https://github.com/jeffpny1123/MultiTool-Releases/releases/latest)** 下載最新的壓縮檔，解壓後直接執行 `MultiTool.exe`，無須安裝 .NET。
 
 Scripts, screenshots and settings are stored in the `data/` folder next to the executable.
 腳本、截圖及設定均儲存於執行檔旁的 `data/` 資料夾。
@@ -450,8 +450,8 @@ The icon is in `assets/` (`icon.png`, `MultiTool.ico`). To change it, edit and r
    更新 `src/App.cs` 中的 `Version`（例如 `v1.4`）。
 2. Build `Build/MultiTool.exe`.
    打包產生 `Build/MultiTool.exe`。
-3. Create a GitHub Release whose **tag matches the version** (`v1.2`), attach `MultiTool.exe` or a zip containing it, and mark it as **latest**.
-   建立 GitHub Release，**標籤須與版本號相同**（`v1.2`），附上 `MultiTool.exe` 或包含該檔案的壓縮檔，並設為 **latest**。
+3. Create the Release in the public **[MultiTool-Releases](https://github.com/jeffpny1123/MultiTool-Releases)** repo (this source repo is private; the updater reads releases from there). The **tag must match the version** (`v1.2`); attach `MultiTool.exe` or a zip containing it, and mark it as **latest**.
+   於公開的 **MultiTool-Releases** repo 建立 Release（此原始碼 repo 為私人；自動更新從該處讀取）。**標籤須與版本號相同**（`v1.2`），附上 `MultiTool.exe` 或包含該檔案的壓縮檔，並設為 **latest**。
 4. Existing users are updated automatically the next time they launch the app.
    現有用戶下次啟動程式時便會自動更新。
 
