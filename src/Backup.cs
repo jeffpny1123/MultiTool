@@ -141,7 +141,7 @@ internal static class DataBackup
             });
             MessageBox.Show(owner, Lang.T("還原好咗，MultiTool 而家重新啟動。"), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
             string exe = Environment.ProcessPath ?? Application.ExecutablePath;
-            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" });
+            Process.Start(new ProcessStartInfo(exe, "--restart") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" });
             Application.Exit();
         }
         catch (Exception ex)

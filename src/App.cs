@@ -11,7 +11,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v2.3";
+    public const string Version = "v2.4";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -32,9 +32,16 @@ internal static class Program
             if (e.ExceptionObject is Exception ex) AppPaths.LogError("Fatal", ex);
         };
         var argv = Environment.GetCommandLineArgs();
-        // 右鍵影片 / 相片 →「開啟檔案」→ 影片剪輯：MultiTool 已經開咗就交俾佢
+        // 右鍵影片 / 相片 →「開啟檔案」→ 影片剪輯：--edit 檔案
         var edit = Video.EdShell.EditArgs(argv);
-        if (edit != null && Video.EdShell.TrySend(edit)) return;
+        // 只准開一個：已經開咗就叫嗰個彈出嚟（或者交檔案俾佢開），自己即刻走
+        // --restart（換語言 / 主題 / 還原備份 / 管理員重開）：等舊嗰個閂咗先開
+        if (!AcquireSingle(argv.Contains("--restart") ? 15000 : 0))
+        {
+            var msg = edit ?? new[] { Video.EdShell.ShowMsg };
+            for (int i = 0; i < 10 && !Video.EdShell.TrySend(msg); i++) System.Threading.Thread.Sleep(500);
+            return;
+        }
         PendingEdit = edit;
         bool startup = argv.Any(a => a == "--startup");
         Application.Run(new MainForm(startup && edit == null));
@@ -42,6 +49,21 @@ internal static class Program
 
     /// <summary>啟動時要用影片剪輯開嘅檔案。</summary>
     public static string[]? PendingEdit;
+
+    private static System.Threading.Mutex? _single;
+
+    /// <summary>攞單一實例鎖（成個程式運行期間都揸住）；攞唔到 = 已經有一個開緊。</summary>
+    private static bool AcquireSingle(int waitMs)
+    {
+        try
+        {
+            _single = new System.Threading.Mutex(false, "MultiTool-Single-" + Environment.UserName);
+            try { return _single.WaitOne(waitMs); }
+            catch (System.Threading.AbandonedMutexException) { return true; } // 上一個閃退：當攞到
+        }
+        catch (UnauthorizedAccessException) { return false; } // 管理員身分開緊嗰個
+        catch { return true; }
+    }
 }
 
 /// <summary>主視窗：左邊側欄揀功能，右邊顯示嗰個功能嘅頁。以後加功能就喺 Pages 加一項。</summary>
@@ -78,7 +100,11 @@ internal sealed class MainForm : Form
         Shown += (_, _) =>
         {
             Video.EdShell.Sync();
-            Video.EdShell.Listen(files => BeginInvoke(() => OpenInEditor(files)));
+            Video.EdShell.Listen(files => BeginInvoke(() =>
+            {
+                if (files.Length == 1 && files[0] == Video.EdShell.ShowMsg) RestoreFromTray();
+                else OpenInEditor(files);
+            }));
             if (Program.PendingEdit is { } pe) { Program.PendingEdit = null; BeginInvoke(() => OpenInEditor(pe)); }
         };
         FormClosed += (_, _) => Scripts.ShareService.Stop();
@@ -338,7 +364,7 @@ internal sealed class MainForm : Form
         try
         {
             string exe = Environment.ProcessPath ?? Application.ExecutablePath;
-            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" });
+            Process.Start(new ProcessStartInfo(exe, "--restart") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" });
         }
         catch (Exception ex) { AppPaths.LogError("重新啟動", ex); }
         Application.Exit();
@@ -354,7 +380,7 @@ internal sealed class MainForm : Form
         try
         {
             string exe = Environment.ProcessPath ?? Application.ExecutablePath;
-            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" });
+            Process.Start(new ProcessStartInfo(exe, "--restart") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" });
         }
         catch (Exception ex) { AppPaths.LogError("重新啟動", ex); }
         Application.Exit();

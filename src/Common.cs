@@ -182,7 +182,7 @@ internal static class Elevation
         try
         {
             string exe = Environment.ProcessPath ?? Application.ExecutablePath;
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, "--restart")
             {
                 UseShellExecute = true, Verb = "runas", WorkingDirectory = Path.GetDirectoryName(exe) ?? ""
             });
@@ -311,6 +311,56 @@ internal static class Matcher
             }
         }
         return best;
+    }
+
+    /// <summary>
+    /// 搵晒畫面上所有夠相似嘅位置（例如背包入面幾格一樣嘅物品）。
+    /// 縮細版搵晒高分嘅位，再原尺寸微調；重疊嘅只留一個。
+    /// </summary>
+    public static List<Result> FindAll(Gray screen, Gray tpl, Rectangle? exclude, double threshold, CancellationToken ct, int max = 64)
+    {
+        var list = new List<Result>();
+        if (tpl.W > screen.W || tpl.H > screen.H || tpl.W < 2 || tpl.H < 2) return list;
+        int s = Math.Clamp(Math.Min(tpl.W, tpl.H) / 12, 1, 4);
+        var sc = screen.Down(s);
+        var tc = tpl.Down(s);
+        if (tc.W > sc.W || tc.H > sc.H) return list;
+        var map = NccMap(sc, tc, ct);
+        int mw = sc.W - tc.W + 1, mh = sc.H - tc.H + 1;
+        bool Excluded(int fx, int fy) => exclude.HasValue && exclude.Value.Contains(fx + tpl.W / 2, fy + tpl.H / 2);
+        PrepTemplate(tpl, out var tz, out double tNorm, out double tMean);
+        var used = (float[])map.Clone();
+        double floor = Math.Max(0.3, threshold - 0.2); // 縮細版分數會低少少
+        for (int k = 0; k < max * 3 && list.Count < max; k++)
+        {
+            ct.ThrowIfCancellationRequested();
+            int bi = -1; float bv = float.MinValue;
+            for (int i = 0; i < used.Length; i++)
+            {
+                if (used[i] <= bv) continue;
+                int x = i % mw, y = i / mw;
+                if (Excluded(x * s, y * s)) continue;
+                bv = used[i]; bi = i;
+            }
+            if (bi < 0 || bv < floor) break;
+            int cx = bi % mw, cy = bi / mw;
+            int rx = Math.Max(1, tc.W / 2), ry = Math.Max(1, tc.H / 2);
+            for (int y = Math.Max(0, cy - ry); y <= Math.Min(mh - 1, cy + ry); y++)
+            for (int x = Math.Max(0, cx - rx); x <= Math.Min(mw - 1, cx + rx); x++)
+                used[y * mw + x] = float.MinValue;
+            var best = new Result { Score = 0, W = tpl.W, H = tpl.H };
+            for (int y = cy * s - s; y <= cy * s + s; y++)
+            for (int x = cx * s - s; x <= cx * s + s; x++)
+            {
+                if (x < 0 || y < 0 || x + tpl.W > screen.W || y + tpl.H > screen.H || Excluded(x, y)) continue;
+                double v = NccAt(screen, x, y, tpl.W, tpl.H, tz, tNorm, tMean);
+                if (v > best.Score) best = new Result { Score = v, X = x, Y = y, W = tpl.W, H = tpl.H };
+            }
+            if (best.Score < threshold) continue;
+            if (list.Any(r => Math.Abs(r.X - best.X) < tpl.W / 2 && Math.Abs(r.Y - best.Y) < tpl.H / 2)) continue;
+            list.Add(best);
+        }
+        return list;
     }
 
     private static void PrepTemplate(Gray t, out float[] tz, out double norm, out double mean)

@@ -18,6 +18,11 @@ namespace MultiTool.Video;
 internal static class EdShell
 {
     private const string ProgId = "MultiTool.VideoEditor";
+    /// <summary>第二次開 MultiTool：叫已經開咗嗰個彈出嚟。</summary>
+    public const string ShowMsg = "\u0001show";
+
+    [DllImport("user32.dll")]
+    private static extern bool AllowSetForegroundWindow(int pid);
     private static string PipeName => "MultiTool-open-" + Environment.UserName;
     private static IEnumerable<string> Exts => MediaInfo.VideoExt.Concat(MediaInfo.ImageExt).Distinct();
 
@@ -99,6 +104,7 @@ internal static class EdShell
         {
             using var c = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
             c.Connect(1000);
+            AllowSetForegroundWindow(-1); // 俾嗰邊可以彈去最前
             var data = Encoding.UTF8.GetBytes(string.Join("\n", files));
             c.Write(data, 0, data.Length);
             c.Flush();

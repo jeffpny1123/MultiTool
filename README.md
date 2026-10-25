@@ -248,6 +248,16 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 ## Changelog 更新紀錄
 
+### v2.4
+- **New: Drag by image** in My Scripts — the Drag step can find every matching image on screen and drag them, e.g. **group identical inventory items together**, or drag rightmost → leftmost.
+  **新增：拖拉搵圖**（我的腳本）——拖拉步驟可找出畫面上所有相同的圖再拖曳，例如**把背包內相同物品疊在一起**，或由最右拖到最左。
+- **New: Mouse step — Position / Find image / IF position** — click a fixed point, the centre of a found image, or where the IF matched (image centre, colour point or text area centre; only inside an IF). Releasing ("Up") on a found image picks a different matching image from the one being held.
+  **新增：滑鼠步驟可選「座標／找圖／IF 座標」**——點擊固定位置、找到的圖片中央，或 IF 找到的位置（圖片中央、顏色該點或文字範圍中央；只限 IF 內）。以「彈起」找圖時會自動選另一張相同的圖。
+- **Changed:** when a window is chosen, image search only looks inside that window; the position picker button is renamed to 位置.
+  **變更：**選擇了視窗時，找圖只會在該視窗內搜尋；記錄座標的按鈕改名為「位置」。
+- **Fixed:** opening MultiTool twice no longer starts a second copy — the running one is brought to the front.
+  **修正：**重複開啟 MultiTool 不會再開多一個，會把已開啟的視窗帶到最前。
+
 ### v2.3
 - **New: Text and number conditions** in My Scripts — an IF can check whether a screen area shows some text, or compare the number in it (e.g. drink a potion when HP is below 300).
   **新增：文字及數字條件**（我的腳本）——IF 可檢查畫面範圍是否出現指定文字，或比較其中的數字（例如血量低於 300 便喝藥水）。
