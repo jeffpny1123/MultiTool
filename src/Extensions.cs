@@ -30,6 +30,7 @@ internal static class Extensions
     public const string Perf = "perf";
     public const string Disk = "disk";
     public const string Doc = "doc";
+    public const string Editor = "editor";
 
     /// <summary>工具庫分類（一個工具可以屬幾類）。</summary>
     public static readonly string[] Categories = { "game", "media", "work", "system", "net" };
@@ -48,6 +49,7 @@ internal static class Extensions
     {
         Scripts => new[] { "work", "game" },
         Recorder => new[] { "media", "game" },
+        Editor => new[] { "media" },
         Replay => new[] { "media", "game" },
         Remap => new[] { "game" },
         Window => new[] { "work", "game" },
@@ -63,7 +65,7 @@ internal static class Extensions
     };
 
     /// <summary>用 ffmpeg 嘅工具：最後一個移除先刪 ffmpeg。</summary>
-    private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert, Download };
+    private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert, Download, Editor };
 
     private static void RemoveFfmpeg(string id)
     {
@@ -71,33 +73,54 @@ internal static class Extensions
         Video.Ffmpeg.Delete();
     }
 
-    private static Info FfmpegTool(string id, string name, string desc) =>
-        new(id, name, desc, false, (p, ct) => Video.Ffmpeg.InstallAsync(p, ct), () => Video.Ffmpeg.Ready, () => RemoveFfmpeg(id), "~100 MB");
+    private static Info FfmpegTool(string id, string name, string desc, string? since = null) =>
+        new(id, name, desc, false, (p, ct) => Video.Ffmpeg.InstallAsync(p, ct), () => Video.Ffmpeg.Ready, () => RemoveFfmpeg(id), "~100 MB", since);
 
     internal sealed record Info(
         string Id, string Name, string Desc, bool DefaultOn,
         Func<Action<string, double>, CancellationToken, Task>? Install = null, // 安裝時要做嘅嘢（例如下載）
         Func<bool>? Ready = null,                                              // 額外檔案齊唔齊
         Action? Remove = null,                                                 // 移除時清理
-        string? Size = null);
+        string? Size = null,
+        string? Since = null);                                                 // 邊個版本推出（新工具：工具庫右上角顯示 NEW）
+
+    /// <summary>
+    /// 新推出嘅工具：推出嗰個版本同下一個版本都顯示 NEW（例如 v2.3 推出，v2.3、v2.4 都有）。
+    /// 以後加新工具記得喺 All 入面填 Since: "vX.Y"。
+    /// </summary>
+    public static bool IsNew(Info e)
+    {
+        static int Num(string v)
+        {
+            var p = v.Trim().TrimStart('v', 'V').Split('.');
+            int major = p.Length > 0 && int.TryParse(p[0], out var a) ? a : 0;
+            int minor = p.Length > 1 && int.TryParse(p[1], out var b) ? b : 0;
+            return major * 100 + minor;
+        }
+        if (string.IsNullOrEmpty(e.Since)) return false;
+        int since = Num(e.Since), now = Num(Program.Version);
+        return now >= since && now - since <= 1;
+    }
 
     public static readonly List<Info> All = new()
     {
         new(Scripts, Lang.T("我的腳本"),
             Lang.T("自己砌自動化腳本（按鍵、滑鼠、搵圖、循環、IF、錄製…），包括腳本庫。"), true),
-        FfmpegTool(Recorder, Lang.T("錄影工具"),
+        FfmpegTool(Recorder, Lang.T("螢幕錄影"),
             Lang.T("錄低螢幕、範圍或者視窗，連電腦聲同咪高峰，輸出 MP4。需要下載 ffmpeg。")),
+        FfmpegTool(Editor, Lang.T("影片剪輯"),
+            Lang.T("好似 Clipchamp 咁剪片：時間軸剪接、分割、文字標題、背景音樂、轉場、速度同濾鏡，即時預覽連聲，匯出 MP4（可以用顯示卡加速）。需要下載 ffmpeg。"), "v2.3"),
         FfmpegTool(Replay, Lang.T("精彩重播"),
             Lang.T("背景一直錄住最近 15 秒至 5 分鐘，撳快捷鍵先存低，錯過精彩位都唔怕。需要下載 ffmpeg。")),
         new(Remap, Lang.T("遊戲改鍵"),
             Lang.T("將一粒鍵變成另一粒鍵，滑鼠側鍵都得，可以只限某個遊戲生效。"), false),
-        new(Window, Lang.T("視窗工具"),
+        new(Window, Lang.T("視窗管理"),
             Lang.T("將視窗置頂、設透明度、變無邊框全螢幕或者置中，有快捷鍵。"), false),
         new(Clipboard, Lang.T("剪貼簿紀錄"),
             Lang.T("記低你複製過嘅文字同圖片，快捷鍵叫出細視窗，撳 1-9 就貼上。"), false),
         new(Ocr, Lang.T("文字辨識"),
             Lang.T("框住畫面上嘅文字就抽出嚟複製，用 Windows 內置辨識，唔使上網。"), false),
-        new(Convert, Lang.T("轉檔工具"),
+        new(Convert, Lang.T("格式轉換"),
             Lang.T("影音：影片、聲音、圖片互轉（MP4、GIF、MP3、PNG…），剪頭尾同縮細，第一次用要下載 ffmpeg（~100 MB）。文件：Excel、CSV、TSV、JSON 互轉，修正 CSV 中文亂碼。"), false,
             Remove: () => RemoveFfmpeg(Convert)),
         new(GameServer, Lang.T("遊戲伺服器"),
@@ -109,8 +132,8 @@ internal static class Extensions
         new(Remote, Lang.T("遠端桌面（測試）"),
             Lang.T("MultiTool 內置嘅遠端桌面：用 ID + 密碼控制其他電腦或者俾人連入嚟，全程加密。冇中轉伺服器：被控電腦用流動數據、CGNAT 或者公共網絡就連唔到。"), false,
             Remove: () => Tools.RemoteHost.Stop()),
-        new(Perf, Lang.T("效能監看"),
-            Lang.T("即時睇 CPU、GPU、RAM、VRAM、磁碟、網速同 GPU 溫度，仲可以喺遊戲畫面角落顯示。用 Windows 內置資料，唔使第三方程式。"), false,
+        new(Perf, Lang.T("效能監控"),
+            Lang.T("即時睇 CPU、GPU、RAM、VRAM、磁碟、網速同 GPU 溫度，仲可以喺遊戲畫面角落顯示；有 Ping 監看同一撳閂背景程式嘅遊戲模式。用 Windows 內置資料，唔使第三方程式。"), false,
             Remove: () => Tools.PerfOverlay.Set(false, false)),
         new(Disk, Lang.T("磁碟空間及健康"),
             Lang.T("睇每個磁碟剩幾多位、硬碟健康（溫度、SSD 壽命、讀寫錯誤），掃描邊個資料夾最食位，一撳掉入資源回收筒。"), false),
@@ -118,7 +141,7 @@ internal static class Extensions
 
     /// <summary>工具庫 / 首頁排序：常用嘅放前，我的腳本第一，測試版最後。</summary>
     private static readonly string[] Order =
-        { Scripts, Recorder, Download, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
+        { Scripts, Recorder, Editor, Download, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
 
     private static readonly bool Sorted = SortAll();
 
@@ -147,7 +170,7 @@ internal static class Extensions
                         if (l.Trim().Length > 0) _installed.Add(l.Trim());
                 }
                 else foreach (var e in All.Where(e => e.DefaultOn)) _installed.Add(e.Id); // 第一次：用預設
-                if (_installed.Remove(Doc)) _installed.Add(Convert); // 舊版「文件轉檔」併咗入轉檔工具
+                if (_installed.Remove(Doc)) _installed.Add(Convert); // 舊版「文件轉檔」併咗入格式轉換
             }
             catch { }
             return _installed;
@@ -161,6 +184,7 @@ internal static class Extensions
     {
         Scripts => ("▶", Ui.Accent),
         Recorder => ("●", Ui.Danger),
+        Editor => ("✂", Ui.Hex(0xE07A5F)),
         Replay => ("↺", Ui.Danger),
         Remap => ("⌨", Ui.Accent2),
         Window => ("▣", Ui.Accent),
@@ -174,6 +198,9 @@ internal static class Extensions
         Disk => ("◔", Ui.Accent2),
         Doc => ("▦", Ui.Accent),
         "ai" => ("✦", Ui.Accent2),
+        "home" => ("⌂", Ui.Accent),
+        "extensions" => ("▦", Ui.Success),
+        "settings" => ("⚙", Ui.TextDim),
         "add" => ("+", Ui.Accent),
         _ => ("★", Ui.Accent2)
     };
@@ -398,7 +425,21 @@ internal sealed class ExtensionsPage : Panel
             // 名 + 狀態
             int tx = (int)ir.Right + Ui.S(12);
             var tf = Ui.F(11.5f, FontStyle.Bold);
-            TextRenderer.DrawText(g, _e.Name, tf, new Rectangle(tx, p + Ui.S(2), Width - tx - p, tf.Height + 2), Ui.Text,
+            int nameRight = Width - p;
+            if (Extensions.IsNew(_e))
+            {
+                // 右上角 NEW 標籤
+                var nf = Ui.F(7.75f, FontStyle.Bold);
+                var ns = TextRenderer.MeasureText("NEW", nf);
+                var nr = new RectangleF(Width - p - ns.Width - Ui.S(12), p - Ui.S(4), ns.Width + Ui.S(12), ns.Height + Ui.S(4));
+                using (var np = Ui.Round(nr, nr.Height / 2f))
+                using (var nb = new SolidBrush(Ui.Danger))
+                    g.FillPath(nb, np);
+                TextRenderer.DrawText(g, "NEW", nf, Rectangle.Round(nr), Color.White,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                nameRight = (int)nr.Left - Ui.S(6);
+            }
+            TextRenderer.DrawText(g, _e.Name, tf, new Rectangle(tx, p + Ui.S(2), Math.Max(10, nameRight - tx), tf.Height + 2), Ui.Text,
                 TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
             var sf = Ui.F(8.75f);
             string sub = on ? Lang.T("✓ 已安裝") : Lang.T("未安裝");

@@ -11,7 +11,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v2.2";
+    public const string Version = "v2.3";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -31,9 +31,17 @@ internal static class Program
         {
             if (e.ExceptionObject is Exception ex) AppPaths.LogError("Fatal", ex);
         };
-        bool startup = Environment.GetCommandLineArgs().Any(a => a == "--startup");
-        Application.Run(new MainForm(startup));
+        var argv = Environment.GetCommandLineArgs();
+        // 右鍵影片 / 相片 →「開啟檔案」→ 影片剪輯：MultiTool 已經開咗就交俾佢
+        var edit = Video.EdShell.EditArgs(argv);
+        if (edit != null && Video.EdShell.TrySend(edit)) return;
+        PendingEdit = edit;
+        bool startup = argv.Any(a => a == "--startup");
+        Application.Run(new MainForm(startup && edit == null));
     }
+
+    /// <summary>啟動時要用影片剪輯開嘅檔案。</summary>
+    public static string[]? PendingEdit;
 }
 
 /// <summary>主視窗：左邊側欄揀功能，右邊顯示嗰個功能嘅頁。以後加功能就喺 Pages 加一項。</summary>
@@ -67,6 +75,12 @@ internal sealed class MainForm : Form
         ResizeBegin += (_, _) => { sizeAtBegin = Size; LiveResize.Active = true; };
         // 腳本庫分享（有開先會行）
         Shown += (_, _) => Scripts.ShareService.Start();
+        Shown += (_, _) =>
+        {
+            Video.EdShell.Sync();
+            Video.EdShell.Listen(files => BeginInvoke(() => OpenInEditor(files)));
+            if (Program.PendingEdit is { } pe) { Program.PendingEdit = null; BeginInvoke(() => OpenInEditor(pe)); }
+        };
         FormClosed += (_, _) => Scripts.ShareService.Stop();
         ResizeEnd += (_, _) =>
         {
@@ -142,17 +156,18 @@ internal sealed class MainForm : Form
         // ---- 功能清單（以後喺度加）----
         AddPage(Lang.T("首頁"), BuildHomePage, "home");
         AddPage(Lang.T("我的腳本"), Scripts.ScriptsPage.Build, "scripts", Extensions.Scripts);
-        AddPage(Lang.T("錄影工具"), Video.RecordPage.Build, "recorder", Extensions.Recorder);
+        AddPage(Lang.T("螢幕錄影"), Video.RecordPage.Build, "recorder", Extensions.Recorder);
+        AddPage(Lang.T("影片剪輯"), Video.EditorPage.Build, "editor", Extensions.Editor);
         AddPage(Lang.T("精彩重播"), Video.ReplayPage.Build, "replay", Extensions.Replay);
         AddPage(Lang.T("遊戲改鍵"), Tools.RemapPage.Build, "remap", Extensions.Remap);
-        AddPage(Lang.T("視窗工具"), Tools.WindowPage.Build, "window", Extensions.Window);
+        AddPage(Lang.T("視窗管理"), Tools.WindowPage.Build, "window", Extensions.Window);
         AddPage(Lang.T("剪貼簿紀錄"), Tools.ClipboardPage.Build, "clipboard", Extensions.Clipboard);
         AddPage(Lang.T("文字辨識"), Tools.OcrPage.Build, "ocr", Extensions.Ocr);
-        AddPage(Lang.T("轉檔工具"), Tools.ConvertHub.Build, "convert", Extensions.Convert);
+        AddPage(Lang.T("格式轉換"), Tools.ConvertHub.Build, "convert", Extensions.Convert);
         AddPage(Lang.T("遊戲伺服器"), Tools.GameServerPage.Build, "gameserver", Extensions.GameServer);
         AddPage(Lang.T("影片下載"), Tools.DownloadPage.Build, "download", Extensions.Download);
         AddPage(Lang.T("遠端桌面（測試）"), Tools.RemotePage.Build, "remote", Extensions.Remote);
-        AddPage(Lang.T("效能監看"), Tools.PerfPage.Build, "perf", Extensions.Perf);
+        AddPage(Lang.T("效能監控"), Tools.PerfHub.Build, "perf", Extensions.Perf);
         AddPage(Lang.T("磁碟空間及健康"), Tools.DiskPage.Build, "disk", Extensions.Disk);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");
         AddPage(Lang.T("工具庫"), () => new ExtensionsPage(), "extensions");
@@ -164,6 +179,7 @@ internal sealed class MainForm : Form
         Tools.PerfOverlay.Wire();
         Extensions.Changed += () => BeginInvoke(() =>
         {
+            Video.EdShell.Sync();
             LayoutNav();
             // 啱啱安裝咗：即刻整好個頁（佢嘅快捷鍵唔使打開過都用得）
             for (int i = 0; i < _pages.Count; i++)
@@ -197,6 +213,19 @@ internal sealed class MainForm : Form
         _tray!.Visible = true;
         Hide();
         if (tip) try { _tray.ShowBalloonTip(3000, Program.AppName, Lang.T("MultiTool 喺系統匣繼續運行，腳本同快捷鍵照用得。右鍵圖示可以結束。"), ToolTipIcon.Info); } catch { }
+    }
+
+    /// <summary>用影片剪輯開檔案（新專案）。</summary>
+    private void OpenInEditor(string[] files)
+    {
+        RestoreFromTray();
+        if (!Extensions.IsInstalled(Extensions.Editor))
+        {
+            MessageBox.Show(this, Lang.T("未安裝影片剪輯：請去「工具庫」安裝。"), Program.AppName);
+            return;
+        }
+        ShowKey("editor");
+        Video.EditorPage.Instance?.OpenAsNewProject(files);
     }
 
     private void RestoreFromTray()
@@ -334,6 +363,7 @@ internal sealed class MainForm : Form
     private void AddPage(string name, Func<Control> build, string key, string? ext = null)
     {
         var nav = new NavItem(name);
+        (nav.Glyph, nav.Hue) = Extensions.Look(ext ?? key);
         int index = _pages.Count;
         nav.SetBounds(0, index * Ui.S(44), _sidebar.Width, Ui.S(40));
         nav.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
@@ -345,7 +375,7 @@ internal sealed class MainForm : Form
         // 拖住上下搬 = 自己排次序
         nav.MouseDown += (_, e) =>
         {
-            if (e.Button != MouseButtons.Left) return;
+            if (e.Button != MouseButtons.Left || IsFixed(index)) return; // 首頁 / 工具庫 / 設定 固定位置
             _dragNav = index;
             _dragY = e.Y;
             _dragging = false;
@@ -361,7 +391,7 @@ internal sealed class MainForm : Form
                 nav.Cursor = Cursors.SizeNS;
             }
             var vis = VisibleOrder();
-            int minTop = -_navOffset, maxTop = -_navOffset + (vis.Count - 1) * _step;
+            int minTop = -_navOffset + FixedTop * _step, maxTop = -_navOffset + (FixedTop + vis.Count - 1) * _step;
             nav.Top = Math.Max(minTop, Math.Min(maxTop, nav.Top + e.Y - _dragY));
             PreviewDrag(index, nav.Top + nav.Height / 2);
         };
@@ -430,15 +460,32 @@ internal sealed class MainForm : Form
         catch (Exception ex) { AppPaths.LogError("儲存側欄排序", ex); }
     }
 
-    private System.Collections.Generic.List<int> VisibleOrder() => _order.Where(PageVisible).ToList();
+    // 首頁固定喺最頂；工具庫、設定固定喺最底（唔可以拖 / 改次序）
+    private static readonly string[] FixedTopKeys = { "home" };
+    private static readonly string[] FixedBottomKeys = { "extensions", "settings" };
+    private bool IsFixed(int i) => FixedTopKeys.Contains(_pageKeys[i].Key) || FixedBottomKeys.Contains(_pageKeys[i].Key);
+    private int FixedTop => FixedTopKeys.Count(k => _pageKeys.Any(p => p.Key == k));
+
+    /// <summary>可以排次序嘅項目（已安裝、唔係固定位置）。</summary>
+    private System.Collections.Generic.List<int> VisibleOrder() => _order.Where(i => PageVisible(i) && !IsFixed(i)).ToList();
+
+    /// <summary>側欄實際顯示次序：首頁 → 可排序嘅工具 → 工具庫 → 設定。</summary>
+    private System.Collections.Generic.List<int> DisplayOrder()
+    {
+        int Find(string k) => _pageKeys.FindIndex(p => p.Key == k);
+        var list = FixedTopKeys.Select(Find).Where(i => i >= 0).ToList();
+        list.AddRange(VisibleOrder());
+        list.AddRange(FixedBottomKeys.Select(Find).Where(i => i >= 0));
+        return list.Where(PageVisible).ToList();
+    }
 
     /// <summary>拖緊：其他項讓位。</summary>
     private void PreviewDrag(int dragged, int centerY)
     {
         var vis = VisibleOrder();
         vis.Remove(dragged);
-        int slot = Math.Max(0, Math.Min(vis.Count, (centerY + _navOffset) / _step));
-        int y = -_navOffset;
+        int slot = Math.Max(0, Math.Min(vis.Count, (centerY + _navOffset) / _step - FixedTop));
+        int y = -_navOffset + FixedTop * _step;
         for (int k = 0; k < vis.Count; k++)
         {
             if (k == slot) y += _step;
@@ -452,7 +499,7 @@ internal sealed class MainForm : Form
     {
         var vis = VisibleOrder();
         vis.Remove(dragged);
-        int slot = Math.Max(0, Math.Min(vis.Count, (centerY + _navOffset) / _step));
+        int slot = Math.Max(0, Math.Min(vis.Count, (centerY + _navOffset) / _step - FixedTop));
         MoveNav(dragged, slot < vis.Count ? vis[slot] : -1, slot >= vis.Count && vis.Count > 0 ? vis[^1] : -1);
     }
 
@@ -469,6 +516,7 @@ internal sealed class MainForm : Form
 
     private void ShowNavMenu(int index, Control nav, Point at)
     {
+        if (IsFixed(index)) return; // 固定位置：冇排序選單
         var vis = VisibleOrder();
         int pos = vis.IndexOf(index);
         var menu = new ContextMenuStrip();
@@ -505,18 +553,17 @@ internal sealed class MainForm : Form
     private void LayoutNav()
     {
         if (_pages.Count == 0) return;
-        int n = _order.Count(PageVisible), avail = _navHost.Height;
+        var shown = DisplayOrder();
+        int n = shown.Count, avail = _navHost.Height;
         _step = n == 0 ? Ui.S(44) : Math.Clamp(avail / n, Ui.S(34), Ui.S(44));
         int total = n * _step;
         _navOffset = Math.Clamp(_navOffset, 0, Math.Max(0, total - avail));
         bool overflow = total > avail;
         int w = _navHost.Width - (overflow ? Ui.S(6) : 0);
         int y = -_navOffset;
-        foreach (int i in _order)
+        for (int i = 0; i < _pages.Count; i++) _pages[i].Nav.Visible = shown.Contains(i);
+        foreach (int i in shown)
         {
-            bool vis = PageVisible(i);
-            _pages[i].Nav.Visible = vis;
-            if (!vis) continue;
             _pages[i].Nav.SetBounds(0, y, w, _step - Ui.S(4));
             y += _step;
         }
@@ -623,6 +670,67 @@ internal sealed class MainForm : Form
         _trayBox = v => { if (!tray.IsDisposed) tray.Checked = v; };
         set.SetContent(flow);
         stack.AddRow(set);
+
+        // ---- 通知（我的腳本：完成 / 出錯 / 通知步驟）----
+        var notify = new CardPanel
+        {
+            Title = Lang.T("通知"),
+            Hint = Lang.T("我的腳本嘅「通知」步驟同「完成 / 出錯時通知」會彈 Windows 通知；填咗 Discord webhook 就可以同時發去 Discord（頻道設定 → 整合 → Webhook → 複製網址）。")
+        };
+        var hookBox = new TextBox { Text = Scripts.Notifier.DiscordUrl, PlaceholderText = "https://discord.com/api/webhooks/…", UseSystemPasswordChar = Scripts.Notifier.DiscordUrl.Length > 0 };
+        var hookHost = new InputHost(hookBox, Ui.S(420));
+        var hookStatus = Ui.Text_("", Ui.TextFaint, Ui.F(9f), new Padding(0, Ui.S(9), 0, 0));
+        hookBox.Enter += (_, _) => hookBox.UseSystemPasswordChar = false;
+        hookBox.Leave += (_, _) =>
+        {
+            var v = hookBox.Text.Trim();
+            if (v.Length > 0 && !Scripts.Notifier.ValidUrl(v)) { hookStatus.Text = Lang.T("網址唔啱：要係 https://discord.com/api/webhooks/… 開頭"); hookStatus.ForeColor = Ui.Danger; return; }
+            Scripts.Notifier.DiscordUrl = v;
+            hookStatus.Text = v.Length > 0 ? Lang.T("已儲存") : "";
+            hookStatus.ForeColor = Ui.Success;
+            hookBox.UseSystemPasswordChar = v.Length > 0;
+        };
+        var hookTest = new FancyButton { Text = Lang.T("試發"), Kind = BtnKind.Default };
+        hookTest.Size = new Size(Math.Max(Ui.S(72), hookTest.GetPreferredSize(Size.Empty).Width), Ui.S(34));
+        hookTest.Click += async (_, _) =>
+        {
+            var v = hookBox.Text.Trim();
+            Scripts.Notifier.Send(Program.AppName, Lang.T("測試通知"), toast: true, discord: false);
+            if (v.Length == 0) { hookStatus.Text = Lang.T("已彈 Windows 通知（未填 Discord）"); hookStatus.ForeColor = Ui.TextFaint; return; }
+            hookTest.Enabled = false;
+            hookStatus.Text = Lang.T("發緊…"); hookStatus.ForeColor = Ui.TextFaint;
+            var err = await Scripts.Notifier.SendDiscordAsync(Program.AppName, Lang.T("測試通知"), v);
+            hookTest.Enabled = true;
+            if (err == null) { Scripts.Notifier.DiscordUrl = v; hookStatus.Text = Lang.T("已發送，Discord 應該收到"); hookStatus.ForeColor = Ui.Success; }
+            else { hookStatus.Text = Lang.T("發送失敗：") + err; hookStatus.ForeColor = Ui.Danger; }
+        };
+        var hookRow = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, WrapContents = true };
+        hookRow.Controls.Add(Ui.Text_(Lang.T("Discord webhook"), Ui.TextDim, Ui.F(9.75f), new Padding(0, Ui.S(9), Ui.S(10), 0)));
+        hookHost.Margin = new Padding(0, 0, Ui.S(10), 0);
+        hookRow.Controls.Add(hookHost);
+        hookTest.Margin = new Padding(0, 0, Ui.S(10), 0);
+        hookRow.Controls.Add(hookTest);
+        hookRow.Controls.Add(hookStatus);
+        notify.SetContent(hookRow);
+        stack.AddRow(notify);
+
+        // ---- 備份及還原 ----
+        var backup = new CardPanel
+        {
+            Title = Lang.T("備份及還原"),
+            Hint = Lang.T("將我的腳本、各工具設定同快捷鍵打包做一個 zip，換電腦或者重裝都可以還原。唔包下載返嚟嘅工具（ffmpeg 等）、AI 模型、遊戲伺服器同大過 50 MB 嘅檔案。")
+        };
+        var bRow = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, WrapContents = true };
+        var exp = new FancyButton { Text = Lang.T("匯出備份…"), Kind = BtnKind.Primary };
+        exp.Size = exp.GetPreferredSize(Size.Empty);
+        exp.Click += async (_, _) => { exp.Enabled = false; try { await DataBackup.ExportAsync(this); } finally { exp.Enabled = true; } };
+        var imp = new FancyButton { Text = Lang.T("由備份還原…"), Kind = BtnKind.Default };
+        imp.Size = imp.GetPreferredSize(Size.Empty);
+        imp.Click += async (_, _) => { imp.Enabled = false; try { await DataBackup.ImportAsync(this); } finally { if (!imp.IsDisposed) imp.Enabled = true; } };
+        bRow.Controls.Add(exp);
+        bRow.Controls.Add(imp);
+        backup.SetContent(bRow);
+        stack.AddRow(backup);
 
         // ---- 快捷鍵表 ----
         var hk = new CardPanel

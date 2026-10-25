@@ -793,6 +793,9 @@ namespace UI
     public class NavItem : Control
     {
         private bool _active, _hover;
+        /// <summary>名左邊嘅細圖示（同工具庫一樣）。</summary>
+        public string Glyph = "";
+        public Color Hue = Ui.Accent;
 
         public NavItem(string text)
         {
@@ -828,9 +831,22 @@ namespace UI
                 using var b = Ui.AccentBrush(new RectangleF(bar.X, bar.Y, Ui.S(3f), bar.Height));
                 g.FillPath(b, path);
             }
+            int tx = (int)r.X + Ui.S(16);
+            if (Glyph.Length > 0)
+            {
+                // 細圖示：圓角色塊 + 符號（側欄縮細時跟住縮）
+                float sz = Math.Min(Ui.S(24f), r.Height - Ui.S(6f));
+                var ir = new RectangleF(r.X + Ui.S(14f), r.Y + (r.Height - sz) / 2f, sz, sz);
+                using (var ip = Ui.Round(ir, Ui.S(6f)))
+                using (var ib = new SolidBrush(Ui.Mix(_active ? Ui.CardHi : Ui.Panel, Hue, _active ? 0.32f : 0.2f)))
+                    g.FillPath(ib, ip);
+                TextRenderer.DrawText(g, Glyph, Ui.F(sz >= Ui.S(22f) ? 9.5f : 8.5f, FontStyle.Bold), Rectangle.Round(ir), Ui.OnTint(Hue),
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                tx = (int)(ir.Right + Ui.S(10f));
+            }
             TextRenderer.DrawText(g, Text, _active ? Ui.F(10f, FontStyle.Bold) : Font,
-                new Rectangle((int)r.X + Ui.S(16), (int)r.Y, (int)r.Width - Ui.S(16), (int)r.Height),
-                _active ? Ui.Text : Ui.TextDim, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                new Rectangle(tx, (int)r.Y, (int)r.Right - tx, (int)r.Height),
+                _active ? Ui.Text : Ui.TextDim, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
         }
     }
 }

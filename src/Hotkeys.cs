@@ -37,15 +37,16 @@ internal static class HotkeyHub
     {
         new() { Id = "scripts.stopall", Ext = Extensions.Scripts, Page = "scripts", Name = () => Lang.T("我的腳本：開始已選 / 全部停止"), LegacyFile = "stopall_hotkey.txt" },
         new() { Id = "scripts.each", Ext = Extensions.Scripts, Page = "scripts", Name = () => Lang.T("我的腳本：各腳本自己嘅快捷鍵"), NoKey = true },
-        new() { Id = "recorder.toggle", Ext = Extensions.Recorder, Page = "recorder", Name = () => Lang.T("錄影工具：開始 / 停止錄影"), LegacyFile = "recorder_hotkey.txt" },
+        new() { Id = "recorder.toggle", Ext = Extensions.Recorder, Page = "recorder", Name = () => Lang.T("螢幕錄影：開始 / 停止錄影"), LegacyFile = "recorder_hotkey.txt" },
         new() { Id = "replay.save", Ext = Extensions.Replay, Page = "replay", Name = () => Lang.T("精彩重播：儲存重播") },
         new() { Id = "replay.toggle", Ext = Extensions.Replay, Page = "replay", Name = () => Lang.T("精彩重播：開 / 關背景錄影") },
         new() { Id = "remap.toggle", Ext = Extensions.Remap, Page = "remap", Name = () => Lang.T("遊戲改鍵：開 / 關改鍵") },
-        new() { Id = "window.top", Ext = Extensions.Window, Page = "window", Name = () => Lang.T("視窗工具：目前視窗置頂 / 取消") },
-        new() { Id = "window.borderless", Ext = Extensions.Window, Page = "window", Name = () => Lang.T("視窗工具：目前視窗無邊框全螢幕 / 還原") },
+        new() { Id = "window.top", Ext = Extensions.Window, Page = "window", Name = () => Lang.T("視窗管理：目前視窗置頂 / 取消") },
+        new() { Id = "window.borderless", Ext = Extensions.Window, Page = "window", Name = () => Lang.T("視窗管理：目前視窗無邊框全螢幕 / 還原") },
         new() { Id = "clipboard.show", Ext = Extensions.Clipboard, Page = "clipboard", Name = () => Lang.T("剪貼簿紀錄：打開紀錄視窗") },
         new() { Id = "ocr.capture", Ext = Extensions.Ocr, Page = "ocr", Name = () => Lang.T("文字辨識：框選畫面辨識") },
-        new() { Id = "perf.overlay", Ext = Extensions.Perf, Page = "perf", Name = () => Lang.T("效能監看：顯示 / 隱藏遊戲疊加") },
+        new() { Id = "perf.overlay", Ext = Extensions.Perf, Page = "perf", Name = () => Lang.T("效能監控：顯示 / 隱藏遊戲疊加") },
+        new() { Id = "perf.gamemode", Ext = Extensions.Perf, Page = "perf", Name = () => Lang.T("效能監控：開 / 關遊戲模式") },
     };
 
     /// <summary>MainForm 設定：而家顯示緊邊頁。</summary>

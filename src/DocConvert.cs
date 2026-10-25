@@ -608,7 +608,7 @@ internal sealed class DocConvertPage : ToolPage
     }
 }
 
-/// <summary>轉檔工具：上面分頁揀「影音」或者「文件」。</summary>
+/// <summary>格式轉換：上面分頁揀「影音」或者「文件」。</summary>
 internal sealed class ConvertHub : Panel
 {
     private readonly Control[] _pages = new Control[2];

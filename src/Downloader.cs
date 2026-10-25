@@ -24,7 +24,7 @@ internal static class YtDlp
     public static string Exe => Path.Combine(Dir, "yt-dlp.exe");
     public static bool Ready => File.Exists(Exe) && Video.Ffmpeg.Ready;
 
-    /// <summary>安裝：yt-dlp + ffmpeg（轉 MP3 / 合併影片聲音要用；同錄影工具共用）。</summary>
+    /// <summary>安裝：yt-dlp + ffmpeg（轉 MP3 / 合併影片聲音要用；同螢幕錄影共用）。</summary>
     public static async Task InstallAsync(Action<string, double> progress, CancellationToken ct)
     {
         if (!Video.Ffmpeg.Ready) await Video.Ffmpeg.InstallAsync(progress, ct);

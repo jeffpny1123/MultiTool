@@ -16,7 +16,7 @@ using MultiTool.UI;
 namespace MultiTool.Tools;
 
 // =====================================================================
-//  效能監看：CPU / GPU / RAM / VRAM / 磁碟 / 網絡 + 遊戲疊加顯示
+//  效能監控：CPU / GPU / RAM / VRAM / 磁碟 / 網絡 + 遊戲疊加顯示
 //  全部用 Windows 內置效能計數器（PDH），唔使第三方程式。
 // =====================================================================
 
@@ -336,7 +336,7 @@ internal sealed class MetricTile : Control
 /// <summary>疊加顯示設定（data\perfmon.txt）。</summary>
 internal static class PerfSettings
 {
-    public static bool Overlay, ShowCpu = true, ShowGpu = true, ShowRam = true, ShowVram, ShowTemp = true, ShowNet, ShowDisk, ShowClock;
+    public static bool Overlay, ShowCpu = true, ShowGpu = true, ShowRam = true, ShowVram, ShowTemp = true, ShowNet, ShowDisk, ShowClock, ShowPing;
     public static int Corner = 1; // 0 左上 1 右上 2 左下 3 右下
     public static int Opacity = 80, FontSize = 1; // 0 細 1 中 2 大
     private static string File_ => Path.Combine(AppPaths.Data, "perfmon.txt");
@@ -364,6 +364,7 @@ internal static class PerfSettings
                     case "net": ShowNet = b; break;
                     case "disk": ShowDisk = b; break;
                     case "clock": ShowClock = b; break;
+                    case "ping": ShowPing = b; break;
                     case "corner": Corner = Math.Clamp(n, 0, 3); break;
                     case "opacity": Opacity = Math.Clamp(n, 20, 100); break;
                     case "font": FontSize = Math.Clamp(n, 0, 2); break;
@@ -382,7 +383,7 @@ internal static class PerfSettings
             File.WriteAllLines(File_, new[]
             {
                 "overlay=" + B(Overlay), "cpu=" + B(ShowCpu), "gpu=" + B(ShowGpu), "ram=" + B(ShowRam), "vram=" + B(ShowVram),
-                "temp=" + B(ShowTemp), "net=" + B(ShowNet), "disk=" + B(ShowDisk), "clock=" + B(ShowClock),
+                "temp=" + B(ShowTemp), "net=" + B(ShowNet), "disk=" + B(ShowDisk), "clock=" + B(ShowClock), "ping=" + B(ShowPing),
                 "corner=" + Corner, "opacity=" + Opacity, "font=" + FontSize
             });
         }
@@ -403,6 +404,7 @@ internal sealed class PerfOverlay : Form
     public static void Wire()
     {
         HotkeyHub.Get("perf.overlay").Action = () => Set(!Showing);
+        GameMode.Wire();
         if (PerfSettings.Overlay && Extensions.IsInstalled(Extensions.Perf)) Set(true);
         Extensions.Changed += () => { if (!Extensions.IsInstalled(Extensions.Perf) && Showing) Application.OpenForms[0]?.BeginInvoke(() => Set(false, false)); };
     }
@@ -415,7 +417,22 @@ internal sealed class PerfOverlay : Form
         StateChanged?.Invoke();
     }
 
-    public static void Restyle() { if (_inst != null) { _inst.Opacity = PerfSettings.Opacity / 100.0; _inst.Render(); } }
+    public static void Restyle() { if (_inst != null) { _inst.Opacity = PerfSettings.Opacity / 100.0; _inst.SyncPing(); _inst.Render(); } }
+
+    // 疊加顯示 Ping：剔咗先開始 ping
+    private bool _pingUsed;
+    private void SyncPing()
+    {
+        if (PerfSettings.ShowPing == _pingUsed) return;
+        _pingUsed = PerfSettings.ShowPing;
+        if (_pingUsed) { PingMonitor.Sampled += OnPing; PingMonitor.Use(); }
+        else { PingMonitor.Sampled -= OnPing; PingMonitor.Release(); }
+    }
+
+    private void OnPing()
+    {
+        try { if (IsHandleCreated && !IsDisposed) BeginInvoke(Render); } catch { }
+    }
 
     private PerfSample? _last;
     private readonly System.Windows.Forms.Timer _top = new() { Interval = 2000 };
@@ -433,7 +450,8 @@ internal sealed class PerfOverlay : Form
         PerfSampler.Use();
         _top.Tick += (_, _) => { if (IsHandleCreated) SetWindowPos(Handle, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); }; // 保持最頂
         _top.Start();
-        FormClosed += (_, _) => { PerfSampler.Sampled -= OnSample; PerfSampler.Release(); _top.Dispose(); };
+        FormClosed += (_, _) => { PerfSampler.Sampled -= OnSample; PerfSampler.Release(); _top.Dispose(); if (_pingUsed) { _pingUsed = false; PingMonitor.Sampled -= OnPing; PingMonitor.Release(); } };
+        SyncPing();
         Render();
     }
 
@@ -471,6 +489,8 @@ internal sealed class PerfOverlay : Form
                 Heat(s == null || s.VramTotal <= 0 || s.VramUsed < 0 ? double.NaN : 100.0 * s.VramUsed / s.VramTotal)));
         if (PerfSettings.ShowNet && s != null) l.Add(("NET", "↓" + PerfSampler.Rate(s.NetDown) + " ↑" + PerfSampler.Rate(s.NetUp), Color.Gainsboro));
         if (PerfSettings.ShowDisk && s != null) l.Add(("DISK", PerfSampler.Pct(s.DiskActive), Heat(s.DiskActive)));
+        if (PerfSettings.ShowPing && PingMonitor.Targets.FirstOrDefault() is { } pt)
+            l.Add(("PING", PingMonitor.Ms(pt.Last), double.IsNaN(pt.Last) || pt.Last >= 150 ? Color.FromArgb(255, 110, 110) : pt.Last >= 80 ? Color.FromArgb(255, 200, 90) : Color.FromArgb(120, 230, 160)));
         if (PerfSettings.ShowClock) l.Add(("", DateTime.Now.ToString("HH:mm"), Color.Gainsboro));
         return l;
     }
@@ -537,7 +557,7 @@ internal sealed class PerfPage : ToolPage
         _net = new MetricTile { Title = Lang.T("網絡"), Hue = Ui.Accent, Hue2 = Ui.Success, AutoMax = true };
         var grid = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, WrapContents = true, MaximumSize = new Size(Ui.S(1100), 0) };
         grid.Controls.AddRange(new Control[] { _cpu, _gpu, _ram, _vram, _disk, _net });
-        Card(Lang.T("效能監看"), Lang.T("每秒更新，數字同 Windows 工作管理員用同一個來源。GPU 溫度淨係 NVIDIA 顯示卡有。"), grid);
+        Card(Lang.T("效能監控"), Lang.T("每秒更新，數字同 Windows 工作管理員用同一個來源。GPU 溫度淨係 NVIDIA 顯示卡有。"), grid);
 
         _overlayCb = TUi.Check(Lang.T("喺畫面角落顯示（遊戲疊加）"), PerfOverlay.Showing, v => { if (v != PerfOverlay.Showing) PerfOverlay.Set(v); });
         void Sync() { if (!_overlayCb.IsDisposed && _overlayCb.Checked != PerfOverlay.Showing) _overlayCb.Checked = PerfOverlay.Showing; }
@@ -558,7 +578,8 @@ internal sealed class PerfPage : ToolPage
                 TUi.Row(Item("CPU", PerfSettings.ShowCpu, v => PerfSettings.ShowCpu = v), Item("GPU", PerfSettings.ShowGpu, v => PerfSettings.ShowGpu = v),
                     Item(Lang.T("GPU 溫度"), PerfSettings.ShowTemp, v => PerfSettings.ShowTemp = v), Item("RAM", PerfSettings.ShowRam, v => PerfSettings.ShowRam = v),
                     Item("VRAM", PerfSettings.ShowVram, v => PerfSettings.ShowVram = v), Item(Lang.T("網速"), PerfSettings.ShowNet, v => PerfSettings.ShowNet = v),
-                    Item(Lang.T("磁碟"), PerfSettings.ShowDisk, v => PerfSettings.ShowDisk = v), Item(Lang.T("時間"), PerfSettings.ShowClock, v => PerfSettings.ShowClock = v)),
+                    Item(Lang.T("磁碟"), PerfSettings.ShowDisk, v => PerfSettings.ShowDisk = v), Item("Ping", PerfSettings.ShowPing, v => PerfSettings.ShowPing = v),
+                    Item(Lang.T("時間"), PerfSettings.ShowClock, v => PerfSettings.ShowClock = v)),
                 TUi.Row(corner, font, TUi.L(Lang.T("不透明度")), opacity)));
 
         _procs = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, FlowDirection = FlowDirection.TopDown, WrapContents = false };

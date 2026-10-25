@@ -25,8 +25,11 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 | Find image & click 搵圖點擊 | Snip screen regions (up to 6 images per step) and click the best match above the similarity threshold.<br>擷取螢幕區域作為目標圖片（每個步驟最多 6 張），並點擊相似度最高且達到門檻的位置。 |
 | Loop / Break 循環／中斷循環 | Repeat steps N times (0 = forever), optionally stop after N seconds or at a set clock time, and break out early when needed. When a loop ends, everything inside it stops at once and keys / buttons it pressed down are released.<br>重複執行步驟 N 次（0 代表無限次），可設定運行 N 秒後或到指定時間停止，並可提前跳出循環。循環結束時，其內所有步驟會即時停止，循環內按下的按鍵／滑鼠鍵會自動彈起。 |
 | Parallel 同時運行 | Two or more branches (add more with **+**, up to 8) run at the same time; the next step runs after all branches finish.<br>兩條或以上支線（可按 **+** 新增，最多 8 條）同時執行，全部完成後才執行下一步。 |
-| IF condition IF 條件 | Image found, image not found, pixel color, clock time, countdown or time limit (script has run for N seconds). Several conditions can be combined with **AND / OR**; IFs can be nested.<br>條件包括：找到圖片、找不到圖片、指定位置的顏色、現實時間、倒數計時及時限（腳本已運行 N 秒）。多個條件可用 **AND／OR** 組合；可多層巢狀使用。 |
+| IF condition IF 條件 | Image found, image not found, pixel color, **text on screen**, **number on screen** (compare with > ≥ < ≤ = ≠), **variable compare**, clock time, countdown or time limit (script has run for N seconds). Several conditions can be combined with **AND / OR**; IFs can be nested. Text and numbers are read with Windows' built-in text recognition.<br>條件包括：找到圖片、找不到圖片、指定位置的顏色、**畫面出現文字**、**畫面數字比較**（> ≥ < ≤ = ≠）、**變數比較**、現實時間、倒數計時及時限（腳本已運行 N 秒）。多個條件可用 **AND／OR** 組合；可多層巢狀使用。文字及數字以 Windows 內置文字辨識讀取。 |
 | System 系統 | Open an app, close a program, switch to a window, shut down the PC, or play a sound (once or repeating).<br>打開應用程式、關閉程式、切換視窗、關閉電腦，或播放音效（播放一次或不斷重複）。 |
+| Variable 變數 | Set, add to or subtract from a named variable, or **read a number from a screen area** (e.g. HP or money). Variables start at 0 each run and are shared by the main thread, threads and IFs; use `{name}` in Type text and Notify.<br>設定、增加或減少一個具名變數，或**讀取畫面範圍內的數字**（例如血量、金錢）。每次運行由 0 開始，主線程、線程及 IF 共用；可於「輸入文字」及「通知」中以 `{變數名}` 插入數值。 |
+| Notify 通知 | Shows a Windows notification and / or sends a message to Discord (webhook set in **Settings → Notifications**).<br>顯示 Windows 通知及／或傳送訊息至 Discord（webhook 於**設定 → 通知**設定）。 |
+| Run script 行其他腳本 | Runs another script's main steps once, using this script's window settings; handy for reusing common parts.<br>以此腳本的視窗設定，執行另一個腳本的主線程步驟一次，方便重用常用部分。 |
 | Stop script 停止腳本 | Stops the whole script, including all IF blocks and threads.<br>停止整個腳本，包括所有 IF 區塊及線程。 |
 
 - **Threads**: click **+ New thread** below the main thread to add threads that run alongside it.
@@ -55,6 +58,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **編輯**：右鍵步驟可複製／剪下／貼上（循環、IF 及支線會連同其內容一併複製），或在上方／下方插入新步驟。右下角 **↶ 復原** 可還原上一次改動。循環及同時運行可摺疊，捲動時頂部列保持顯示。
 - **Run speed** (0.5x – 3.0x) on the preview page scales delays, hold times, check intervals and countdowns; it can be changed while the script is running.
   預覽頁的**運行速度**（0.5x – 3.0x）會按倍率調整延遲、按住時間、檢查間隔及倒數，運行中亦可即時更改。
+- **⏰ Schedule / notify** (top of the editor): start a script **daily at a set time** on chosen weekdays, **start it when MultiTool opens**, and get a **notification when it finishes or fails** (Windows + Discord). The same settings are on the **⏰** button of each script in the list, which also shows the schedule and the next start date and time.
+  **⏰ 定時／通知**（修改頁頂部）：可設定**每日指定時間**（可揀星期幾）自動開始、**開啟 MultiTool 時自動開始**，以及**完成或出錯時通知**（Windows + Discord）。腳本列表每個腳本的 **⏰** 按鈕亦可設定，並會顯示定時及下次開始的日期和時間。
 - Scripts are validated before running (missing images, unset keys, empty loops, etc.).
   執行前會自動檢查腳本（例如缺少圖片、未設定按鍵、空白循環等）。
 - **Auto update** checks GitHub Releases on startup and, when a new version is out, downloads it, replaces the program and restarts automatically — no prompt. If it fails (e.g. offline), MultiTool keeps working and tries again next launch.
@@ -76,11 +81,13 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - Tools are shown as tiles with a search box. **Install** adds a tool to the sidebar and **Remove** hides it again; your scripts and videos are kept. A fresh download starts with no tools installed; when upgrading from an older version, **My Scripts** stays installed.
   工具以方格排列，並設有搜尋欄。按**安裝**會在側欄加入該工具，按**移除**則會隱藏；你的腳本及影片會保留。全新下載時預設未安裝任何工具；由舊版更新時，**我的腳本**會保持已安裝。
 - Tools that need extra files download them when installed (e.g. the recorder downloads FFmpeg, about 100 MB). No server of our own is involved.
-  需要額外檔案的工具會於安裝時下載（例如錄影工具會下載約 100 MB 的 FFmpeg），不經任何自設伺服器。
+  需要額外檔案的工具會於安裝時下載（例如螢幕錄影會下載約 100 MB 的 FFmpeg），不經任何自設伺服器。
 - **Categories** (Gaming, Media, Productivity, System, Network) and **All / Installed / Not installed** tabs can be combined; commonly used tools are listed first and beta tools last.
   **分類**（遊戲、媒體、效率、系統、網絡）可與**全部／已安裝／未安裝**分頁一併篩選；常用工具排在最前，測試版排在最後。
+- Newly released tools show a **NEW** badge at the top-right of their tile.
+  新推出的工具會於方格右上角顯示 **NEW**。
 
-**Screen recorder 錄影工具** — install it from the Tool library / 於工具庫安裝
+**Screen Recorder 螢幕錄影** — install it from the Tool library / 於工具庫安裝
 
 - Record the full screen, a region or a window, with system audio and / or microphone, each with its own volume (0–300%).
   錄製全螢幕、指定範圍或指定視窗，可同時錄製電腦聲音及／或咪高峰，兩者可分別調整音量（0–300%）。
@@ -95,6 +102,25 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - **Recent recording** shows the latest video with **Play** and **Delete** (moves it to the Recycle Bin).
   **最近錄影**顯示最新的影片，可**播放**或**刪除**（移至資源回收筒）。
 
+**Video Editor 影片剪輯** — Clipchamp-style editing, install it from the Tool library / 類似 Clipchamp 的影片剪輯，於工具庫安裝
+
+- **Timeline** with text, video and audio tracks: add videos, images and audio (or drag them in), trim by dragging clip edges, move and reorder clips, split at the playhead, delete and undo. Projects are saved automatically.
+  **時間軸**設有文字、影片及音訊軌：加入影片、相片及聲音（亦可拖曳加入），拖曳片段兩邊剪頭尾、拖曳移動及排序、於播放頭分割、刪除及復原。專案自動儲存。
+- **Live preview with sound**; scrubbing the timeline shows the frame at that point.
+  **即時預覽連聲音**；拖曳時間軸會顯示該位置的畫面。
+- **Text** titles / captions (position, size, colour, dark background, fade), **background music** (volume, fade in / out), **transitions** between clips (fade, dissolve, slide, wipe, circle, pixelate…), **speed** 0.25x – 4x, rotate / flip, fit or fill, brightness / contrast / saturation / black & white.
+  **文字**標題／字幕（位置、大小、顏色、黑色底、淡入淡出）、**背景音樂**（音量、淡入／淡出）、片段之間的**轉場**（淡入淡出、溶解、滑動、擦除、圓形、馬賽克等）、**速度** 0.25x – 4x、旋轉／翻轉、完整顯示或填滿、亮度／對比／飽和度／黑白。
+- **Image overlays** (stickers / logos): drop a photo onto the preview or onto Video 2+, drag text and images to position them, drag a corner or scroll to resize; opacity and fade.
+  **疊圖**（貼圖／logo）：把相片拖入預覽畫面或影片 2 軌以上，可直接拖曳文字及圖片調整位置、拖曳四角或滾輪調整大小；可調不透明度及淡入淡出。
+- **Multiple tracks of every kind** — click “+” next to a track name to add text, video or audio tracks (drag a track name to reorder); items on different tracks can overlap (e.g. background music + sound effects), drag up / down to change track. **Video 2 and above = overlays (picture-in-picture / images)**. Clips snap to each other's edges, Shift + click selects several clips, and **Merge** joins adjacent clips. **Detach audio** from a video clip onto an audio track. The time display also shows the current / total frame.
+  **每種軌都可以加多條**——按軌名旁的「+」新增文字、影片或音軌（拖曳軌名可調整次序），不同軌可以重疊（例如背景音樂＋音效），上下拖曳可換軌；**影片 2 軌以上＝疊加（子母畫面／圖片）**。拖曳時會吸附其他片段頭尾；Shift + 左鍵可多選，**合併**可把相連片段合成一段。可把影片的聲音**分離音軌**到音訊軌。時間旁亦顯示目前幀數／總幀數。
+- **Open with**: right-click a video or photo in File Explorer → Open with → Video Editor (MultiTool) opens it in a new project (registered for the current user only, removed when the tool is uninstalled).
+  **開啟檔案**：在檔案總管右鍵影片或相片 →「開啟檔案」→「影片剪輯 (MultiTool)」，會開新專案並加入檔案（只登記目前使用者，移除工具時會清除）。
+- **Fade in / out with a colour** at the start and end of each clip, for smooth joins between clips.
+  每段片段開頭／結尾可**由顏色淡入、淡出至顏色**（可自選顏色），方便銜接影片。
+- **Aspect ratio** 16:9, 9:16 (Shorts / Reels / TikTok), 1:1, 4:3, 3:4, 4:5, 5:4, 3:2, 2:3, 21:9, 2:1 or a **custom size**; 720p – 4K; 24 / 30 / 60 fps. **Export** MP4, MOV, MKV, AVI, WebM or WMV (H.264 formats can use GPU acceleration), or **audio only** as MP3, WAV, M4A or FLAC. Settings are grouped in collapsible sections.
+  **畫面比例** 16:9、9:16（Shorts／Reels／TikTok）、1:1、4:3、3:4、4:5、5:4、3:2、2:3、21:9、2:1 或**自訂尺寸**；720p 至 4K；24／30／60 fps。**匯出** MP4、MOV、MKV、AVI、WebM 或 WMV（H.264 格式可用顯示卡加速），或**只匯出聲音**為 MP3、WAV、M4A 或 FLAC。設定分成可摺疊的區塊。
+
 **Instant Replay 精彩重播** — keeps recording in the background, saves the last moments on a hotkey / 背景持續錄影，按快捷鍵儲存最近一段
 
 - Keeps the last 15 s – 5 min of the screen (with system audio / microphone) and saves it as MP4 only when you press the hotkey, like ShadowPlay. Nothing is saved otherwise.
@@ -107,7 +133,7 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - Rules like Caps Lock → Ctrl or mouse side button → F; targets can be keys or mouse buttons. Each rule can be limited to one program. On / off with a hotkey.
   規則例如 Caps Lock → Ctrl、滑鼠側鍵 → F；目標可為按鍵或滑鼠鍵，每條規則可限定只於指定程式生效，並可用快捷鍵開關。
 
-**Window Tools 視窗工具**
+**Window Manager 視窗管理**
 
 - Keep any window on top, set its opacity (10–100%), make it borderless fullscreen or center it. Hotkeys act on the window in front.
   將任何視窗置頂、設定透明度（10–100%）、變為無邊框全螢幕或置中；快捷鍵作用於最前面的視窗。
@@ -122,7 +148,7 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - Select any area on screen (or an image file) to extract its text with Windows' built-in OCR — offline, no download. Copies the result automatically.
   框選畫面任何範圍（或選擇圖片檔），以 Windows 內建 OCR 擷取文字——離線使用，無須下載，並自動複製結果。
 
-**Converter 轉檔工具** — two tabs: Media and Documents / 分「影音」及「文件」兩個分頁
+**Converter 格式轉換** — two tabs: Media and Documents / 分「影音」及「文件」兩個分頁
 
 - **Media**: convert video, audio and images (MP4, MKV, WEBM, AVI, MOV, GIF, MP3, WAV, M4A, PNG, JPG, WEBP), resize and trim. Drag files in, convert in batches with progress. FFmpeg (~100 MB) is downloaded on first use from inside the tab.
   **影音**：影片、聲音、圖片互相轉換（MP4、MKV、WEBM、AVI、MOV、GIF、MP3、WAV、M4A、PNG、JPG、WEBP），可縮小及剪輯頭尾；可拖曳檔案批次轉換並顯示進度。首次使用時於分頁內下載 FFmpeg（約 100 MB）。
@@ -134,12 +160,16 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - Paste a link from YouTube, Bilibili, Twitch, TikTok, X, Vimeo, SoundCloud and 1000+ other sites and save it as MP3 or MP4; playlists supported. yt-dlp and FFmpeg are downloaded on install.
   貼上 YouTube、Bilibili、Twitch、TikTok、X、Vimeo、SoundCloud 等 1000 多個網站的連結，儲存為 MP3 或 MP4，支援播放清單。安裝時下載 yt-dlp 及 FFmpeg。
 
-**Performance Monitor 效能監看**
+**Performance Monitor 效能監控** — three tabs: Performance, Ping and Game Mode / 分「效能」、「Ping 監看」及「遊戲模式」三個分頁
 
 - Live CPU, GPU, RAM, VRAM, disk and network usage with graphs, plus GPU temperature on NVIDIA cards, using Windows' own performance counters. Lists the programs using the most CPU and memory.
   即時顯示 CPU、GPU、RAM、VRAM、磁碟及網絡用量與走勢圖，NVIDIA 顯示卡另顯示 GPU 溫度，使用 Windows 內置效能計數器；並列出最耗 CPU 及記憶體的程式。
 - **Game overlay**: a small always-on-top, click-through box in a screen corner, with a hotkey. Choose items, corner, font size and opacity. Works with borderless / windowed games (exclusive fullscreen covers it).
   **遊戲疊加**：於螢幕角落顯示永遠置頂、滑鼠可穿透的小框，並設有快捷鍵；可選擇顯示項目、位置、字體大小及不透明度。適用於無邊框／視窗模式遊戲（獨佔全螢幕會將其覆蓋）。
+- **Ping**: pings up to 8 targets (e.g. 1.1.1.1, your router or a game server) every second and shows latency, packet loss and jitter with graphs; the overlay can show ping too.
+  **Ping 監看**：每秒 ping 最多 8 個目標（例如 1.1.1.1、路由器或遊戲伺服器），以走勢圖顯示延遲、封包遺失及抖動；遊戲疊加亦可顯示 Ping。
+- **Game Mode**: one click (or a hotkey) closes the apps you list and switches to the High performance power plan; click again to restore the power plan and reopen the closed apps.
+  **遊戲模式**：一鍵（或快捷鍵）關閉你指定的程式並切換至高效能電源計劃；再按一下即還原電源計劃及重新開啟已關閉的程式。
 
 **Disk Space & Health 磁碟空間及健康**
 
@@ -174,8 +204,12 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   開機時啟動、關閉時最少化至系統匣（首次關閉時會詢問）、檢查更新。日光／夜間主題及語言於左下角切換。
 - **Hotkeys**: one table with every installed tool's hotkey (editable). Tick **Use outside page** to use a hotkey anywhere; otherwise it only works on that tool's page. Duplicate hotkeys cannot be ticked.
   **快捷鍵**：一個表格列出所有已安裝工具的快捷鍵（可直接修改）。勾選**頁面外使用**即可於任何地方使用，否則只可在該工具頁使用；重複的快捷鍵無法勾選。
-- **Sidebar order**: drag items in the sidebar up or down, or right-click for Move up / Move down / Reset order.
-  **側欄排序**：可直接拖曳側欄項目上下移動，或右鍵選擇上移／下移／重設排序。
+- **Notifications**: set a Discord webhook (with a **Test** button) for the Notify step and finish / error notifications.
+  **通知**：設定 Discord webhook（設有**測試**按鈕），供「通知」步驟及完成／出錯通知使用。
+- **Backup & restore**: export My Scripts, tool settings and hotkeys to one zip, and restore it on another PC. Downloaded tools, AI models, game servers and files over 50 MB are skipped.
+  **備份及還原**：將我的腳本、各工具設定及快捷鍵匯出為一個 zip，可於另一部電腦還原；不包括下載的工具、AI 模型、遊戲伺服器及大於 50 MB 的檔案。
+- **Sidebar order**: drag items in the sidebar up or down, or right-click for Move up / Move down / Reset order. Home stays at the top and Tool library / Settings at the bottom. Each item has a small icon.
+  **側欄排序**：可直接拖曳側欄項目上下移動，或右鍵選擇上移／下移／重設排序；首頁固定在最頂，工具庫及設定固定在最底。每項附小圖示。
 
 **AI Assistant AI 助手** — uses the AI command-line tool already installed and signed in on your computer / 使用你電腦上已安裝並已登入的 AI 命令列工具
 
@@ -214,13 +248,35 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 ## Changelog 更新紀錄
 
+### v2.3
+- **New: Text and number conditions** in My Scripts — an IF can check whether a screen area shows some text, or compare the number in it (e.g. drink a potion when HP is below 300).
+  **新增：文字及數字條件**（我的腳本）——IF 可檢查畫面範圍是否出現指定文字，或比較其中的數字（例如血量低於 300 便喝藥水）。
+- **New: Variable step** — counters and numbers read from the screen, with a **variable compare** condition (e.g. stop after 50 runs).
+  **新增：「變數」步驟**——計數器及讀取畫面數字，配合**變數比較**條件（例如執行 50 次後停止）。
+- **New: Notify step** and **notify when finished / on error** — Windows notifications and Discord webhooks.
+  **新增：「通知」步驟**及**完成／出錯時通知**——Windows 通知及 Discord webhook。
+- **New: Schedule** — start a script daily at a set time, or when MultiTool opens.
+  **新增：定時開始**——每日指定時間或開啟 MultiTool 時自動開始腳本。
+- **New: Run script step** — run another script's steps inside this one.
+  **新增：「行其他腳本」步驟**——於腳本內執行另一個腳本的步驟。
+- **New: Ping monitor** and **Game Mode** tabs in Performance Monitor (renamed from 效能監看 to 效能監控).
+  **新增：Ping 監看**及**遊戲模式**分頁（效能監看改名為效能監控）。
+- **New: Backup & restore** for scripts and settings in Settings.
+  **新增：腳本及設定的備份及還原**（設定頁）。
+- **New tool: Video Editor** — Clipchamp-style editor: multiple text / video / audio tracks, picture-in-picture and image overlays you drag and resize in the preview, transitions, colour fades, speed and filters, detach audio, merge clips, snapping, live preview with sound, and export to MP4 / MOV / MKV / AVI / WebM / WMV or audio only (MP3 / WAV / M4A / FLAC). Right-click a video or photo → Open with → Video Editor.
+  **新工具：影片剪輯**——類似 Clipchamp：多條文字／影片／音軌、子母畫面及疊圖（可於預覽拖曳及調整大小）、轉場、顏色淡入淡出、速度及濾鏡、分離音軌、合併片段、磁貼吸附、即時預覽連聲音，可匯出 MP4／MOV／MKV／AVI／WebM／WMV 或只匯出聲音（MP3／WAV／M4A／FLAC）。可在檔案總管右鍵影片或相片 →「開啟檔案」→ 影片剪輯。
+- **New:** icons in the sidebar, and a **NEW** badge for newly released tools in the Tool library.
+  **新增：**側欄圖示，以及工具庫新工具的 **NEW** 標籤。
+- **Changed:** tools renamed — 錄影工具 → **螢幕錄影**, 轉檔工具 → **格式轉換**, 視窗工具 → **視窗管理** (Window Manager); Home, Tool library and Settings stay fixed in the sidebar.
+  **變更：**工具改名——錄影工具 → **螢幕錄影**、轉檔工具 → **格式轉換**、視窗工具 → **視窗管理**；首頁、工具庫及設定固定於側欄。
+
 ### v2.2
 - **Changed:** releases are now published in **[MultiTool-Releases](https://github.com/jeffpny1123/MultiTool-Releases/releases)**; auto update checks there.
   **變更：**新版本改於 **MultiTool-Releases** 發佈，自動更新會從該處檢查。
 
 ### v2.1
-- **New: Show mouse clicks** in the Screen recorder — an expanding ring at each click, recorded into the video.
-  **新增：錄製滑鼠點擊**（錄影工具）——每次點擊位置出現擴散圓圈，並錄入影片。
+- **New: Show mouse clicks** in the Screen Recorder — an expanding ring at each click, recorded into the video.
+  **新增：錄製滑鼠點擊**（螢幕錄影）——每次點擊位置出現擴散圓圈，並錄入影片。
 - **New: Mouse move step** in My Scripts — move from A to B over a set time without clicking.
   **新增：滑鼠移動步驟**（我的腳本）——於指定時間內由 A 點移到 B 點，不按任何按鍵。
 - **New:** the Key press step accepts the middle and side mouse buttons.
@@ -250,15 +306,15 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - **New: Disk Space & Health** — free space per drive, drive health, treemap space analysis and largest files.
   **新增：磁碟空間及健康**——各磁碟剩餘空間、硬碟健康、方格圖空間分析及最大檔案。
 - **Changed: Converter** now has **Media** and **Documents** tabs; Documents converts Excel / CSV / TSV / JSON and fixes garbled Chinese CSVs. FFmpeg is only downloaded when the Media tab is first used.
-  **變更：轉檔工具**新增**影音**及**文件**分頁；文件分頁可轉換 Excel／CSV／TSV／JSON 並修正 CSV 中文亂碼。FFmpeg 只會於首次使用影音分頁時下載。
+  **變更：格式轉換**新增**影音**及**文件**分頁；文件分頁可轉換 Excel／CSV／TSV／JSON 並修正 CSV 中文亂碼。FFmpeg 只會於首次使用影音分頁時下載。
 - **Changed: Tool library** — category filters, commonly used tools first, beta tools last.
   **變更：工具庫**——新增分類篩選，常用工具排最前，測試版排最後。
 - **Fixed:** the Tool library could not be scrolled when the list was taller than the window.
   **修正：**工具庫內容超出視窗時無法向下捲動。
 
 ### v1.8
-- **New tools** in the Tool library: Instant Replay, Key Remap, Window Tools, Clipboard History, Text Recognition, Converter and Game Servers.
-  **新工具**（於工具庫安裝）：精彩重播、遊戲改鍵、視窗工具、剪貼簿紀錄、文字辨識、轉檔工具及遊戲伺服器。
+- **New tools** in the Tool library: Instant Replay, Key Remap, Window Manager, Clipboard History, Text Recognition, Converter and Game Servers.
+  **新工具**（於工具庫安裝）：精彩重播、遊戲改鍵、視窗管理、剪貼簿紀錄、文字辨識、格式轉換及遊戲伺服器。
 - **New: Game Servers** — SteamCMD dedicated servers with settings, backups, UPnP, file editor, console and an AI helper that can fill in settings and explain errors.
   **新增：遊戲伺服器**——SteamCMD 專用伺服器，附設定、備份、UPnP、檔案編輯、控制台，以及可代填設定及解釋錯誤的 AI 助手。
 - **New: Hotkeys table** in Settings — change every tool's hotkey in one place and choose whether it works outside its page.
@@ -271,8 +327,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ### v1.7
 - **New: Tool library** (replaces the fixed sidebar) — install or remove tools as tiles, with search. Tools that need extra files download them on install.
   **新增：工具庫**——以方格安裝或移除工具，並可搜尋；需要額外檔案的工具會於安裝時下載。
-- **New: Screen recorder** — full screen / region / window, system audio and microphone with separate volume, 15–144 FPS, 720P–4K, H.264 / H.265 / AV1 with GPU encoding, quality levels, MP4 / MKV / AVI, cursor on / off, hotkey, on-screen timer that is not recorded.
-  **新增：錄影工具**——全螢幕／範圍／視窗，電腦聲音及咪高峰可分別調整音量，15–144 FPS、720P–4K，H.264／H.265／AV1 顯示卡編碼，品質級別，MP4／MKV／AVI，可開關滑鼠游標，快捷鍵，以及不會被錄入的計時器。
+- **New: Screen Recorder** — full screen / region / window, system audio and microphone with separate volume, 15–144 FPS, 720P–4K, H.264 / H.265 / AV1 with GPU encoding, quality levels, MP4 / MKV / AVI, cursor on / off, hotkey, on-screen timer that is not recorded.
+  **新增：螢幕錄影**——全螢幕／範圍／視窗，電腦聲音及咪高峰可分別調整音量，15–144 FPS、720P–4K，H.264／H.265／AV1 顯示卡編碼，品質級別，MP4／MKV／AVI，可開關滑鼠游標，快捷鍵，以及不會被錄入的計時器。
 - **New: Sidebar order** — drag items or right-click to reorder; the order is remembered.
   **新增：側欄排序**——拖曳或右鍵調整次序，並會記住。
 - **Changed:** the Script library moved into My Scripts (button at the bottom-right).
@@ -421,7 +477,7 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 錄影工具；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Tools, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗工具、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs` Performance Monitor 效能監看；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 螢幕錄影；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Manager, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗管理、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs`, `PerfExtra.cs` Performance Monitor, Ping, Game Mode 效能監控、Ping 監看、遊戲模式；`ScriptsExtra.cs` script variables, text recognition, notifications, schedule 腳本變數、文字辨識、通知、定時；`Backup.cs` backup & restore 備份及還原；`VideoEditor.cs`, `VideoEditorUi.cs` Video Editor 影片剪輯；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
 | `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
 | `release/` | User guide shipped with releases 隨發佈版本附上的使用說明（`使用說明.txt`） |
@@ -467,7 +523,7 @@ Downloaded by the user on demand, not bundled in the executable / 由用戶按�
 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and [OpenAI Whisper](https://github.com/openai/whisper) models — MIT License
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) — MIT License
-- [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the recorder, Instant Replay, Converter and Video Downloader as a separate program / GPL 授權，錄影工具、精彩重播、轉檔工具及影片下載以獨立程式方式調用
+- [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the recorder, Instant Replay, Video Editor, Converter and Video Downloader as a separate program / GPL 授權，螢幕錄影、精彩重播、影片剪輯、格式轉換及影片下載以獨立程式方式調用
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) — Unlicense, downloaded by Video Downloader / 由影片下載工具下載
 - [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD) — Valve's command-line Steam client, downloaded by Game Servers; dedicated servers are downloaded from Steam under each game's own terms / Valve 官方命令列 Steam 用戶端，由遊戲伺服器下載；各專用伺服器從 Steam 下載，受各遊戲條款約束
 - [Qwen3.5](https://huggingface.co/Qwen) models (GGUF by [unsloth](https://huggingface.co/unsloth)) — see each model's license / 請參閱各模型的授權

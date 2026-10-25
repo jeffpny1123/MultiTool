@@ -19,7 +19,7 @@ namespace MultiTool.Scripts;
 //  資料
 // =====================================================================
 
-public enum StepKind { Key, Click, Wait, Image, If, Loop, Break, Drag, StopScript, Thread, Parallel, System, Text, Scroll, Move }
+public enum StepKind { Key, Click, Wait, Image, If, Loop, Break, Drag, StopScript, Thread, Parallel, System, Text, Scroll, Move, Var, Notify, Call }
 
 /// <summary>按鍵 / 滑鼠嘅動作：撳住（按下 → 等 → 彈起）、淨係按下、淨係彈起。</summary>
 public enum PressMode { Hold, Down, Up }
@@ -51,6 +51,11 @@ public sealed class Step
     public decimal Seconds2 = 2m;             // 延遲：隨機嘅最長時間（秒）
     public decimal LimitSec = 0m;   // 循環：時限（秒，0 = 唔限）
     public string Until = "";       // 循環：到呢個現實時間就停（HH:mm:ss，空 = 唔限）
+    public string Var = "";         // 變數：名
+    public VarOp Op;                // 變數：設定 / 加 / 減 / 讀畫面數字（範圍 = X,Y → X2,Y2）
+    public decimal Value;           // 變數：數值
+    public bool Toast = true;       // 通知：Windows 通知
+    public bool Discord;            // 通知：Discord webhook
 
     public Step Clone()
     {
@@ -85,6 +90,9 @@ public sealed class Step
         StepKind.Text => Lang.T("輸入文字"),
         StepKind.Scroll => Lang.T("滑鼠"),
         StepKind.Move => Lang.T("滑鼠移動"),
+        StepKind.Var => Lang.T("變數"),
+        StepKind.Notify => Lang.T("通知"),
+        StepKind.Call => Lang.T("行其他腳本"),
         _ => Lang.T("搵圖點擊")
     };
 
@@ -122,6 +130,9 @@ public sealed class Step
         StepKind.Parallel => "par|~" + (Collapsed ? 1 : 0) + "|" + string.Join("|", Branches.Select(b =>
             Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", b.Select(x => x.Serialize())))))),
         StepKind.Thread => "thread|" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", Body.Select(b => b.Serialize())))),
+        StepKind.Var => $"var|{B64(Var)}|{(int)Op}|{D(Value)}|{X}|{Y}|{X2}|{Y2}",
+        StepKind.Notify => $"notify|{B64(Target)}|{(Toast ? 1 : 0)}|{(Discord ? 1 : 0)}",
+        StepKind.Call => $"call|{B64(Target)}|{B64(TargetName)}",
         _ => $"image|{Image}|{Similarity}"
     };
 
@@ -171,6 +182,13 @@ public sealed class Step
                     Body = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(At(1)))
                         .Split('\n').Where(l => l.Length > 0).Select(Parse).Where(x => x != null).Select(x => x!).ToList()
                 },
+                "var" => new Step
+                {
+                    Kind = StepKind.Var, Var = UnB64(At(1)), Op = (VarOp)Math.Clamp(Int(At(2), 0), 0, 3), Value = Dec(At(3), 0m),
+                    X = Int(At(4), 0), Y = Int(At(5), 0), X2 = Int(At(6), 0), Y2 = Int(At(7), 0)
+                },
+                "notify" => new Step { Kind = StepKind.Notify, Target = UnB64(At(1)), Toast = At(2) != "0", Discord = At(3) == "1" },
+                "call" => new Step { Kind = StepKind.Call, Target = UnB64(At(1)), TargetName = UnB64(At(2)) },
                 "move" => new Step
                 {
                     Kind = StepKind.Move, X = Int(At(1), 0), Y = Int(At(2), 0), X2 = Int(At(3), 0), Y2 = Int(At(4), 0), Hold = Dec(At(5), 0.5m)
@@ -229,7 +247,13 @@ public sealed class ThreadBlock
 /// <summary>「系統」步驟做嘅嘢。</summary>
 public enum SysAction { OpenApp, CloseApp, SwitchWindow, Shutdown, PlaySound }
 
-public enum CondKind { ImageFound, ImageNotFound, PixelColor, Time, Countdown, Elapsed }
+public enum CondKind { ImageFound, ImageNotFound, PixelColor, Time, Countdown, Elapsed, Text, Number, Variable }
+
+/// <summary>變數步驟做乜：設定、加、減、讀畫面上嘅數字。</summary>
+public enum VarOp { Set, Add, Sub, Read }
+
+/// <summary>比較：大過、大過或等於、細過、細過或等於、等於、唔等於。</summary>
+public enum CmpOp { Gt, Ge, Lt, Le, Eq, Ne }
 
 /// <summary>
 /// IF 框：自己一條線一直檢查條件，成立就行入面嘅步驟（同主步驟同時行，互不干擾）。
@@ -253,6 +277,11 @@ public sealed class IfBlock
     public bool ClickFound;            // 搵到圖：順手喺嗰個位置左鍵點一下
     public List<IfBlock> More = new(); // 額外條件（淨係用條件部分）
     public bool Or;                    // 幾個條件：true = 或者（任何一個成立）；false = 而且（全部成立）
+    public int X2, Y2;                 // 文字 / 數字：範圍右下角（X,Y 係左上角）
+    public string Text = "";           // 文字：要搵嘅字
+    public string Var = "";            // 變數：名
+    public CmpOp Op = CmpOp.Ge;        // 數字 / 變數：點比較
+    public decimal Value;              // 數字 / 變數：同乜比較
     public List<Step> Steps = new();
 
     /// <summary>所有條件（第一個 + 額外）。</summary>
@@ -273,11 +302,28 @@ public sealed class IfBlock
         CondKind.PixelColor => Lang.T("某位置係某顏色"),
         CondKind.Time => Lang.T("現實時間到咗"),
         CondKind.Elapsed => Lang.T("時限到（運行咗幾耐）"),
+        CondKind.Text => Lang.T("畫面出現文字"),
+        CondKind.Number => Lang.T("畫面數字比較"),
+        CondKind.Variable => Lang.T("變數比較"),
         _ => Lang.T("倒數完")
     };
 
     /// <summary>呢種條件要唔要設「每幾多秒檢查」。</summary>
-    public bool UsesInterval => AllConds.Any(c => c.Kind is CondKind.ImageFound or CondKind.ImageNotFound or CondKind.PixelColor);
+    public bool UsesInterval => AllConds.Any(c => c.Kind is CondKind.ImageFound or CondKind.ImageNotFound or CondKind.PixelColor
+        or CondKind.Text or CondKind.Number or CondKind.Variable);
+
+    public static string OpName(CmpOp o) => o switch
+    {
+        CmpOp.Gt => ">", CmpOp.Ge => "≥", CmpOp.Lt => "<", CmpOp.Le => "≤", CmpOp.Eq => "=", _ => "≠"
+    };
+
+    public static bool Compare(decimal a, CmpOp o, decimal b) => o switch
+    {
+        CmpOp.Gt => a > b, CmpOp.Ge => a >= b, CmpOp.Lt => a < b, CmpOp.Le => a <= b, CmpOp.Eq => a == b, _ => a != b
+    };
+
+    private static string B64(string s) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s ?? ""));
+    private static string UnB64(string s) { try { return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(s)); } catch { return ""; } }
 
     private static string D(decimal d) => d.ToString(CultureInfo.InvariantCulture);
 
@@ -285,6 +331,7 @@ public sealed class IfBlock
         $"{Id};kind={(int)Kind};img={Image};sim={Similarity};x={X};y={Y};color={Color};tol={Tolerance};" +
         $"time={Time};sec={D(Seconds)};elapsed={D(ElapsedSec)};interval={D(Interval)};once={(Once ? 1 : 0)};" +
         $"fold={(Collapsed ? 1 : 0)};click={(ClickFound ? 1 : 0)};or={(Or ? 1 : 0)};" +
+        $"x2={X2};y2={Y2};txt={B64(Text)};var={B64(Var)};op={(int)Op};val={D(Value)};" +
         (More.Count > 0 ? "more=" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", More.Select(m => m.Serialize())))) + ";" : "") +
         $"name={Name.Replace(';', '；').Replace('\n', ' ').Replace('\r', ' ')}";
 
@@ -321,7 +368,13 @@ public sealed class IfBlock
             decimal Dm(decimal def) => decimal.TryParse(v, NumberStyles.Number, CultureInfo.InvariantCulture, out var x) ? x : def;
             switch (k)
             {
-                case "kind": b.Kind = (CondKind)Math.Clamp(I(0), 0, 5); break;
+                case "kind": b.Kind = (CondKind)Math.Clamp(I(0), 0, 8); break;
+                case "x2": b.X2 = I(0); break;
+                case "y2": b.Y2 = I(0); break;
+                case "txt": b.Text = UnB64(v); break;
+                case "var": b.Var = UnB64(v); break;
+                case "op": b.Op = (CmpOp)Math.Clamp(I(1), 0, 5); break;
+                case "val": b.Value = Dm(0m); break;
                 case "img": b.Image = v; break;
                 case "sim": b.Similarity = I(80); break;
                 case "x": b.X = I(0); break;
@@ -380,6 +433,10 @@ public sealed class Script
     public bool FakeFocus;             // 背景執行：送輸入前先扮個視窗有焦點（部分遊戲要咁先收背景輸入）
     public bool Public;                // 公開到腳本庫（P2P）
     public string Desc = "";           // 腳本庫顯示嘅簡介
+    public bool NotifyEnd;             // 完成 / 出錯時通知
+    public string SchedTime = "";      // 每日定時開始（HH:mm，空 = 冇）
+    public int SchedDays = 127;        // 定時：星期幾（bit 0 = 星期日 … bit 6 = 星期六）
+    public bool AutoStart;             // 開 MultiTool 時自動開始
 
     public string Dir
     {
@@ -491,7 +548,11 @@ public sealed class Script
                 "win=2",
                 "pub=" + (Public ? "1" : "0"),
                 "fakefocus=" + (FakeFocus ? "1" : "0"),
-                "desc=" + Desc.Replace('\n', ' ').Replace('\r', ' ')
+                "desc=" + Desc.Replace('\n', ' ').Replace('\r', ' '),
+                "notifyend=" + (NotifyEnd ? "1" : "0"),
+                "sched=" + SchedTime,
+                "scheddays=" + SchedDays,
+                "autostart=" + (AutoStart ? "1" : "0")
             };
             lines.AddRange(Steps.Select(s => "step=" + s.Serialize()));
             foreach (var t in Threads)
@@ -545,6 +606,10 @@ public sealed class Script
                     case "pub": sc.Public = v == "1"; break;
                     case "fakefocus": sc.FakeFocus = v == "1"; break;
                     case "desc": sc.Desc = v; break;
+                    case "notifyend": sc.NotifyEnd = v == "1"; break;
+                    case "sched": sc.SchedTime = v.Trim(); break;
+                    case "scheddays": if (int.TryParse(v, out var sd)) sc.SchedDays = sd & 127; break;
+                    case "autostart": sc.AutoStart = v == "1"; break;
                     case "refw": int.TryParse(v, out sc.RefW); break;
                     case "refh": int.TryParse(v, out sc.RefH); break;
                     case "speed":
@@ -721,6 +786,7 @@ public static class ScriptRunner
         var cts = new CancellationTokenSource();
         Running[s.Id] = cts;
         RunningScripts[s.Id] = s;
+        ScriptVars.Reset(s.Id); // 變數每次開始都由 0 計起
         Changed?.Invoke();
         _ = Task.Run(() => RunAsync(s, cts.Token));
     }
@@ -765,6 +831,10 @@ public static class ScriptRunner
         if (b.Kind is CondKind.ImageFound or CondKind.ImageNotFound) CheckImages(s, b.Image, where + Lang.T(" 條件"), errs);
         if (b.Kind == CondKind.Time && !TimeSpan.TryParse(b.Time, CultureInfo.InvariantCulture, out _))
             errs.Add(Lang.F("{0} 條件：時間格式唔啱", where));
+        if (b.Kind is CondKind.Text or CondKind.Number && (b.X == b.X2 || b.Y == b.Y2))
+            errs.Add(Lang.F("{0} 條件：未揀辨識範圍", where));
+        if (b.Kind == CondKind.Text && b.Text.Trim().Length == 0) errs.Add(Lang.F("{0} 條件：未填要搵嘅文字", where));
+        if (b.Kind == CondKind.Variable && b.Var.Trim().Length == 0) errs.Add(Lang.F("{0} 條件：未填變數名", where));
     }
 
     private static void CheckSteps(Script s, List<Step> steps, string path, List<string> errs)
@@ -791,6 +861,19 @@ public static class ScriptRunner
                     break;
                 case StepKind.Text:
                     if (st.Target.Length == 0) errs.Add(Lang.F("{0}：未輸入文字", where));
+                    break;
+                case StepKind.Var:
+                    if (st.Var.Trim().Length == 0) errs.Add(Lang.F("{0}：未填變數名", where));
+                    if (st.Op == VarOp.Read && (st.X == st.X2 || st.Y == st.Y2)) errs.Add(Lang.F("{0}：未揀讀數字嘅範圍", where));
+                    break;
+                case StepKind.Notify:
+                    if (st.Target.Trim().Length == 0) errs.Add(Lang.F("{0}：未輸入通知內容", where));
+                    if (!st.Toast && !st.Discord) errs.Add(Lang.F("{0}：未揀通知方式", where));
+                    else if (st.Discord && !st.Toast && Notifier.DiscordUrl.Length == 0) errs.Add(Lang.F("{0}：未設定 Discord webhook（設定 → 通知）", where));
+                    break;
+                case StepKind.Call:
+                    if (st.Target.Length == 0) errs.Add(Lang.F("{0}：未揀腳本", where));
+                    else if (!File.Exists(Path.Combine(AppPaths.Scripts, st.Target, "script.txt"))) errs.Add(Lang.F("{0}：搵唔到腳本「{1}」", where, st.TargetName));
                     break;
                 case StepKind.Thread:
                     if (st.Body.Count == 0) errs.Add(Lang.F("{0}：新線程入面冇步驟", where));
@@ -897,6 +980,9 @@ public static class ScriptRunner
         return new RunCtx(null, h, rel, 0, refSize) { Fake = true };
     }
 
+    /// <summary>編輯介面「試辨識」用：同運行時一樣嘅環境（前景 / 背景視窗）。</summary>
+    internal static RunCtx PreviewCtx(Script s) => MakeCtx(s);
+
     private static Rectangle? OwnWindow() => OnUi(() =>
     {
         var f = _ui!.FindForm();
@@ -914,6 +1000,9 @@ public static class ScriptRunner
     }
 
     private static double SpeedNow => Math.Clamp(Current.Value?.Speed ?? 1.0, 0.5, 3.0);
+
+    // 「行其他腳本」疊咗幾多層（防止互相呼叫無限咁行）
+    private static readonly AsyncLocal<int> CallDepth = new();
 
     // 腳本幾時開始行（時限條件用；跟住 async 流程走）
     private static readonly AsyncLocal<DateTime> StartedAt = new();
@@ -988,14 +1077,16 @@ public static class ScriptRunner
                 ct.ThrowIfCancellationRequested();
             }
             Post(() => { if (IsRunning(s)) Stop(s, Lang.F("{0:HH:mm:ss} 完成", DateTime.Now)); });
+            NotifyEnd(s, Lang.F("{0:HH:mm:ss} 完成", DateTime.Now));
         }
         catch (OperationCanceledException) { }
-        catch (ScriptStop) { }
-        catch (NeedAdminException na) { NeedAdmin(s, na.Process); }
+        catch (ScriptStop) { NotifyEnd(s, Lang.F("{0:HH:mm:ss} 停止腳本", DateTime.Now)); }
+        catch (NeedAdminException na) { NeedAdmin(s, na.Process); NotifyEnd(s, Lang.F("「{0}」用咗管理員權限運行，點擊同按鍵被 Windows 擋住", na.Process)); }
         catch (Exception ex)
         {
             AppPaths.LogError("運行腳本 " + s.Name, ex);
             Post(() => Stop(s, Lang.T("出錯：") + ex.Message));
+            NotifyEnd(s, Lang.T("出錯：") + ex.Message);
         }
         finally
         {
@@ -1003,6 +1094,18 @@ public static class ScriptRunner
             try { held.ReleaseAll(); } catch { }
             try { await Task.WhenAll(ifTasks); } catch { }
         }
+    }
+
+    /// <summary>腳本有剔「完成 / 出錯時通知」就發通知。</summary>
+    private static void NotifyEnd(Script s, string text)
+    {
+        if (s.NotifyEnd) Notifier.Send(s.Name, text, toast: true, discord: true);
+    }
+
+    /// <summary>「新線程」、「IF 框」等出錯：都通知埋（淨係有剔先會發）。</summary>
+    private static void NotifyError(Script? s, string text)
+    {
+        if (s != null) NotifyEnd(s, text);
     }
 
     /// <summary>「系統」步驟：開 / 閂程式、切換視窗、關機。</summary>
@@ -1088,6 +1191,7 @@ public static class ScriptRunner
         {
             AppPaths.LogError("新線程", ex);
             Post(() => { if (IsRunning(s)) Stop(s, Lang.T("新線程出錯：") + ex.Message); });
+            NotifyError(s, Lang.T("新線程出錯：") + ex.Message);
         }
         finally { try { held.ReleaseAll(); } catch { } }
     }
@@ -1133,6 +1237,21 @@ public static class ScriptRunner
                 return TimeSpan.TryParse(b.Time, CultureInfo.InvariantCulture, out var ts) && DateTime.Now.TimeOfDay >= ts;
             case CondKind.Elapsed:
                 return RunTime.TotalSeconds >= (double)b.ElapsedSec;
+            case CondKind.Text:
+            {
+                using var img = exclude.CaptureRegion(b.X, b.Y, b.X2, b.Y2);
+                if (img == null) return false;
+                return OcrServer.ContainsText(OcrServer.Recognize(img, ct), b.Text);
+            }
+            case CondKind.Number:
+            {
+                using var img = exclude.CaptureRegion(b.X, b.Y, b.X2, b.Y2);
+                if (img == null) return false;
+                var n = OcrServer.FirstNumber(OcrServer.Recognize(img, ct));
+                return n != null && IfBlock.Compare(n.Value, b.Op, b.Value);
+            }
+            case CondKind.Variable:
+                return IfBlock.Compare(ScriptVars.Get(Current.Value?.Id ?? "", b.Var), b.Op, b.Value);
             default:
                 return false;
         }
@@ -1219,6 +1338,9 @@ public static class ScriptRunner
                     case CondKind.ImageFound:
                     case CondKind.ImageNotFound:
                     case CondKind.PixelColor:
+                    case CondKind.Text:
+                    case CondKind.Number:
+                    case CondKind.Variable:
                         ok = CheckNow(b, dir, MakeCtx(s), ct);
                         break;
                     case CondKind.Time:
@@ -1329,8 +1451,55 @@ public static class ScriptRunner
                 break;
             }
             case StepKind.Text:
-                exclude.TypeText(st.Target, ct);
+                exclude.TypeText(ScriptVars.Fill(Current.Value?.Id ?? "", st.Target), ct);
                 break;
+            case StepKind.Var:
+            {
+                string id = Current.Value?.Id ?? "";
+                string name = st.Var.Trim();
+                if (name.Length == 0) break;
+                switch (st.Op)
+                {
+                    case VarOp.Set: ScriptVars.Set(id, name, st.Value); break;
+                    case VarOp.Add: ScriptVars.Set(id, name, ScriptVars.Get(id, name) + st.Value); break;
+                    case VarOp.Sub: ScriptVars.Set(id, name, ScriptVars.Get(id, name) - st.Value); break;
+                    case VarOp.Read:
+                    {
+                        using var img = exclude.CaptureRegion(st.X, st.Y, st.X2, st.Y2);
+                        var n = img == null ? null : OcrServer.FirstNumber(OcrServer.Recognize(img, ct));
+                        if (n != null) ScriptVars.Set(id, name, n.Value); // 讀唔到數字就保留舊值
+                        break;
+                    }
+                }
+                break;
+            }
+            case StepKind.Notify:
+            {
+                var me = Current.Value;
+                Notifier.Send(me?.Name ?? Program.AppName, ScriptVars.Fill(me?.Id ?? "", st.Target), st.Toast, st.Discord);
+                break;
+            }
+            case StepKind.Call:
+            {
+                // 行其他腳本：用而家呢個腳本嘅視窗設定，行嗰個腳本嘅主步驟一次（變數共用）
+                int depth = CallDepth.Value;
+                if (depth >= 8) throw new InvalidOperationException(Lang.T("「行其他腳本」疊得太多層（最多 8 層），係咪互相呼叫咗？"));
+                var other = Script.Load(Path.Combine(AppPaths.Scripts, st.Target));
+                if (other == null) throw new InvalidOperationException(Lang.F("搵唔到腳本「{0}」", st.TargetName));
+                string odir = Path.Combine(AppPaths.Scripts, st.Target);
+                CallDepth.Value = depth + 1;
+                try
+                {
+                    foreach (var sub in other.Steps)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        try { await RunStep(sub, odir, exclude, held, ct); }
+                        catch (LoopBreak) { }
+                    }
+                }
+                finally { CallDepth.Value = depth; }
+                break;
+            }
             case StepKind.Scroll:
             {
                 var pt = exclude.Pt(st.X, st.Y);
@@ -1633,6 +1802,21 @@ public sealed class ScriptsPage : Panel
         Dock = DockStyle.Fill;
         ScriptRunner.Init(this);
         EmergencyStop.Init();
+        Application.ApplicationExit += (_, _) => OcrServer.Stop();
+        // 定時開始：每 15 秒睇一次；開 MultiTool 自動開始：等程式開好 5 秒先開
+        var sched = new System.Windows.Forms.Timer { Interval = 15_000 };
+        sched.Tick += (_, _) => { try { ScriptSchedule.Tick(_scripts); _grid?.Invalidate(); } catch (Exception ex) { AppPaths.LogError("定時開始", ex); } };
+        sched.Start();
+        Disposed += (_, _) => sched.Dispose();
+        var autoStart = new System.Windows.Forms.Timer { Interval = 5_000 };
+        autoStart.Tick += (_, _) =>
+        {
+            autoStart.Stop();
+            autoStart.Dispose();
+            foreach (var sc in _scripts.Where(x => x.AutoStart && !ScriptRunner.IsRunning(x)).ToList())
+                try { ScriptRunner.Start(sc); } catch (Exception ex) { AppPaths.LogError("自動開始腳本", ex); }
+        };
+        autoStart.Start();
 
         _grid = new ScriptGrid(_scripts);
         _grid.OpenRequested += Open;
@@ -1665,7 +1849,8 @@ public sealed class ScriptsPage : Panel
                 Background = sc.Background, TargetProcess = sc.TargetProcess, TargetTitle = sc.TargetTitle, Speed = sc.Speed,
                 Relative = sc.Relative, TargetHwnd = sc.TargetHwnd, TargetIndex = sc.TargetIndex, RefW = sc.RefW, RefH = sc.RefH,
                 Ifs = sc.Ifs.Select(x => x.Clone()).ToList(),
-                Threads = sc.Threads.Select(x => x.Clone()).ToList()
+                Threads = sc.Threads.Select(x => x.Clone()).ToList(),
+                NotifyEnd = sc.NotifyEnd // 定時 / 自動開始唔抄，費事兩個一齊開
             };
             try
             {
@@ -1739,7 +1924,7 @@ public sealed class ScriptsPage : Panel
             // 「開始已選 / 全部停止」快捷鍵由 HotkeyHub 處理
             foreach (var sc in _scripts.ToList())
             {
-                // 喺其他頁（AI 助手、錄影工具…）或者最少化：所有腳本快捷鍵都用得；
+                // 喺其他頁（AI 助手、螢幕錄影…）或者最少化：所有腳本快捷鍵都用得；
                 // 喺「我的腳本」頁入面就淨係預覽緊嗰個可以開始（費事改緊其他腳本時誤觸）；行緊嘅腳本喺邊度都可以停
                 bool viewing = Visible && (_editor is ScriptViewer v && v.Script == sc || _editor is MonitorView);
                 bool usable = viewing || (!Visible && HotkeyHub.EffectiveGlobal("scripts.each")) || ScriptRunner.IsRunning(sc);
@@ -1943,7 +2128,7 @@ internal sealed class ScriptGrid : Control
         return new Rectangle(0, i * (TileH + Gap), Math.Max(Ui.S(300), Width) - 1, h - 1);
     }
 
-    private int _hoverBg = -1, _hoverRun = -1, _hoverRuns = -1;
+    private int _hoverBg = -1, _hoverRun = -1, _hoverRuns = -1, _hoverClock = -1;
 
     /// <summary>「開始」掣左邊：運行次數選單。</summary>
     private Rectangle RunsRect(Rectangle tile)
@@ -1965,7 +2150,15 @@ internal sealed class ScriptGrid : Control
     {
         int w = Math.Clamp(tile.Width * 38 / 100, Ui.S(180), Ui.S(380));
         int h = Ui.S(30);
-        return new Rectangle(tile.Right - Ui.S(270) - w, tile.Y + (tile.Height - h) / 2, w, h);
+        return new Rectangle(tile.Right - Ui.S(282) - w, tile.Y + (tile.Height - h) / 2, w, h);
+    }
+
+    /// <summary>運行次數左邊「⏰」掣：定時開始 / 自動開始 / 通知。</summary>
+    private Rectangle ClockRect(Rectangle tile)
+    {
+        var rs = RunsRect(tile);
+        int sz = Ui.S(30);
+        return new Rectangle(rs.X - Ui.S(8) - Ui.S(34), rs.Y, Ui.S(34), sz);
     }
 
     /// <summary>格仔右上角個剔格。</summary>
@@ -2020,10 +2213,28 @@ internal sealed class ScriptGrid : Control
                 Ui.Text, TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
             string info = Lang.F("{0} 個步驟", sc.Steps.Count) + (sc.Ifs.Count > 0 ? Lang.F(" · {0} 個 IF", sc.Ifs.Count) : "")
                           + (sc.Public ? " · " + Lang.T("🌐 已公開") : "");
+            string sched = ScriptSchedule.ListText(sc);
             // 運行中：顯示第幾輪 / 第幾步
             bool showRun = run && _status.TryGetValue(sc.Id, out var stText) && stText.Length > 0;
-            TextRenderer.DrawText(g, showRun ? "● " + _status[sc.Id] : info, Ui.F(8.75f), new Rectangle(tx, r.Y + Ui.S(36), textW, Ui.S(18)),
-                showRun ? Ui.Success : Ui.TextDim, TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+            var infoRect = new Rectangle(tx, r.Y + Ui.S(36), textW, Ui.S(18));
+            if (showRun)
+                TextRenderer.DrawText(g, "● " + _status[sc.Id], Ui.F(8.75f), infoRect, Ui.Success,
+                    TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+            else
+            {
+                // 步驟數（灰）+ 定時（藍）
+                var f = Ui.F(8.75f);
+                int iw = TextRenderer.MeasureText(g, info, f, Size.Empty, TextFormatFlags.NoPadding).Width;
+                if (sched.Length > 0 && iw < textW - Ui.S(60))
+                {
+                    TextRenderer.DrawText(g, info + " · ", f, infoRect, Ui.TextDim, TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                    int sw = TextRenderer.MeasureText(g, info + " · ", f, Size.Empty, TextFormatFlags.NoPadding).Width;
+                    TextRenderer.DrawText(g, sched, f, new Rectangle(tx + sw, infoRect.Y, Math.Max(10, textW - sw), infoRect.Height), Ui.Accent,
+                        TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+                }
+                else
+                    TextRenderer.DrawText(g, info, f, infoRect, Ui.TextDim, TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+            }
             // 右上角剔格（多選）
             var cb = CheckRect(r);
             bool sel = Selected.Contains(sc);
@@ -2054,6 +2265,17 @@ internal sealed class ScriptGrid : Control
             }
             TextRenderer.DrawText(g, BgControls.ShortTarget(sc) + "  ▾", Ui.F(8.75f), new Rectangle(bp.X + Ui.S(8), bp.Y, bp.Width - Ui.S(12), bp.Height),
                 sc.Background ? Ui.Text : Ui.TextDim, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            // ⏰ 定時 / 通知
+            var ck = ClockRect(r);
+            bool ckOn = ScriptSchedule.HasSchedule(sc) || sc.AutoStart || sc.NotifyEnd;
+            using (var ckp = Ui.Round(new RectangleF(ck.X, ck.Y, ck.Width, ck.Height), Ui.S(6f)))
+            {
+                using (var ckb = new SolidBrush(_hoverClock == i ? Ui.CardHi : ckOn ? Ui.Mix(Ui.Card, Ui.Accent, 0.22f) : Ui.Card)) g.FillPath(ckb, ckp);
+                using var ckpen = new Pen(_hoverClock == i || ckOn ? Ui.Accent : Ui.Border, 1f);
+                g.DrawPath(ckpen, ckp);
+            }
+            TextRenderer.DrawText(g, "⏰", Ui.F(9.5f), ck, ckOn ? Ui.Text : Ui.TextDim,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
             // 運行次數
             var rs = RunsRect(r);
             using (var rsp = Ui.Round(new RectangleF(rs.X, rs.Y, rs.Width, rs.Height), Ui.S(6f)))
@@ -2084,7 +2306,24 @@ internal sealed class ScriptGrid : Control
         int hb = h >= 0 && h < _scripts.Count && BgRect(TileRect(h)).Contains(e.Location) ? h : -1;
         int hr = h >= 0 && h < _scripts.Count && RunRect(TileRect(h)).Contains(e.Location) ? h : -1;
         int hn = h >= 0 && h < _scripts.Count && RunsRect(TileRect(h)).Contains(e.Location) ? h : -1;
-        if (h != _hover || hb != _hoverBg || hr != _hoverRun || hn != _hoverRuns) { _hover = h; _hoverBg = hb; _hoverRun = hr; _hoverRuns = hn; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); }
+        int hc = h >= 0 && h < _scripts.Count && ClockRect(TileRect(h)).Contains(e.Location) ? h : -1;
+        // 提示：指住「⏰」掣或者名下面嘅定時文字，顯示完整定時時間
+        string? tip = null;
+        if (h >= 0 && h < _scripts.Count)
+        {
+            var sc = _scripts[h];
+            var r = TileRect(h);
+            string full = string.Join("\n", new[] { ScriptSchedule.ListText(sc), sc.NotifyEnd ? Lang.T("完成 / 出錯時通知") : "" }.Where(x => x.Length > 0));
+            var infoRect = Rectangle.FromLTRB(r.X + Ui.S(48), r.Y + Ui.S(32), BgRect(r).X - Ui.S(4), r.Y + Ui.S(56));
+            if (hc >= 0) tip = full.Length > 0 ? full : Lang.T("定時開始 / 自動開始 / 完成時通知");
+            else if (full.Length > 0 && infoRect.Contains(e.Location)) tip = full;
+        }
+        if (tip != _tipText)
+        {
+            _tipText = tip;
+            _clockTip.SetToolTip(this, tip);
+        }
+        if (h != _hover || hb != _hoverBg || hr != _hoverRun || hn != _hoverRuns || hc != _hoverClock) { _hover = h; _hoverBg = hb; _hoverRun = hr; _hoverRuns = hn; _hoverClock = hc; Cursor = h >= 0 ? Cursors.Hand : Cursors.Default; Invalidate(); }
     }
 
     protected override void OnMouseLeave(EventArgs e)
@@ -2094,8 +2333,13 @@ internal sealed class ScriptGrid : Control
         _hoverBg = -1;
         _hoverRun = -1;
         _hoverRuns = -1;
+        _hoverClock = -1;
+        if (_tipText != null) { _tipText = null; _clockTip.SetToolTip(this, null); }
         Invalidate();
     }
+
+    private readonly ToolTip _clockTip = new() { AutoPopDelay = 15000, InitialDelay = 300 };
+    private string? _tipText;
 
     protected override void OnMouseUp(MouseEventArgs e)
     {
@@ -2113,6 +2357,11 @@ internal sealed class ScriptGrid : Control
             {
                 ScriptRunner.Toggle(_scripts[i]);
                 Invalidate();
+                return;
+            }
+            if (ClockRect(TileRect(i)).Contains(e.Location))
+            {
+                if (ScriptAutoDialog.Edit(FindForm(), _scripts[i])) Invalidate();
                 return;
             }
             if (RunsRect(TileRect(i)).Contains(e.Location))
@@ -2151,7 +2400,7 @@ internal sealed class ScriptGrid : Control
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _menu.Dispose();
+        if (disposing) { _menu.Dispose(); _clockTip.Dispose(); }
         base.Dispose(disposing);
     }
 }
@@ -2212,9 +2461,23 @@ internal sealed class ScriptEditor : Panel
         var rec = new FancyButton { Text = Lang.T("● 錄製"), Kind = BtnKind.Ghost, Font = Ui.F(9.75f), Size = new Size(Ui.S(90), Ui.S(34)) };
         _tip.SetToolTip(rec, Lang.T("錄低你撳嘅鍵、滑鼠掣同滾輪（唔記滑鼠移動），停咗之後加喺主線程最尾。撳 F10 停止。"));
         rec.Click += (_, _) => StartRecording();
+        var auto = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9.75f) };
+        void AutoText()
+        {
+            bool on = ScriptSchedule.HasSchedule(_sc) || _sc.AutoStart || _sc.NotifyEnd;
+            auto.Text = on ? Lang.T("⏰ 定時 / 通知 ✓") : Lang.T("⏰ 定時 / 通知");
+            auto.Size = new Size(auto.GetPreferredSize(Size.Empty).Width + Ui.S(8), Ui.S(34));
+            var tip = string.Join("\n", new[]
+            {
+                ScriptSchedule.Describe(_sc), _sc.AutoStart ? Lang.T("開 MultiTool 時自動開始") : "", _sc.NotifyEnd ? Lang.T("完成 / 出錯時通知") : ""
+            }.Where(x => x.Length > 0));
+            _tip.SetToolTip(auto, tip.Length > 0 ? tip : Lang.T("每日定時開始、開 MultiTool 自動開始、完成 / 出錯時通知"));
+        }
+        AutoText();
+        auto.Click += (_, _) => { if (ScriptAutoDialog.Edit(FindForm(), _sc)) { AutoText(); auto.Parent?.PerformLayout(); } };
 
         var top = new BareRow();
-        top.SetContent(new FlowRow(new Control[] { back, nameHost, _mode, rec }, new Control[] { _start, hkHost, hkLabel }));
+        top.SetContent(new FlowRow(new Control[] { back, nameHost, _mode, rec, auto }, new Control[] { _start, hkHost, hkLabel }));
         top.Padding = new Padding(0);
 
         // ---- 步驟 ----
@@ -2653,6 +2916,9 @@ internal sealed class StepList : Panel, ISizeCache
         _kinds.Add(StepKind.Text);
         _kinds.Add(StepKind.Parallel);
         _kinds.Add(StepKind.System);
+        _kinds.Add(StepKind.Var);
+        _kinds.Add(StepKind.Notify);
+        _kinds.Add(StepKind.Call);
         if (inLoop) _kinds.Add(StepKind.Break);
         _kinds.Add(StepKind.StopScript);
         _sc = sc;
@@ -2671,7 +2937,7 @@ internal sealed class StepList : Panel, ISizeCache
         {
             var more = new FancyButton { Text = Lang.T("+ 更多 ▾"), Kind = BtnKind.Ghost, Dashed = true, Font = Ui.F(9.5f) };
             more.Size = new Size(Ui.S(116), Ui.S(34));
-            _tip.SetToolTip(more, Lang.T("滑鼠移動、輸入文字、IF 條件、同時運行、系統、中斷循環、停止腳本"));
+            _tip.SetToolTip(more, Lang.T("滑鼠移動、輸入文字、IF 條件、同時運行、系統、變數、通知、行其他腳本、中斷循環、停止腳本"));
             more.Click += (_, _) => ShowMoreMenu(more);
             _addButtons.Add(more);
             Controls.Add(more);
@@ -2882,7 +3148,8 @@ internal sealed class StepList : Panel, ISizeCache
         try { menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
         menu.BackColor = Ui.CardHi;
         menu.ForeColor = Ui.Text;
-        foreach (var k in _kinds.Where(k => k is StepKind.Move or StepKind.Text or StepKind.If or StepKind.Parallel or StepKind.System or StepKind.Break or StepKind.StopScript))
+        foreach (var k in _kinds.Where(k => k is StepKind.Move or StepKind.Text or StepKind.If or StepKind.Parallel or StepKind.System
+                                              or StepKind.Var or StepKind.Notify or StepKind.Call or StepKind.Break or StepKind.StopScript))
         {
             var kind = k;
             menu.Items.Add(Step.KindName(kind), null, (_, _) => BeginInvoke(() => AddStep(kind)));
@@ -3020,6 +3287,8 @@ internal sealed class StepList : Panel, ISizeCache
         if (kind == StepKind.Parallel) { st.Branches.Add(new List<Step>()); st.Branches.Add(new List<Step>()); }
         if (kind == StepKind.System) st.Seconds = 60m;
         if (kind == StepKind.Scroll) st.Count = -3;
+        if (kind == StepKind.Var) { st.Var = ScriptVars.NamesIn(_sc).FirstOrDefault() ?? Lang.T("次數"); st.Op = VarOp.Add; st.Value = 1; }
+        if (kind == StepKind.Notify) st.Target = Lang.T("腳本做完喇");
         if (kind is StepKind.Click or StepKind.Drag or StepKind.Scroll or StepKind.Move)
         {
             var p = ScriptCoords.FromScreen(_sc, Cursor.Position) ?? Point.Empty;
@@ -3312,9 +3581,85 @@ internal sealed class StepList : Panel, ISizeCache
             {
                 var tb = new TextBox { Text = st.Target, MaxLength = 2000 };
                 var host = new InputHost(tb, Ui.S(320));
-                _tip.SetToolTip(tb, Lang.T("要輸入嘅文字（中文都得）"));
+                _tip.SetToolTip(tb, Lang.T("要輸入嘅文字（中文都得）。{變數名} 會換做變數嘅數值。"));
                 tb.TextChanged += (_, _) => { st.Target = tb.Text; Changed(false); };
                 list.Add(host);
+                break;
+            }
+            case StepKind.Var:
+            {
+                var name = new TextBox { Text = st.Var, MaxLength = 30, PlaceholderText = Lang.T("變數名") };
+                var nameHost = new InputHost(name, Ui.S(120));
+                _tip.SetToolTip(name, Lang.T("變數名（例如「次數」）。每次開始腳本都由 0 計起；IF 條件可以用「變數比較」。"));
+                name.TextChanged += (_, _) => { st.Var = name.Text.Trim(); Changed(false); };
+                string OpText(VarOp o) => o switch
+                {
+                    VarOp.Set => Lang.T("設定做"), VarOp.Add => Lang.T("加"), VarOp.Sub => Lang.T("減"), _ => Lang.T("讀畫面數字")
+                };
+                var op = new FancyButton { Text = OpText(st.Op) + "  ▾", Kind = BtnKind.Ghost, Font = Ui.F(9.75f) };
+                op.Size = new Size(Math.Max(Ui.S(84), TextRenderer.MeasureText(op.Text, op.Font).Width + Ui.S(26)), Ui.S(34));
+                op.Click += (_, _) =>
+                {
+                    var m = DarkMenu();
+                    foreach (VarOp o in Enum.GetValues(typeof(VarOp)))
+                    {
+                        var chosen = o;
+                        var it = new ToolStripMenuItem(OpText(o)) { Checked = st.Op == o };
+                        it.Click += (_, _) => BeginInvoke(() => { st.Op = chosen; RebuildRow(st); });
+                        m.Items.Add(it);
+                    }
+                    ShowMenu(m, op);
+                };
+                list.AddRange(new Control[] { nameHost, op });
+                if (st.Op == VarOp.Read)
+                {
+                    var pos = L(ScriptUiBits.RegionText(st.X, st.Y, st.X2, st.Y2), Ui.Text);
+                    var pick = new FancyButton { Text = Lang.T("揀範圍"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(78), Ui.S(34)) };
+                    _tip.SetToolTip(pick, Lang.T("框住畫面上嘅數字（例如血量、金錢）"));
+                    pick.Click += (_, _) => ScriptUiBits.PickRegion(pick, _sc, (a, b) =>
+                    {
+                        st.X = a.X; st.Y = a.Y; st.X2 = b.X; st.Y2 = b.Y;
+                        pos.Text = ScriptUiBits.RegionText(st.X, st.Y, st.X2, st.Y2);
+                        Changed(false);
+                        Relayout();
+                    });
+                    var test = new FancyButton { Text = Lang.T("試辨識"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(78), Ui.S(34)) };
+                    test.Click += (_, _) => ScriptUiBits.TestRegion(test, _sc, st.X, st.Y, st.X2, st.Y2);
+                    list.AddRange(new Control[] { pos, pick, test, L(Lang.T("（讀第一個數字）"), Ui.TextFaint) });
+                }
+                else
+                {
+                    var v = new NumberBox(Ui.S(110)) { Minimum = -999_999_999m, Maximum = 999_999_999m, DecimalPlaces = st.Value % 1 == 0 ? 0 : 2, Increment = 1m };
+                    v.Value = st.Value;
+                    v.ValueChanged += (_, _) => { st.Value = v.Value; Changed(false); };
+                    list.Add(v);
+                }
+                break;
+            }
+            case StepKind.Notify:
+            {
+                var tb = new TextBox { Text = st.Target, MaxLength = 500 };
+                var host = new InputHost(tb, Ui.S(280));
+                _tip.SetToolTip(tb, Lang.T("通知內容。{變數名} 會換做變數嘅數值，例如「刷咗 {次數} 次」。"));
+                tb.TextChanged += (_, _) => { st.Target = tb.Text; Changed(false); };
+                var win = new ToggleChip("Windows") { Checked = st.Toast };
+                win.Size = new Size(win.Width, Ui.S(30));
+                _tip.SetToolTip(win, Lang.T("彈 Windows 通知"));
+                win.CheckedChanged += () => { st.Toast = win.Checked; Changed(false); };
+                var dc = new ToggleChip("Discord") { Checked = st.Discord };
+                dc.Size = new Size(dc.Width, Ui.S(30));
+                _tip.SetToolTip(dc, Lang.T("發去 Discord（喺「設定 → 通知」填 webhook 網址）"));
+                dc.CheckedChanged += () => { st.Discord = dc.Checked; Changed(false); };
+                list.AddRange(new Control[] { host, win, dc });
+                break;
+            }
+            case StepKind.Call:
+            {
+                var pick = new FancyButton { Text = (st.TargetName.Length > 0 ? st.TargetName : Lang.T("揀腳本")) + "  ▾", Kind = BtnKind.Ghost, Font = Ui.F(9.75f) };
+                pick.Size = new Size(Math.Max(Ui.S(120), Math.Min(Ui.S(260), TextRenderer.MeasureText(pick.Text, pick.Font).Width + Ui.S(26))), Ui.S(34));
+                pick.Click += (_, _) => ScriptUiBits.PickScript(pick, _sc, st.Target, (folder, name) =>
+                    BeginInvoke(() => { st.Target = folder; st.TargetName = name; RebuildRow(st); }));
+                list.AddRange(new Control[] { pick, L(Lang.T("用呢個腳本嘅視窗設定，行嗰個腳本嘅主步驟一次"), Ui.TextFaint) });
                 break;
             }
             case StepKind.Scroll:
@@ -4181,6 +4526,7 @@ internal sealed class IfPanel : TintPanel, ISizeCache
             {
                 if (c.Kind == kind) return;
                 c.Kind = kind;
+                if (kind == CondKind.Variable && c.Var.Length == 0) c.Var = ScriptVars.NamesIn(_sc).FirstOrDefault() ?? "";
                 Save();
                 BeginInvoke(RebuildCond);
             };
@@ -4264,6 +4610,54 @@ internal sealed class IfPanel : TintPanel, ISizeCache
                     L(_nested ? Lang.T("（行到呢步時已經夠鐘）") : Lang.T("（到咗觸發一次；想停腳本就加「停止腳本」）"), Ui.TextFaint)
                 });
                 break;
+            case CondKind.Text:
+            case CondKind.Number:
+            {
+                var pos = L(ScriptUiBits.RegionText(c.X, c.Y, c.X2, c.Y2), Ui.Text);
+                var pick = new FancyButton { Text = Lang.T("揀範圍"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(78), Ui.S(34)) };
+                _tip.SetToolTip(pick, c.Kind == CondKind.Text ? Lang.T("框住畫面上會出現文字嘅位置") : Lang.T("框住畫面上嘅數字（例如血量、金錢）"));
+                pick.Click += (_, _) => ScriptUiBits.PickRegion(pick, _sc, (a, b) =>
+                {
+                    c.X = a.X; c.Y = a.Y; c.X2 = b.X; c.Y2 = b.Y;
+                    pos.Text = ScriptUiBits.RegionText(c.X, c.Y, c.X2, c.Y2);
+                    Save();
+                    Relayout();
+                });
+                var test = new FancyButton { Text = Lang.T("試辨識"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(78), Ui.S(34)) };
+                _tip.SetToolTip(test, Lang.T("即刻截個範圍，睇吓讀到乜"));
+                test.Click += (_, _) => ScriptUiBits.TestRegion(test, _sc, c.X, c.Y, c.X2, c.Y2);
+                row.AddRange(new Control[] { pos, pick, test });
+                if (c.Kind == CondKind.Text)
+                {
+                    var tb = new TextBox { Text = c.Text, MaxLength = 100, PlaceholderText = Lang.T("要搵嘅字") };
+                    var host = new InputHost(tb, Ui.S(150));
+                    _tip.SetToolTip(tb, Lang.T("範圍入面有呢段字就成立（唔理大細楷同空格）"));
+                    tb.TextChanged += (_, _) => { c.Text = tb.Text; Save(); };
+                    row.AddRange(new Control[] { L(Lang.T("有")), host });
+                }
+                else
+                {
+                    var v = new NumberBox(Ui.S(110)) { Minimum = -999_999_999m, Maximum = 999_999_999m, DecimalPlaces = 2, Increment = 1m };
+                    v.Value = c.Value;
+                    v.ValueChanged += (_, _) => { c.Value = v.Value; Save(); };
+                    _tip.SetToolTip(v, Lang.T("讀到嘅第一個數字同呢個數比較"));
+                    row.AddRange(new Control[] { L(Lang.T("數字")), ScriptUiBits.OpButton(c.Op, o => { c.Op = o; Save(); }), v });
+                }
+                break;
+            }
+            case CondKind.Variable:
+            {
+                var name = new TextBox { Text = c.Var, MaxLength = 30, PlaceholderText = Lang.T("變數名") };
+                var host = new InputHost(name, Ui.S(120));
+                var known = ScriptVars.NamesIn(_sc);
+                _tip.SetToolTip(name, known.Count > 0 ? Lang.F("用「變數」步驟設定。呢個腳本有：{0}", string.Join("、", known)) : Lang.T("用「變數」步驟設定"));
+                name.TextChanged += (_, _) => { c.Var = name.Text.Trim(); Save(); };
+                var v = new NumberBox(Ui.S(110)) { Minimum = -999_999_999m, Maximum = 999_999_999m, DecimalPlaces = c.Value % 1 == 0 ? 0 : 2, Increment = 1m };
+                v.Value = c.Value;
+                v.ValueChanged += (_, _) => { c.Value = v.Value; Save(); };
+                row.AddRange(new Control[] { host, ScriptUiBits.OpButton(c.Op, o => { c.Op = o; Save(); }), v });
+                break;
+            }
         }
     }
 
@@ -4442,6 +4836,46 @@ internal sealed class SnipOverlay : Form
         Math.Max(_start.X, _cur.X), Math.Max(_start.Y, _cur.Y));
 
     public Bitmap? Result { get; private set; }
+    /// <summary>框住嘅範圍（螢幕座標）。</summary>
+    public Rectangle? ResultRect { get; private set; }
+    private string? _hint;
+
+    /// <summary>淨係要範圍（文字 / 數字辨識用）：回傳螢幕座標，取消就 null。</summary>
+    public static Rectangle? GrabRect(Form? owner, string hint)
+    {
+        double oldOpacity = owner?.Opacity ?? 1;
+        try
+        {
+            if (owner != null)
+            {
+                owner.Opacity = 0;
+                owner.Update();
+                Application.DoEvents();
+                System.Threading.Thread.Sleep(180);
+            }
+            var vs = SystemInformation.VirtualScreen;
+            var shot = new Bitmap(vs.Width, vs.Height, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(shot))
+                g.CopyFromScreen(vs.Location, Point.Empty, vs.Size, CopyPixelOperation.SourceCopy);
+            using var ov = new SnipOverlay(shot, vs) { _hint = hint };
+            ov.ShowDialog();
+            ov.Result?.Dispose();
+            return ov.ResultRect;
+        }
+        catch (Exception ex)
+        {
+            AppPaths.LogError("揀範圍", ex);
+            return null;
+        }
+        finally
+        {
+            if (owner != null)
+            {
+                owner.Opacity = oldOpacity;
+                owner.Activate();
+            }
+        }
+    }
 
     /// <summary>收埋自己個視窗 → 截成個畫面 → 俾用家框 → 回傳框住嗰部分（取消就 null）。</summary>
     public static Bitmap? Grab(Form? owner)
@@ -4539,6 +4973,7 @@ internal sealed class SnipOverlay : Form
             return;
         }
         Result = _shot.Clone(r, PixelFormat.Format32bppArgb);
+        ResultRect = new Rectangle(r.X + _vs.X, r.Y + _vs.Y, r.Width, r.Height);
         Close();
     }
 
@@ -4578,7 +5013,7 @@ internal sealed class SnipOverlay : Form
         // 提示（喺滑鼠所在嗰個螢幕頂中間）
         var screen = Screen.FromPoint(PointToScreen(_cur)).Bounds;
         screen.Offset(-_vs.X, -_vs.Y);
-        string hint = Lang.T("拖一個框，框住要搵嘅圖片　·　Esc / 右鍵取消");
+        string hint = _hint ?? Lang.T("拖一個框，框住要搵嘅圖片　·　Esc / 右鍵取消");
         var hf = Ui.F(10.5f, FontStyle.Bold);
         var hs = TextRenderer.MeasureText(hint, hf);
         var hr = new Rectangle(screen.X + (screen.Width - hs.Width) / 2 - 16, screen.Y + 24, hs.Width + 32, hs.Height + 16);
@@ -4891,6 +5326,16 @@ internal static class Describe
         StepKind.Parallel => Lang.F("{0} 條支線同時運行，全部完成先繼續", st.Branches.Count),
         StepKind.Break => Lang.T("跳出最近嗰個循環"),
         StepKind.If => st.Sub == null ? "" : Lang.F("{0}：如果{1}", st.Sub.Name, Cond(st.Sub, true)),
+        StepKind.Var => st.Op switch
+        {
+            VarOp.Set => $"{st.Var} = {D(st.Value)}",
+            VarOp.Add => $"{st.Var} + {D(st.Value)}",
+            VarOp.Sub => $"{st.Var} − {D(st.Value)}",
+            _ => Lang.F("{0} = 讀畫面數字 ({1}, {2}) → ({3}, {4})", st.Var, st.X, st.Y, st.X2, st.Y2)
+        },
+        StepKind.Notify => "「" + (st.Target.Length > 40 ? st.Target[..40] + "…" : st.Target).Replace("\n", " ") + "」"
+            + (st.Toast && st.Discord ? Lang.T("（Windows + Discord）") : st.Discord ? Lang.T("（Discord）") : Lang.T("（Windows）")),
+        StepKind.Call => Lang.F("行「{0}」嘅主步驟一次", st.TargetName),
         _ => ""
     };
 
@@ -4911,6 +5356,9 @@ internal static class Describe
         CondKind.PixelColor => Lang.F("({0}, {1}) 係 #{2:X6}（容差 {3}）", b.X, b.Y, b.Color, b.Tolerance),
         CondKind.Time => nested ? Lang.F("已經過咗 {0}", b.Time) : Lang.F("時間到 {0}（每日）", b.Time),
         CondKind.Elapsed => Lang.F("腳本運行咗 {0} 秒", D(b.ElapsedSec)),
+        CondKind.Text => Lang.F("範圍入面有「{0}」", b.Text),
+        CondKind.Number => Lang.F("範圍入面嘅數字 {0} {1}", IfBlock.OpName(b.Op), D(b.Value)),
+        CondKind.Variable => $"{b.Var} {IfBlock.OpName(b.Op)} {D(b.Value)}",
         _ => Lang.F("倒數 {0} 秒", D(b.Seconds))
     };
 
@@ -5052,10 +5500,10 @@ internal static class ScriptCoords
     {
         foreach (var st in steps)
         {
-            if (st.Kind is StepKind.Click or StepKind.Drag or StepKind.Scroll or StepKind.Move)
+            if (st.Kind is StepKind.Click or StepKind.Drag or StepKind.Scroll or StepKind.Move || (st.Kind == StepKind.Var && st.Op == VarOp.Read))
             {
                 var a = f(new Point(st.X, st.Y)); st.X = a.X; st.Y = a.Y;
-                if (st.Kind is StepKind.Drag or StepKind.Move) { var b = f(new Point(st.X2, st.Y2)); st.X2 = b.X; st.Y2 = b.Y; }
+                if (st.Kind is StepKind.Drag or StepKind.Move or StepKind.Var) { var b = f(new Point(st.X2, st.Y2)); st.X2 = b.X; st.Y2 = b.Y; }
             }
             if (st.Sub != null) { Cond(st.Sub, f); Each(st.Sub.Steps, f); }
             Each(st.Body, f);
@@ -5066,8 +5514,10 @@ internal static class ScriptCoords
     private static void Cond(IfBlock b, Func<Point, Point> f)
     {
         foreach (var m in b.More) Cond(m, f);
-        if (b.Kind != CondKind.PixelColor) return;
+        if (b.Kind is not (CondKind.PixelColor or CondKind.Text or CondKind.Number)) return;
         var p = f(new Point(b.X, b.Y)); b.X = p.X; b.Y = p.Y;
+        if (b.Kind == CondKind.PixelColor) return;
+        var q = f(new Point(b.X2, b.Y2)); b.X2 = q.X; b.Y2 = q.Y; // 文字 / 數字：範圍右下角
     }
 
     private static void All(Script sc, Func<Point, Point> f)
@@ -5995,6 +6445,26 @@ internal sealed class RunCtx
         }
         if (best.Score < threshold || best.W == 0) return null;
         return new Point(origin.X + best.X + best.W / 2, origin.Y + best.Y + best.H / 2);
+    }
+
+    /// <summary>截一個範圍（腳本座標：左上 → 右下）做圖，文字 / 數字辨識用。</summary>
+    public Bitmap? CaptureRegion(int x1, int y1, int x2, int y2)
+    {
+        var a = Pt(Math.Min(x1, x2), Math.Min(y1, y2));
+        var b = Pt(Math.Max(x1, x2), Math.Max(y1, y2));
+        var r = Rectangle.FromLTRB(a.X, a.Y, Math.Max(a.X + 1, b.X), Math.Max(a.Y + 1, b.Y));
+        if (r.Width < 2 || r.Height < 2) return null;
+        if (!Bg)
+        {
+            var bmp = new Bitmap(r.Width, r.Height, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(bmp)) g.CopyFromScreen(r.Location, Point.Empty, r.Size, CopyPixelOperation.SourceCopy);
+            return bmp;
+        }
+        using var full = Win.CaptureClient(Hwnd);
+        if (full == null) return null;
+        r.Intersect(new Rectangle(0, 0, full.Width, full.Height));
+        if (r.Width < 2 || r.Height < 2) return null;
+        return full.Clone(r, PixelFormat.Format32bppArgb);
     }
 
     /// <summary>某點嘅顏色（座標係螢幕座標，背景會自動換算）。</summary>

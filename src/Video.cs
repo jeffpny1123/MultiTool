@@ -18,7 +18,7 @@ using MultiTool.UI;
 namespace MultiTool.Video;
 
 // =====================================================================
-//  錄影工具：ffmpeg（安裝時下載）錄畫面 + 自己用 WASAPI 錄電腦聲 / 咪高峰，經 named pipe 餵俾 ffmpeg。
+//  螢幕錄影：ffmpeg（安裝時下載）錄畫面 + 自己用 WASAPI 錄電腦聲 / 咪高峰，經 named pipe 餵俾 ffmpeg。
 // =====================================================================
 
 /// <summary>ffmpeg：下載、搵、試編碼器。</summary>
@@ -390,7 +390,7 @@ internal static class RecSettings
     }
 }
 
-/// <summary>一次錄影用嘅設定（錄影工具 / 精彩重播各自一份）。</summary>
+/// <summary>一次錄影用嘅設定（螢幕錄影 / 精彩重播各自一份）。</summary>
 internal sealed class RecOpts
 {
     public CaptureMode Mode;
@@ -746,7 +746,7 @@ internal sealed class RecordBar : Form
 }
 
 // ---------------------------------------------------------------------
-//  錄影工具頁
+//  螢幕錄影頁
 // ---------------------------------------------------------------------
 public sealed class RecordPage : Panel
 {
@@ -843,7 +843,7 @@ public sealed class RecordPage : Panel
         col.Controls.Add(Row(L(Lang.T("儲存位置")), _folderLabel, _folderBtn, openFolder));
         col.Controls.Add(Row(L(Lang.T("開始 / 停止快捷鍵")), hkHost));
         col.Controls.Add(Row(_start, _status));
-        var card = new CardPanel { Title = Lang.T("錄影工具"), Hint = Lang.T("錄緊時右上角會有計時器（唔會錄入片）；撳「停止」或者快捷鍵完成，影片存做 MP4。") };
+        var card = new CardPanel { Title = Lang.T("螢幕錄影"), Hint = Lang.T("錄緊時右上角會有計時器（唔會錄入片）；撳「停止」或者快捷鍵完成，影片存做 MP4。") };
         card.SetContent(col);
         _stack.AddRow(card);
 
@@ -1109,7 +1109,7 @@ public sealed class RecordPage : Panel
             if (_session != null) { await FinishAsync(); return; }
             if (!Ffmpeg.Ready)
             {
-                _status.Text = Lang.T("未下載 ffmpeg：請去「工具庫」重新安裝錄影工具。");
+                _status.Text = Lang.T("未下載 ffmpeg：請去「工具庫」重新安裝螢幕錄影。");
                 return;
             }
             _status.Text = Lang.T("準備緊…");

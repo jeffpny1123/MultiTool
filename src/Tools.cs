@@ -611,7 +611,7 @@ internal sealed class RemapPage : ToolPage
 }
 
 // =====================================================================
-//  視窗工具
+//  視窗管理
 // =====================================================================
 internal static class WinTools
 {
@@ -730,7 +730,7 @@ internal sealed class WindowPage : ToolPage
             Toast.Show((WinTools.IsBorderless(h) ? Lang.T("無邊框全螢幕：") : Lang.T("已還原：")) + WinTools.Describe(h), Ui.Accent);
             if (Visible) BuildRows();
         };
-        Card(Lang.T("視窗工具"), Lang.T("將任何程式視窗置頂、設透明度、變無邊框全螢幕或者置中。快捷鍵會作用喺而家最前面嘅視窗。"),
+        Card(Lang.T("視窗管理"), Lang.T("將任何程式視窗置頂、設透明度、變無邊框全螢幕或者置中。快捷鍵會作用喺而家最前面嘅視窗。"),
             TUi.Col(
                 TUi.Row(TUi.L(Lang.T("置頂 / 取消")), HotkeyHub.Box("window.top", 140)),
                 TUi.Row(TUi.L(Lang.T("無邊框全螢幕 / 還原")), HotkeyHub.Box("window.borderless", 140))));
