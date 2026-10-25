@@ -165,6 +165,26 @@ while ($true) {
 }
 
 /// <summary>腳本變數：每次開始腳本都由 0 開始；主線程、新線程、IF 框共用。</summary>
+/// <summary>
+/// 位置清單（好似 array）：「變數 → 搵圖（記低所有位置）」存入去；
+/// 循環可以逐個位置行，滑鼠可以撳「清單位置」（循環目前 / 第一個 / 最後一個 / 第 N 個）。
+/// 每次開始腳本清空。座標係運行環境嘅座標（前景 = 螢幕；背景 = 視窗）。
+/// </summary>
+internal static class ScriptLists
+{
+    private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, List<System.Drawing.Point>>> All = new();
+
+    private static ConcurrentDictionary<string, List<System.Drawing.Point>> Of(string scriptId) =>
+        All.GetOrAdd(scriptId, _ => new ConcurrentDictionary<string, List<System.Drawing.Point>>(StringComparer.OrdinalIgnoreCase));
+
+    public static void Reset(string scriptId) => All[scriptId] = new ConcurrentDictionary<string, List<System.Drawing.Point>>(StringComparer.OrdinalIgnoreCase);
+
+    public static List<System.Drawing.Point> Get(string scriptId, string name) =>
+        Of(scriptId).TryGetValue(name.Trim(), out var v) ? new List<System.Drawing.Point>(v) : new();
+
+    public static void Set(string scriptId, string name, List<System.Drawing.Point> pts) => Of(scriptId)[name.Trim()] = new List<System.Drawing.Point>(pts);
+}
+
 internal static class ScriptVars
 {
     private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, decimal>> All = new();
@@ -198,7 +218,7 @@ internal static class ScriptVars
             foreach (var s in steps)
             {
                 if (s.Kind == StepKind.Var && s.Var.Trim().Length > 0) names.Add(s.Var.Trim());
-                if (s.Sub != null) { Cond(s.Sub); Steps(s.Sub.Steps); }
+                if (s.Sub != null) { Cond(s.Sub); Steps(s.Sub.Steps); Steps(s.Sub.Else); }
                 Steps(s.Body);
                 foreach (var b in s.Branches) Steps(b);
             }
@@ -209,7 +229,7 @@ internal static class ScriptVars
         }
         Steps(sc.Steps);
         foreach (var t in sc.Threads) Steps(t.Steps);
-        foreach (var b in sc.Ifs) { Cond(b); Steps(b.Steps); }
+        foreach (var b in sc.Ifs) { Cond(b); Steps(b.Steps); Steps(b.Else); }
         return names.OrderBy(x => x).ToList();
     }
 }
@@ -556,14 +576,47 @@ internal static class ScriptUiBits
         x1 == x2 || y1 == y2 ? Lang.T("（未揀範圍）") : $"({x1}, {y1}) → ({x2}, {y2})";
 
     /// <summary>框一個範圍（文字 / 數字辨識用）：回傳腳本座標（左上、右下）。</summary>
-    public static void PickRegion(Control owner, Script sc, Action<Point, Point> done)
+    public static void PickRegion(Control owner, Script sc, Action<Point, Point> done, string? prompt = null)
     {
-        var r = SnipOverlay.GrabRect(owner.FindForm(), Lang.T("拖一個框，框住要辨識嘅文字 / 數字（框細啲會準啲）　·　Esc / 右鍵取消"));
+        var r = SnipOverlay.GrabRect(owner.FindForm(), prompt ?? Lang.T("拖一個框，框住要辨識嘅文字 / 數字（框細啲會準啲）　·　Esc / 右鍵取消"));
         if (r == null) return;
         var a = ScriptCoords.FromScreen(sc, r.Value.Location);
         var b = ScriptCoords.FromScreen(sc, new Point(r.Value.Right, r.Value.Bottom));
         if (a == null || b == null) { StepList.NoWindow(owner); return; }
         done(a.Value, b.Value);
+    }
+
+    /// <summary>
+    /// 搵圖範圍掣：「全畫面」或者「範圍 ✓」，撳開選單揀範圍 / 取消範圍。
+    /// get / set 用腳本座標（左上、右下）。
+    /// </summary>
+    public static FancyButton RegionButton(Script sc, ToolTip tip, Func<(bool On, int X1, int Y1, int X2, int Y2)> get, Action<bool, int, int, int, int> set)
+    {
+        var b = new FancyButton { Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(104), Ui.S(34)) };
+        void Refresh()
+        {
+            var g = get();
+            b.Text = (g.On ? Lang.T("範圍 ✓") : Lang.T("全畫面")) + " ▾";
+            tip.SetToolTip(b, g.On ? Lang.T("搵圖範圍：") + RegionText(g.X1, g.Y1, g.X2, g.Y2) : Lang.T("搵圖範圍：成個畫面（揀咗視窗就係成個視窗）"));
+        }
+        Refresh();
+        b.Click += (_, _) =>
+        {
+            var m = new ContextMenuStrip();
+            try { m.Renderer = DarkTheme.MenuRenderer(); } catch { }
+            m.BackColor = Ui.CardHi;
+            m.ForeColor = Ui.Text;
+            var pick = new ToolStripMenuItem(Lang.T("揀範圍…")) { ForeColor = Ui.Text };
+            pick.Click += (_, _) => b.BeginInvoke(() => PickRegion(b, sc, (p1, p2) => { set(true, p1.X, p1.Y, p2.X, p2.Y); Refresh(); },
+                Lang.T("拖一個框：淨係喺呢個範圍入面搵圖　·　Esc / 右鍵取消")));
+            var all = new ToolStripMenuItem(Lang.T("全畫面（唔限範圍）")) { ForeColor = Ui.Text, Checked = !get().On };
+            all.Click += (_, _) => { var g = get(); set(false, g.X1, g.Y1, g.X2, g.Y2); Refresh(); };
+            m.Items.Add(pick);
+            m.Items.Add(all);
+            m.Closed += (_, _) => b.BeginInvoke(() => m.Dispose());
+            m.Show(b, new Point(0, b.Height + Ui.S(2)));
+        };
+        return b;
     }
 
     /// <summary>試辨識：即刻截個範圍睇吓讀到乜（幫手調範圍）。</summary>
@@ -610,4 +663,72 @@ internal static class ScriptUiBits
         if (m.Items.Count == 0) m.Items.Add(new ToolStripMenuItem(Lang.T("（冇其他腳本）")) { Enabled = false });
         Show(m, anchor);
     }
+}
+
+/// <summary>
+/// Debug 模式：腳本開咗 Debug，每次運行開一個資料夾 data\debug\&lt;腳本&gt;\&lt;日期時間&gt;，
+/// log.txt 記低每一步、每次搵圖 / 條件嘅結果；每次截圖都存做 PNG（最多 20000 張）。
+/// </summary>
+internal sealed class DebugSession
+{
+    public readonly string Dir;
+    private readonly StreamWriter _log;
+    private int _shot;
+    private readonly object _lk = new();
+    private bool _closed;
+
+    public DebugSession(string dir)
+    {
+        Dir = dir;
+        Directory.CreateDirectory(dir);
+        _log = new StreamWriter(Path.Combine(dir, "log.txt"), false, new System.Text.UTF8Encoding(true));
+    }
+
+    public void Log(string line)
+    {
+        lock (_lk)
+        {
+            if (_closed) return;
+            try { _log.WriteLine($"{DateTime.Now:HH:mm:ss.fff} [T{Environment.CurrentManagedThreadId}] {line}"); _log.Flush(); } catch { }
+        }
+    }
+
+    /// <summary>存一張截圖，回傳檔名（太多就唔再存）。</summary>
+    public string Shot(System.Drawing.Bitmap b, string tag)
+    {
+        int n = Interlocked.Increment(ref _shot);
+        if (n > 20000)
+        {
+            if (n == 20001) Log("截圖超過 20000 張，之後唔再存");
+            return "";
+        }
+        string f = $"{n:00000}_{tag}.png";
+        try { b.Save(Path.Combine(Dir, f), System.Drawing.Imaging.ImageFormat.Png); } catch { return ""; }
+        return f;
+    }
+
+    public void Close()
+    {
+        lock (_lk)
+        {
+            if (_closed) return;
+            _closed = true;
+            try { _log.Dispose(); } catch { }
+        }
+    }
+}
+
+internal static class ScriptDebug
+{
+    /// <summary>而家呢條運行線嘅 debug（冇開就 null）；跟 async 流程走，IF 框 / 新線程都帶埋。</summary>
+    public static readonly AsyncLocal<DebugSession?> Cur = new();
+
+    public static string Root => Path.Combine(AppPaths.Data, "debug");
+
+    public static string FolderOf(Script s) => Path.Combine(Root, Path.GetFileName(s.Dir));
+
+    public static DebugSession Start(Script s) =>
+        new(Path.Combine(FolderOf(s), DateTime.Now.ToString("yyyyMMdd-HHmmss")));
+
+    public static void Log(string line) => Cur.Value?.Log(line);
 }

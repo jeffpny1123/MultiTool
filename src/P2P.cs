@@ -376,7 +376,7 @@ internal static class ScriptPackage
     private static IEnumerable<Step> AllSteps(Script sc)
     {
         IEnumerable<Step> Walk(IEnumerable<Step> steps) => steps.SelectMany(s => new[] { s }.Concat(s.Kids().SelectMany(Walk)));
-        return Walk(sc.Steps).Concat(sc.Threads.SelectMany(t => Walk(t.Steps))).Concat(sc.Ifs.SelectMany(b => Walk(b.Steps)));
+        return Walk(sc.Steps).Concat(sc.Threads.SelectMany(t => Walk(t.Steps))).Concat(sc.Ifs.SelectMany(b => Walk(b.Steps).Concat(Walk(b.Else))));
     }
 
     /// <summary>要提醒下載者嘅步驟（系統動作、打字）。</summary>

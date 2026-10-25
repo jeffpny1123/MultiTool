@@ -248,6 +248,20 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 ## Changelog 更新紀錄
 
+### v2.4.1
+- **New: Else** for IF — click "+ 否則" at the bottom of an IF to run other steps when the condition is not met.
+  **新增：「否則」**——IF 底部按「+ 否則」，條件不成立時執行另一組步驟。
+- **New: Search area** — every image search can be limited to a box on screen.
+  **新增：找圖範圍**——所有找圖都可限定只在畫面某個範圍內搜尋。
+- **New: Position lists** — Variable → Find image saves every match as a list (the variable holds the count); loops can go through each position, the mouse can click the current / first / last / Nth position, and the list can drop its first / last / Nth item (under 清單管理).
+  **新增：位置清單**——「變數 → 找圖（記錄所有位置）」把所有位置存成清單（變數＝數量）；循環可逐個位置執行，滑鼠可點擊目前／第一個／最後一個／第 N 個位置，並可在「清單管理」移除第一個／最後一個／第 N 個。
+- **New: Debug mode** — logs every step and keeps every screenshot in `data\debug` for troubleshooting.
+  **新增：Debug 模式**——記錄每一步並保留所有截圖於 `data\debug`，方便排查問題。
+- **Changed:** the coloured block of a loop / IF now also wraps its own row; the main window remembers its size and position.
+  **變更：**循環／IF 的色塊連同自身一行一併包住；主視窗會記住大小及位置。
+- **Fixed:** the AI assistant no longer breaks newer step types when editing a script; a "for each list position" loop keeps its mode; steps using IF position can't be pasted outside an IF.
+  **修正：**AI 助手修改腳本時不會再弄壞較新的步驟；「逐個清單位置」循環不會變回重複次數；使用 IF 座標的步驟不能貼到 IF 外。
+
 ### v2.4
 - **New: Drag by image** in My Scripts — the Drag step can find every matching image on screen and drag them, e.g. **group identical inventory items together**, or drag rightmost → leftmost.
   **新增：拖拉搵圖**（我的腳本）——拖拉步驟可找出畫面上所有相同的圖再拖曳，例如**把背包內相同物品疊在一起**，或由最右拖到最左。

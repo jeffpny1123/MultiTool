@@ -309,7 +309,7 @@ internal sealed class KeyCaptureBox : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Field.BackOf(Parent));
+        g.Clear(Field.BackFor(this));
         Ui.Smooth(g);
         var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
         using (var path = Ui.Round(r, Ui.S(7f)))

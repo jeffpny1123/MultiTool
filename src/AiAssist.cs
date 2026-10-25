@@ -59,7 +59,18 @@ internal static class ScriptJson
           {"type":"parallel","branches":[[...],[...]]}             // 同時運行：幾條支線（最少 2 條）一齊行，全部行完先做下一步
           {"type":"thread","steps":[...]}                          // 新線程：開一條支線同時行入面啲步驟，主線程唔使等即刻做下一步
           {"type":"break"}                                         // 中斷最近一層循環；只可以放喺 loop 入面（包括 loop 入面嘅 if）
-          {"type":"if","name":"","condition":條件,"steps":[...]}   // 行到呢步先檢查一次，成立就行入面啲步驟（可以一層層 nest）
+          {"type":"if","name":"","condition":條件,"steps":[...],"else":[...]}   // 行到呢步先檢查一次，成立就行 steps；唔成立而有 else 就行 else（可以一層層 nest）
+          {"type":"var","name":"次數","op":"add","value":1}         // 變數：op = set / add / sub；read = 讀畫面數字（x,y,x2,y2 範圍）
+              op = find_images：搵晒一樣嘅圖（images, similarity, sort = reading / nearest / right_to_left / bottom_to_top），位置存入同名清單，變數 = 數量
+              op = list_remove_first / list_remove_last / list_remove_at（value = 第幾個，由 1 起）：清單操作，數量跟住更新
+          {"type":"notify","text":"刷咗 {次數} 次","windows":true,"discord":false}   // 通知；{變數名} 會換做數值
+          {"type":"call","script":"資料夾名","name":"顯示名"}       // 行其他腳本嘅主步驟一次
+        滑鼠點擊 click 可以加 "target"：
+          "position"（預設，用 x,y）；"image"（images, similarity：搵到就撳佢中間）；
+          "if"（撳 IF 搵到嘅位置，只可以放喺 if / ifs 嘅 steps 入面）；"list"（"list":清單名, "index":0 = 循環目前位置 / -1 = 最後 / N = 第 N 個）
+        拖拉 drag 可以加 "target":"image"（images, similarity, "order": group = 全部拖埋一齊 / right_to_left / left_to_right / bottom_to_top / top_to_bottom）
+        循環 loop 加 "list":"清單名" 就變成逐個清單位置行（count 唔用）。
+        搵圖嘅步驟 / 條件（image、click/drag 搵圖、var find_images、image_found / image_not_found）可以加 "region":[x1,y1,x2,y2] 限定搵圖範圍。
         條件（kind）：
           {"kind":"image_found","images":["a.png"],"similarity":80,"click_found":false,"interval":1}   // click_found = 搵到順手左鍵點一下
           {"kind":"image_not_found","images":["a.png"],"similarity":80,"interval":1}
@@ -67,6 +78,10 @@ internal static class ScriptJson
           {"kind":"time","time":"12:00:00"}                                                          // 現實時間到咗
           {"kind":"countdown","seconds":60}                                                          // 倒數完；只可以用喺頂層 ifs
           {"kind":"elapsed","seconds":1800}                                                          // 腳本運行咗 N 秒（時限）；頂層 ifs 觸發一次
+          {"kind":"text","x":0,"y":0,"x2":100,"y2":30,"text":"完成"}                                  // 範圍入面出現文字
+          {"kind":"number","x":0,"y":0,"x2":100,"y2":30,"op":"<","value":300}                         // 範圍入面嘅數字比較（op：> >= < <= = !=）
+          {"kind":"variable","var":"次數","op":">=","value":50}                                       // 變數比較
+        頂層 ifs 都可以加 "else":[...]：每次檢查唔成立就行。
           interval（每幾秒檢查一次）只對頂層 ifs 有用。
         幾個條件：IF（ifs 或者 type=if）可以加 "more_conditions":[條件, ...] 同 "logic":"and"|"or"
           and = 全部條件成立先做；or = 任何一個成立就做。
@@ -87,6 +102,7 @@ internal static class ScriptJson
                 var o = new JsonObject { ["name"] = b.Name, ["condition"] = Cond(b, true) };
                 AddMore(o, b, true);
                 o["steps"] = StepsArr(b.Steps);
+                if (b.HasElse) o["else"] = StepsArr(b.Else);
                 return (JsonNode)o;
             }).ToArray())
         };
@@ -99,7 +115,21 @@ internal static class ScriptJson
 
     private static JsonArray Imgs(string field) => new(ImageList.Split(field).Select(n => (JsonNode)JsonValue.Create(n)!).ToArray());
 
+    private static JsonArray Rgn(int x1, int y1, int x2, int y2) => new(JsonValue.Create(x1), JsonValue.Create(y1), JsonValue.Create(x2), JsonValue.Create(y2));
+
+    private static string[] SortNames = { "reading", "nearest", "right_to_left", "bottom_to_top" };
+    private static string[] OrderNames = { "group", "right_to_left", "left_to_right", "bottom_to_top", "top_to_bottom" };
+    private static string[] VarOps = { "set", "add", "sub", "read", "find_images", "list_remove_first", "list_remove_last", "list_remove_at" };
+    private static readonly string[] CmpNames = { ">", ">=", "<", "<=", "=", "!=" };
+
     private static JsonObject StepObj(Step s)
+    {
+        var o = StepObjCore(s);
+        if (s.Rgn) o["region"] = Rgn(s.RX1, s.RY1, s.RX2, s.RY2);
+        return o;
+    }
+
+    private static JsonObject StepObjCore(Step s)
     {
         switch (s.Kind)
         {
@@ -115,7 +145,11 @@ internal static class ScriptJson
             }
             case StepKind.Click:
             {
-                var o = new JsonObject { ["type"] = "click", ["button"] = s.Right ? "right" : "left", ["x"] = s.X, ["y"] = s.Y, ["action"] = Act(s.Mode) };
+                var o = new JsonObject { ["type"] = "click", ["button"] = s.Right ? "right" : "left", ["action"] = Act(s.Mode) };
+                if (s.ByList) { o["target"] = "list"; o["list"] = s.Var; o["index"] = s.Index; }
+                else if (s.ByIf) o["target"] = "if";
+                else if (s.ByImage) { o["target"] = "image"; o["images"] = Imgs(s.Image); o["similarity"] = s.Similarity; }
+                else { o["x"] = s.X; o["y"] = s.Y; }
                 if (s.Mode == PressMode.Hold) o["hold"] = s.Hold;
                 return o;
             }
@@ -127,15 +161,41 @@ internal static class ScriptJson
             }
             case StepKind.Text: return new JsonObject { ["type"] = "text", ["text"] = s.Target };
             case StepKind.Scroll: return new JsonObject { ["type"] = "scroll", ["x"] = s.X, ["y"] = s.Y, ["notches"] = s.Count };
+            case StepKind.Drag when s.ByImage:
+                return new JsonObject
+                {
+                    ["type"] = "drag", ["target"] = "image", ["button"] = s.Right ? "right" : "left", ["images"] = Imgs(s.Image),
+                    ["similarity"] = s.Similarity, ["order"] = OrderNames[Math.Clamp(s.Order, 0, 4)], ["seconds"] = s.Hold
+                };
             case StepKind.Drag:
                 return new JsonObject
                 {
                     ["type"] = "drag", ["button"] = s.Right ? "right" : "left", ["x"] = s.X, ["y"] = s.Y,
                     ["x2"] = s.X2, ["y2"] = s.Y2, ["seconds"] = s.Hold
                 };
+            case StepKind.Var:
+            {
+                var o = new JsonObject { ["type"] = "var", ["name"] = s.Var, ["op"] = VarOps[Math.Clamp((int)s.Op, 0, VarOps.Length - 1)] };
+                switch (s.Op)
+                {
+                    case VarOp.Read: o["x"] = s.X; o["y"] = s.Y; o["x2"] = s.X2; o["y2"] = s.Y2; break;
+                    case VarOp.FindImg: o["images"] = Imgs(s.Image); o["similarity"] = s.Similarity; o["sort"] = SortNames[Math.Clamp(s.Order, 0, 3)]; break;
+                    case VarOp.ListRemoveFirst or VarOp.ListRemoveLast: break;
+                    default: o["value"] = s.Value; break;
+                }
+                return o;
+            }
+            case StepKind.Notify: return new JsonObject { ["type"] = "notify", ["text"] = s.Target, ["windows"] = s.Toast, ["discord"] = s.Discord };
+            case StepKind.Call: return new JsonObject { ["type"] = "call", ["script"] = s.Target, ["name"] = s.TargetName };
             case StepKind.Move:
                 return new JsonObject { ["type"] = "move", ["x"] = s.X, ["y"] = s.Y, ["x2"] = s.X2, ["y2"] = s.Y2, ["seconds"] = s.Hold };
-            case StepKind.Loop: return new JsonObject { ["type"] = "loop", ["count"] = s.Count, ["limit_seconds"] = s.LimitSec, ["until"] = s.Until, ["steps"] = StepsArr(s.Body) };
+            case StepKind.Loop:
+            {
+                var lo = new JsonObject { ["type"] = "loop", ["count"] = s.Count, ["limit_seconds"] = s.LimitSec, ["until"] = s.Until };
+                if (s.Var.Length > 0) lo["list"] = s.Var;
+                lo["steps"] = StepsArr(s.Body);
+                return lo;
+            }
             case StepKind.StopScript: return new JsonObject { ["type"] = "stop" };
             case StepKind.System:
                 return new JsonObject
@@ -158,6 +218,7 @@ internal static class ScriptJson
                 var io = new JsonObject { ["type"] = "if", ["name"] = b.Name, ["condition"] = Cond(b, false) };
                 AddMore(io, b, false);
                 io["steps"] = StepsArr(b.Steps);
+                if (b.HasElse) io["else"] = StepsArr(b.Else);
                 return io;
             }
             default: return new JsonObject { ["type"] = "image", ["images"] = Imgs(s.Image), ["similarity"] = s.Similarity };
@@ -188,8 +249,12 @@ internal static class ScriptJson
             CondKind.PixelColor => new JsonObject { ["kind"] = "color", ["x"] = b.X, ["y"] = b.Y, ["color"] = $"#{b.Color & 0xFFFFFF:X6}", ["tolerance"] = b.Tolerance },
             CondKind.Time => new JsonObject { ["kind"] = "time", ["time"] = b.Time },
             CondKind.Elapsed => new JsonObject { ["kind"] = "elapsed", ["seconds"] = b.ElapsedSec },
+            CondKind.Text => new JsonObject { ["kind"] = "text", ["x"] = b.X, ["y"] = b.Y, ["x2"] = b.X2, ["y2"] = b.Y2, ["text"] = b.Text },
+            CondKind.Number => new JsonObject { ["kind"] = "number", ["x"] = b.X, ["y"] = b.Y, ["x2"] = b.X2, ["y2"] = b.Y2, ["op"] = CmpNames[(int)b.Op], ["value"] = b.Value },
+            CondKind.Variable => new JsonObject { ["kind"] = "variable", ["var"] = b.Var, ["op"] = CmpNames[(int)b.Op], ["value"] = b.Value },
             _ => new JsonObject { ["kind"] = "countdown", ["seconds"] = b.Seconds }
         };
+        if (b.Rgn && b.Kind is CondKind.ImageFound or CondKind.ImageNotFound) o["region"] = Rgn(b.RX1, b.RY1, b.RX2, b.RY2);
         if (top && b.UsesInterval) o["interval"] = b.Interval;
         return o;
     }
@@ -219,6 +284,7 @@ internal static class ScriptJson
                 ParseMore(o, b, true, Lang.F("IF 框 {0}", n), have, warn);
                 b.Name = Str(o, "name") is { Length: > 0 } nm ? nm : Lang.F("IF 條件 {0}", n);
                 b.Steps = ParseSteps(o["steps"] as JsonArray, Lang.F("IF 框「{0}」", b.Name), false, true, have, warn);
+                if (o["else"] is JsonArray ea) { b.HasElse = true; b.Else = ParseSteps(ea, Lang.F("IF 框「{0}」否則", b.Name), false, true, have, warn); }
                 ifs.Add(b);
             }
         }
@@ -326,6 +392,32 @@ internal static class ScriptJson
             if (node is not JsonObject o) continue;
             string where = Lang.F("{0} 第 {1} 步", path, i);
             string type = Str(o, "type").ToLowerInvariant();
+            int before = list.Count;
+            ParseOne(o, type, where, list, inLoop, have, warn);
+            if (list.Count > before && ReadRgn(o) is { } rg)
+            {
+                var st0 = list[^1];
+                st0.Rgn = true; (st0.RX1, st0.RY1, st0.RX2, st0.RY2) = rg;
+            }
+        }
+        return list;
+    }
+
+    private static (int, int, int, int)? ReadRgn(JsonObject o)
+    {
+        if (o["region"] is not JsonArray r || r.Count != 4) return null;
+        try { return ((int)Math.Round(r[0]!.GetValue<double>()), (int)Math.Round(r[1]!.GetValue<double>()), (int)Math.Round(r[2]!.GetValue<double>()), (int)Math.Round(r[3]!.GetValue<double>())); }
+        catch { return null; }
+    }
+
+    private static CmpOp ParseCmp(string s) => s.Trim() switch
+    {
+        ">" => CmpOp.Gt, ">=" or "≥" => CmpOp.Ge, "<" => CmpOp.Lt, "<=" or "≤" => CmpOp.Le, "=" or "==" => CmpOp.Eq, "!=" or "≠" or "<>" => CmpOp.Ne, _ => CmpOp.Ge
+    };
+
+    private static void ParseOne(JsonObject o, string type, string where, List<Step> list, bool inLoop, HashSet<string> have, List<string> warn)
+    {
+        {
             switch (type)
             {
                 case "key":
@@ -346,7 +438,26 @@ internal static class ScriptJson
                         Kind = StepKind.Click, Right = Str(o, "button").ToLowerInvariant() == "right",
                         X = Int(o, "x", 0), Y = Int(o, "y", 0), Mode = Mode(o), Hold = Math.Max(0, Dec(o, "hold", 0.1m))
                     };
-                    if (st.X == 0 && st.Y == 0) warn.Add(Lang.F("{0}：座標未揀", where));
+                    switch (Str(o, "target").ToLowerInvariant())
+                    {
+                        case "image":
+                            st.ByImage = true;
+                            st.Image = Images(o, where, have, warn);
+                            st.Similarity = Math.Clamp(Int(o, "similarity", 80), 1, 100);
+                            break;
+                        case "if":
+                            st.ByIf = true;
+                            break;
+                        case "list":
+                            st.ByList = true;
+                            st.Var = Str(o, "list");
+                            st.Index = Int(o, "index", 0);
+                            if (st.Var.Length == 0) warn.Add(Lang.F("{0}：清單名未填", where));
+                            break;
+                        default:
+                            if (st.X == 0 && st.Y == 0) warn.Add(Lang.F("{0}：座標未揀", where));
+                            break;
+                    }
                     list.Add(st);
                     break;
                 }
@@ -358,12 +469,44 @@ internal static class ScriptJson
                     });
                     break;
                 case "drag":
-                    list.Add(new Step
+                {
+                    var ds = new Step
                     {
                         Kind = StepKind.Drag, Right = Str(o, "button").ToLowerInvariant() == "right",
                         X = Int(o, "x", 0), Y = Int(o, "y", 0), X2 = Int(o, "x2", 0), Y2 = Int(o, "y2", 0),
                         Hold = Math.Max(0.01m, Dec(o, "seconds", 0.5m))
-                    });
+                    };
+                    if (Str(o, "target").ToLowerInvariant() == "image")
+                    {
+                        ds.ByImage = true;
+                        ds.Image = Images(o, where, have, warn);
+                        ds.Similarity = Math.Clamp(Int(o, "similarity", 80), 1, 100);
+                        ds.Order = Math.Max(0, Array.IndexOf(OrderNames, Str(o, "order").ToLowerInvariant()));
+                    }
+                    list.Add(ds);
+                    break;
+                }
+                case "var":
+                {
+                    var vs = new Step { Kind = StepKind.Var, Var = Str(o, "name"), Value = Dec(o, "value", 1m) };
+                    int op = Array.IndexOf(VarOps, Str(o, "op").ToLowerInvariant());
+                    vs.Op = (VarOp)Math.Max(0, op);
+                    if (vs.Op == VarOp.Read) { vs.X = Int(o, "x", 0); vs.Y = Int(o, "y", 0); vs.X2 = Int(o, "x2", 0); vs.Y2 = Int(o, "y2", 0); }
+                    if (vs.Op == VarOp.FindImg)
+                    {
+                        vs.Image = Images(o, where, have, warn);
+                        vs.Similarity = Math.Clamp(Int(o, "similarity", 80), 1, 100);
+                        vs.Order = Math.Max(0, Array.IndexOf(SortNames, Str(o, "sort").ToLowerInvariant()));
+                    }
+                    if (vs.Var.Length == 0) { vs.Var = Lang.T("變數名稱"); warn.Add(Lang.F("{0}：變數名未填", where)); }
+                    list.Add(vs);
+                    break;
+                }
+                case "notify":
+                    list.Add(new Step { Kind = StepKind.Notify, Target = Str(o, "text"), Toast = o["windows"] == null || Bool(o, "windows"), Discord = Bool(o, "discord") });
+                    break;
+                case "call":
+                    list.Add(new Step { Kind = StepKind.Call, Target = Str(o, "script"), TargetName = Str(o, "name") is { Length: > 0 } cn ? cn : Str(o, "script") });
                     break;
                 case "wait":
                 {
@@ -388,6 +531,7 @@ internal static class ScriptJson
                         Kind = StepKind.Loop, Count = Math.Max(0, Int(o, "count", 0)),
                         LimitSec = Math.Max(0m, o["limit_seconds"] != null ? Dec(o, "limit_seconds", 0m) : Dec(o, "limit_minutes", 0m) * 60m),
                         Until = TimeSpan.TryParse(Str(o, "until"), CultureInfo.InvariantCulture, out var ut) ? $"{ut.Hours:00}:{ut.Minutes:00}:{ut.Seconds:00}" : "",
+                        Var = Str(o, "list"),
                         Body = ParseSteps(o["steps"] as JsonArray, where + Lang.T(" 循環"), true, false, have, warn)
                     });
                     break;
@@ -431,6 +575,7 @@ internal static class ScriptJson
                     ParseMore(o, b, false, where, have, warn);
                     b.Name = Str(o, "name");
                     b.Steps = ParseSteps(o["steps"] as JsonArray, where + " IF", inLoop, false, have, warn);
+                    if (o["else"] is JsonArray ea) { b.HasElse = true; b.Else = ParseSteps(ea, where + Lang.T(" 否則"), inLoop, false, have, warn); }
                     list.Add(new Step { Kind = StepKind.If, Sub = b });
                     break;
                 }
@@ -439,7 +584,6 @@ internal static class ScriptJson
                     break;
             }
         }
-        return list;
     }
 
     private static IfBlock ParseCond(JsonObject? o, bool top, string where, HashSet<string> have, List<string> warn)
@@ -470,6 +614,23 @@ internal static class ScriptJson
                 b.Kind = CondKind.Elapsed;
                 b.ElapsedSec = Math.Max(1m, o["seconds"] != null ? Dec(o, "seconds", 1800m) : Dec(o, "minutes", 30m) * 60m);
                 break;
+            case "text":
+                b.Kind = CondKind.Text;
+                b.X = Int(o, "x", 0); b.Y = Int(o, "y", 0); b.X2 = Int(o, "x2", 0); b.Y2 = Int(o, "y2", 0);
+                b.Text = Str(o, "text");
+                break;
+            case "number":
+                b.Kind = CondKind.Number;
+                b.X = Int(o, "x", 0); b.Y = Int(o, "y", 0); b.X2 = Int(o, "x2", 0); b.Y2 = Int(o, "y2", 0);
+                b.Op = ParseCmp(Str(o, "op"));
+                b.Value = Dec(o, "value", 0m);
+                break;
+            case "variable":
+                b.Kind = CondKind.Variable;
+                b.Var = Str(o, "var");
+                b.Op = ParseCmp(Str(o, "op"));
+                b.Value = Dec(o, "value", 0m);
+                break;
             case "countdown":
                 if (!top) { warn.Add(Lang.F("{0}：倒數只可以用喺 IF 框，改咗做「搵到圖」", where)); goto default; }
                 b.Kind = CondKind.Countdown;
@@ -483,6 +644,11 @@ internal static class ScriptJson
                 break;
         }
         if (top) b.Interval = Math.Max(0.05m, Dec(o, "interval", 1m));
+        if (b.Kind is CondKind.ImageFound or CondKind.ImageNotFound && ReadRgn(o) is { } rg)
+        {
+            b.Rgn = true;
+            (b.RX1, b.RY1, b.RX2, b.RY2) = rg;
+        }
         return b;
     }
 }

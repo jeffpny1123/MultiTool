@@ -11,7 +11,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v2.4";
+    public const string Version = "v2.4.1";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -92,6 +92,11 @@ internal sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(Ui.S(1100), Ui.S(680));
         MinimumSize = new Size(Ui.S(900), Ui.S(500));
+        // 記住上次嘅視窗大細同位置（data\window.txt）
+        bool wasMax = LoadWindowBounds();
+        if (wasMax) Shown += (_, _) => { if (Visible && WindowState == FormWindowState.Normal) WindowState = FormWindowState.Maximized; };
+        ResizeEnd += (_, _) => SaveWindowBounds();
+        FormClosing += (_, _) => SaveWindowBounds();
         // 拖視窗邊改大細：放手先重新排位（步驟多時唔會拖到卡）
         Size sizeAtBegin = Size.Empty;
         ResizeBegin += (_, _) => { sizeAtBegin = Size; LiveResize.Active = true; };
@@ -239,6 +244,49 @@ internal sealed class MainForm : Form
         _tray!.Visible = true;
         Hide();
         if (tip) try { _tray.ShowBalloonTip(3000, Program.AppName, Lang.T("MultiTool 喺系統匣繼續運行，腳本同快捷鍵照用得。右鍵圖示可以結束。"), ToolTipIcon.Info); } catch { }
+    }
+
+    private static string WindowFile => Path.Combine(AppPaths.Data, "window.txt");
+
+    /// <summary>讀返上次嘅視窗位置 / 大細；仲喺某個螢幕入面先用。回傳上次係咪最大化。</summary>
+    private bool LoadWindowBounds()
+    {
+        try
+        {
+            if (!File.Exists(WindowFile)) return false;
+            var p = File.ReadAllText(WindowFile).Trim().Split(',');
+            if (p.Length < 4) return false;
+            var r = new Rectangle(int.Parse(p[0]), int.Parse(p[1]), int.Parse(p[2]), int.Parse(p[3]));
+            bool max = p.Length > 4 && p[4] == "1";
+            r.Width = Math.Max(r.Width, MinimumSize.Width);
+            r.Height = Math.Max(r.Height, MinimumSize.Height);
+            // 螢幕拔走咗 / 解像度變咗：標題列要見得到先用，唔係就淨係用大細、放返中間
+            bool visible = Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(new Rectangle(r.X + 40, r.Y, Math.Max(1, r.Width - 80), Ui.S(30))));
+            if (visible)
+            {
+                StartPosition = FormStartPosition.Manual;
+                Bounds = r;
+            }
+            else
+            {
+                var wa = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1280, 720);
+                Size = new Size(Math.Min(r.Width, wa.Width), Math.Min(r.Height, wa.Height));
+            }
+            return max;
+        }
+        catch { return false; }
+    }
+
+    private void SaveWindowBounds()
+    {
+        try
+        {
+            if (WindowState == FormWindowState.Minimized && !Visible) return;
+            var r = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+            if (r.Width < 100 || r.Height < 100) return;
+            File.WriteAllText(WindowFile, $"{r.X},{r.Y},{r.Width},{r.Height},{(WindowState == FormWindowState.Maximized ? 1 : 0)}");
+        }
+        catch { }
     }
 
     /// <summary>用影片剪輯開檔案（新專案）。</summary>

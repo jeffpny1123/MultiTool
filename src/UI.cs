@@ -431,7 +431,7 @@ namespace UI
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Field.BackOf(Parent));
+            g.Clear(Field.BackFor(this));
             Ui.Smooth(g);
             var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             using var path = Ui.Round(r, Ui.S(7f));
@@ -510,7 +510,7 @@ namespace UI
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Field.BackOf(Parent));
+            g.Clear(Field.BackFor(this));
             Ui.Smooth(g);
             if (_kind == BtnKind.Ghost)
             {
@@ -557,6 +557,12 @@ namespace UI
         Color Tint { get; }
     }
 
+    /// <summary>父控件喺某啲位置畫咗色帶（例如腳本步驟清單嘅循環 / IF 色塊）：子控件問佢自己位置嘅底色。</summary>
+    public interface IBandTint
+    {
+        Color? BackAt(Control child);
+    }
+
     /// <summary>
     /// 有色底嘅圓角區塊：底色由外面一層嘅底色混少少主題色，一層層 nest 會越嚟越明顯。
     /// </summary>
@@ -577,16 +583,21 @@ namespace UI
         public Color Tint => Ui.Mix(Field.BackOf(Parent), _hue, _amount);
         public Color Edge => Ui.Mix(Field.BackOf(Parent), _hue, 0.35f);
         public int Pad => Ui.S(12);
+        /// <summary>false = 唔畫自己個色塊同框（由父控件連埋標題行一齊畫）。</summary>
+        public bool Framed = true;
 
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Field.BackOf(Parent));
+            g.Clear(Field.BackFor(this));
             Ui.Smooth(g);
             var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             using var path = Ui.Round(r, Ui.S(9f));
-            using (var b = new SolidBrush(Tint)) g.FillPath(b, path);
-            using (var pen = new Pen(Edge, 1f)) g.DrawPath(pen, path);
+            if (Framed)
+            {
+                using (var b = new SolidBrush(Tint)) g.FillPath(b, path);
+                using (var pen = new Pen(Edge, 1f)) g.DrawPath(pen, path);
+            }
             base.OnPaint(e);
         }
     }
@@ -596,7 +607,7 @@ namespace UI
     {
         public static void Paint(Control c, Graphics g, bool focused, bool hover)
         {
-            g.Clear(BackOf(c.Parent));
+            g.Clear(BackFor(c));
             Ui.Smooth(g);
             var r = new RectangleF(0.5f, 0.5f, c.Width - 1.5f, c.Height - 1.5f);
             using var path = Ui.Round(r, Ui.S(7f));
@@ -604,6 +615,10 @@ namespace UI
             using var pen = new Pen(focused ? Ui.Accent : hover ? Ui.BorderHi : Ui.Border, focused ? Ui.S(1.5f) : 1f);
             g.DrawPath(pen, path);
         }
+
+        /// <summary>某個控件身後嘅底色（父控件有色帶就用色帶色）。</summary>
+        public static Color BackFor(Control c) =>
+            c.Parent is IBandTint bt && bt.BackAt(c) is { } col ? col : BackOf(c.Parent);
 
         public static Color BackOf(Control? c)
         {
