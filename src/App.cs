@@ -11,7 +11,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v2.4.1";
+    public const string Version = "v2.4.2";
     public const string Author = "白兔糖v3v";
 
     [STAThread]
@@ -806,14 +806,6 @@ internal sealed class MainForm : Form
         backup.SetContent(bRow);
         stack.AddRow(backup);
 
-        // ---- 快捷鍵表 ----
-        var hk = new CardPanel
-        {
-            Title = Lang.T("快捷鍵"),
-            Hint = Lang.T("已安裝工具嘅快捷鍵（喺度改都得）。剔「頁面外使用」= 喺任何地方都用得；冇剔就只喺嗰個工具頁先用得。快捷鍵重複就唔可以剔。")
-        };
-        hk.SetContent(new HotkeyTable());
-        stack.AddRow(hk);
 
         var card = new CardPanel { Title = Program.AppName + " " + Program.Version, Hint = Lang.T("開發者：") + Program.Author + Lang.T("。設定同圖片全部存喺 exe 隔籬嘅 data 資料夾。") };
         var row = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, WrapContents = false };

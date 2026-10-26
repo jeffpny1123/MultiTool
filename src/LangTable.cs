@@ -1765,5 +1765,10 @@ public static partial class Lang
         ["全畫面（唔限範圍）"] = new[] { "全畫面（不限範圍）", "全画面（不限范围）", "Full screen (no limit)" },
         ["清單管理"] = new[] { "清單管理", "清单管理", "List" },
         ["清單："] = new[] { "清單：", "清单：", "List: " },
+        ["我的腳本「{0}」"] = new[] { "我的腳本「{0}」", "我的脚本“{0}”", "My Scripts \"{0}\"" },
+        ["呢個快捷鍵已經俾「{0}」用咗，請揀第二個。"] = new[] { "此快捷鍵已被「{0}」使用，請選擇其他快捷鍵。", "此快捷键已被“{0}”使用，请选择其他快捷键。", "This hotkey is already used by \"{0}\". Please choose another one." },
+        ["撳「+」新增腳本；撳腳本睇預覽，再撳「修改」入去改；右鍵可以複製 / 刪除。各腳本嘅快捷鍵喺任何地方都用得（修改緊腳本時除外）。"] = new[] { "按「+」新增腳本；按腳本查看預覽，再按「修改」進行編輯；右鍵可複製／刪除。各腳本的快捷鍵在任何地方都可使用（編輯腳本時除外）。", "按“+”添加脚本；按脚本查看预览，再按“修改”进行编辑；右键可拷贝／删除。各脚本的快捷键在任何地方都可使用（编辑脚本时除外）。", "Click \"+\" to add a script; click a script to preview it, then \"Edit\" to change it; right-click to copy / delete. Script hotkeys work anywhere (except while editing a script)." },
+        ["背景截圖改用方法 {0}"] = new[] { "背景截圖改用方法 {0}", "背景截图改用方法 {0}", "Background capture switched to method {0}" },
+        ["背景截圖：所有方法都截到全黑 / 單色（試吓改模擬器嘅渲染模式，或者唔好最少化）"] = new[] { "背景截圖：所有方法都只截到全黑／單色（請嘗試更改模擬器的渲染模式，或不要最小化）", "背景截图：所有方法都只截到全黑／单色（请尝试更改仿真器的渲染模式，或不要最小化）", "Background capture: every method returned a black / single-colour image (try another render mode in the emulator, or don't minimise it)" },
     };
 }

@@ -248,6 +248,14 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 ## Changelog 更新紀錄
 
+### v2.4.2
+- **Changed: Hotkeys** — the hotkey table was removed from Settings; every tool and script hotkey now works anywhere. Setting a hotkey that another tool or script already uses is refused with a message saying who uses it.
+  **變更：快捷鍵**——設定頁的快捷鍵表已移除，所有工具及腳本的快捷鍵一律可在任何地方使用；設定已被其他工具或腳本使用的快捷鍵時會被拒絕，並提示由誰使用。
+- **Fixed:** script hotkeys could only stop, not start, when MultiTool was left on the My Scripts list in the background.
+  **修正：**MultiTool 停留在「我的腳本」清單並在背後時，腳本快捷鍵只能停止、不能開始。
+- **Fixed:** background image search on emulators such as LDPlayer — background capture now tries several methods and avoids black screenshots.
+  **修正：**雷電等模擬器的背景找圖——背景截圖會嘗試多種方法，避免截到全黑畫面。
+
 ### v2.4.1
 - **New: Else** for IF — click "+ 否則" at the bottom of an IF to run other steps when the condition is not met.
   **新增：「否則」**——IF 底部按「+ 否則」，條件不成立時執行另一組步驟。

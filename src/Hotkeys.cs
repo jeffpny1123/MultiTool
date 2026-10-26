@@ -130,8 +130,32 @@ internal static class HotkeyHub
         !e.NoKey && !e.Key.IsEmpty &&
         All.Any(o => o != e && !o.NoKey && o.Key == e.Key && Extensions.IsInstalled(o.Ext));
 
-    /// <summary>頁面外都用得（剔咗而且冇重複）。</summary>
-    public static bool EffectiveGlobal(Entry e) => e.Global && !IsDuplicate(e);
+    /// <summary>頁面外都用得：而家一律用得（設定快捷鍵時已經唔准重複）。</summary>
+    public static bool EffectiveGlobal(Entry e) => true;
+
+    /// <summary>各腳本自己嘅快捷鍵（我的腳本頁設定）：(顯示名, 快捷鍵, 腳本)。</summary>
+    public static Func<IEnumerable<(string Name, Hotkey Key, object Owner)>>? ScriptKeys;
+
+    /// <summary>呢個快捷鍵已經俾邊個用咗（其他已安裝工具 / 其他腳本）；冇撞就 null。</summary>
+    public static string? UsedBy(Hotkey k, object self)
+    {
+        if (k.IsEmpty) return null;
+        foreach (var o in All)
+            if (o != self && !o.NoKey && o.Key == k && Extensions.IsInstalled(o.Ext)) return o.Name();
+        if (Extensions.IsInstalled(Extensions.Scripts))
+        {
+            IEnumerable<(string Name, Hotkey Key, object Owner)> scripts;
+            try { scripts = ScriptKeys?.Invoke() ?? Scripts.Script.LoadAll().Select(s => (Lang.F("我的腳本「{0}」", s.Name), s.Hotkey, (object)s)); }
+            catch { scripts = Array.Empty<(string, Hotkey, object)>(); }
+            foreach (var (name, key, owner) in scripts)
+                if (!ReferenceEquals(owner, self) && key == k && !(self is Scripts.Script me && owner is Scripts.Script os && me.Dir == os.Dir)) return name;
+        }
+        return null;
+    }
+
+    /// <summary>撞咗：提示邊個用緊。</summary>
+    public static void WarnUsed(Control owner, string by) =>
+        MessageBox.Show(owner.FindForm(), Lang.F("呢個快捷鍵已經俾「{0}」用咗，請揀第二個。", by), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
     public static bool EffectiveGlobal(string id) => EffectiveGlobal(Get(id));
 
@@ -159,7 +183,17 @@ internal static class HotkeyHub
     {
         var e = Get(id);
         box.Hotkey = e.Key;
-        box.Changed += () => SetKey(e, box.Hotkey);
+        box.Changed += () =>
+        {
+            // 同其他工具 / 腳本撞制：唔准設定，變返原本
+            if (UsedBy(box.Hotkey, e) is { } by)
+            {
+                box.Hotkey = e.Key;
+                box.BeginInvoke(() => WarnUsed(box, by));
+                return;
+            }
+            SetKey(e, box.Hotkey);
+        };
         void Sync() { if (!box.IsDisposed && box.Hotkey != e.Key) box.Hotkey = e.Key; }
         e.Changed += Sync;
         box.Disposed += (_, _) => e.Changed -= Sync;

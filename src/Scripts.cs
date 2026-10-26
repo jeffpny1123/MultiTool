@@ -2165,6 +2165,7 @@ public sealed class ScriptsPage : Panel
         stopAll.Click += (_, _) => StopAllScripts();
         _stopAllKey = new HotkeyBox();
         HotkeyHub.Bind(_stopAllKey, "scripts.stopall");
+        HotkeyHub.ScriptKeys = () => _scripts.Select(s => (Lang.F("我的腳本「{0}」", s.Name), s.Hotkey, (object)s)).ToList();
         HotkeyHub.Get("scripts.stopall").Action = () =>
         {
             // 同一粒快捷鍵：有嘢行緊就全部停；冇就開始剔咗嘅腳本
@@ -2188,7 +2189,7 @@ public sealed class ScriptsPage : Panel
         bar.SetContent(new FlowRow(new Control[] { _startSel, stopAll, monitor }, new Control[] { stopKeyHost, stopKeyLabel }));
         _listView.AddRow(bar);
 
-        var card = new CardPanel { Title = Lang.T("我的腳本"), Hint = Lang.T("撳「+」新增腳本；撳腳本睇預覽，再撳「修改」入去改；右鍵可以複製 / 刪除。入咗預覽頁先可以用快捷鍵開始 / 停止。") + Lang.T("剔右上角個格可以揀幾個腳本一齊開始。") };
+        var card = new CardPanel { Title = Lang.T("我的腳本"), Hint = Lang.T("撳「+」新增腳本；撳腳本睇預覽，再撳「修改」入去改；右鍵可以複製 / 刪除。各腳本嘅快捷鍵喺任何地方都用得（修改緊腳本時除外）。") + Lang.T("剔右上角個格可以揀幾個腳本一齊開始。") };
         card.SetContent(_grid);
         _listView.AddRow(card);
         _listView.Dock = DockStyle.Fill;
@@ -2214,12 +2215,19 @@ public sealed class ScriptsPage : Panel
             if (!MultiTool.Extensions.IsInstalled(MultiTool.Extensions.Scripts)) return; // 「我的腳本」已移除：快捷鍵唔生效
             // 全部停止快捷鍵：喺邊度都用得
             // 「開始已選 / 全部停止」快捷鍵由 HotkeyHub 處理
+            // MultiTool 唔喺最前（例如喺遊戲入面）、最少化、或者喺其他頁：所有腳本快捷鍵都用得。
+            // 以前淨係睇「呢頁有冇顯示」，MultiTool 喺背後停咗喺「我的腳本」清單時就開唔到，只停到 —— 而家改睇視窗係咪喺最前。
+            var myForm = form;
+            bool looking = Visible && myForm != null && Form.ActiveForm == myForm && myForm.WindowState != FormWindowState.Minimized;
             foreach (var sc in _scripts.ToList())
             {
-                // 喺其他頁（AI 助手、螢幕錄影…）或者最少化：所有腳本快捷鍵都用得；
-                // 喺「我的腳本」頁入面就淨係預覽緊嗰個可以開始（費事改緊其他腳本時誤觸）；行緊嘅腳本喺邊度都可以停
-                bool viewing = Visible && (_editor is ScriptViewer v && v.Script == sc || _editor is MonitorView);
-                bool usable = viewing || (!Visible && HotkeyHub.EffectiveGlobal("scripts.each")) || ScriptRunner.IsRunning(sc);
+                // 對住「我的腳本」頁：清單、預覽、監視模式都用得；淨係修改緊腳本時唔准開始（費事打字誤觸），行緊嘅照停得
+                bool usable = !looking
+                              || _editor == null
+                              || _editor is MonitorView
+                              || (_editor is ScriptViewer v && v.Script == sc)
+                              || _editor == _libView
+                              || ScriptRunner.IsRunning(sc);
                 bool down = usable && !typing && !sc.Hotkey.IsEmpty && sc.Hotkey.IsDown();
                 _wasDown.TryGetValue(sc.Id, out bool was);
                 _wasDown[sc.Id] = down; // 先記低，就算下面彈視窗都唔會當再撳一次
@@ -2745,7 +2753,18 @@ internal sealed class ScriptEditor : Panel
 
         var hkLabel = Ui.Text_(Lang.T("快捷鍵"), Ui.TextDim, Ui.F(9.75f), new Padding(0));
         var hkBox = new HotkeyBox { Hotkey = sc.Hotkey };
-        hkBox.Changed += () => { _sc.Hotkey = hkBox.Hotkey; _sc.Save(); };
+        hkBox.Changed += () =>
+        {
+            // 同其他工具 / 腳本撞制：唔准設定
+            if (HotkeyHub.UsedBy(hkBox.Hotkey, _sc) is { } by)
+            {
+                hkBox.Hotkey = _sc.Hotkey;
+                hkBox.BeginInvoke(() => HotkeyHub.WarnUsed(hkBox, by));
+                return;
+            }
+            _sc.Hotkey = hkBox.Hotkey;
+            _sc.Save();
+        };
         var hkHost = new InputHost(hkBox, Ui.S(130));
 
         _start = new FancyButton { Kind = BtnKind.Success, Size = new Size(Ui.S(96), Ui.S(34)) };
@@ -7354,18 +7373,122 @@ internal static class Win
     }
 
     /// <summary>截視窗內容區（被遮住都得；縮細咗就截唔到，回傳 null）。</summary>
+    [DllImport("user32.dll")] private static extern bool EnumChildWindows(nint parent, EnumProc cb, nint l);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(nint h, out RECT r);
+    [DllImport("user32.dll")] private static extern nint WindowFromPoint(POINT p);
+    [DllImport("user32.dll")] private static extern nint GetAncestor(nint h, uint flags);
+
+    // 每個視窗用邊種截圖方法得（模擬器 / 遊戲用顯示卡畫，有啲方法會截到全黑）
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, int> CapWay = new();
+
+    /// <summary>
+    /// 背景截圖：逐種方法試，截到「唔係全黑 / 單色」就用，下次直接用返嗰種：
+    /// 0 = PrintWindow 成個視窗；1 = PrintWindow 逐個子視窗（雷電等模擬器個畫面喺子視窗）；
+    /// 2 = 視窗冇被擋住就直接由螢幕複製。全部都唔得就回傳第一種嘅結果。
+    /// </summary>
     public static Bitmap? CaptureClient(nint h)
     {
         if (!IsWindow(h) || IsIconic(h)) return null;
         if (!GetClientRect(h, out var r) || r.R <= 0 || r.B <= 0) return null;
-        var bmp = new Bitmap(r.R, r.B, PixelFormat.Format32bppArgb);
+        var size = new Size(r.R, r.B);
+        int pref = CapWay.TryGetValue(h, out var p) ? p : -1;
+        var order = pref >= 0 ? new[] { pref }.Concat(new[] { 0, 1, 2 }.Where(x => x != pref)) : new[] { 0, 1, 2 };
+        Bitmap? first = null;
+        foreach (int way in order)
+        {
+            Bitmap? bmp = null;
+            try { bmp = way switch { 0 => PrintWhole(h, size), 1 => PrintChildren(h, size), _ => FromScreenIfVisible(h, size) }; }
+            catch { bmp?.Dispose(); bmp = null; }
+            if (bmp == null) continue;
+            if (!LooksBlank(bmp))
+            {
+                if (pref != way) ScriptDebug.Log(Lang.F("背景截圖改用方法 {0}", way));
+                CapWay[h] = way;
+                first?.Dispose();
+                return bmp;
+            }
+            if (first == null) first = bmp; else bmp.Dispose();
+        }
+        CapWay.TryRemove(h, out _);
+        ScriptDebug.Log(Lang.T("背景截圖：所有方法都截到全黑 / 單色（試吓改模擬器嘅渲染模式，或者唔好最少化）"));
+        return first;
+    }
+
+    private static Bitmap PrintWhole(nint h, Size size)
+    {
+        var bmp = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(bmp);
+        nint hdc = g.GetHdc();
+        try { PrintWindow(h, hdc, 1 /*PW_CLIENTONLY*/ | 2 /*PW_RENDERFULLCONTENT*/); }
+        finally { g.ReleaseHdc(hdc); }
+        return bmp;
+    }
+
+    /// <summary>逐個（看得見嘅）子視窗用 PrintWindow 截，再按佢喺視窗入面嘅位置砌返埋一張。</summary>
+    private static Bitmap? PrintChildren(nint h, Size size)
+    {
+        var kids = new List<(nint H, Rectangle R)>();
+        var origin = new POINT { X = 0, Y = 0 };
+        ClientToScreen(h, ref origin);
+        EnumChildWindows(h, (c, _) =>
+        {
+            if (IsWindowVisible(c) && GetWindowRect(c, out var wr) && wr.R - wr.L > 20 && wr.B - wr.T > 20)
+                kids.Add((c, new Rectangle(wr.L - origin.X, wr.T - origin.Y, wr.R - wr.L, wr.B - wr.T)));
+            return true;
+        }, 0);
+        if (kids.Count == 0) return null;
+        var bmp = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bmp))
         {
-            nint hdc = g.GetHdc();
-            try { PrintWindow(h, hdc, 1 /*PW_CLIENTONLY*/ | 2 /*PW_RENDERFULLCONTENT*/); }
-            finally { g.ReleaseHdc(hdc); }
+            g.Clear(Color.Black);
+            // 大嘅先畫，細嘅（例如工具列）疊上面
+            foreach (var (c, rc) in kids.OrderByDescending(k => k.R.Width * k.R.Height))
+            {
+                using var part = new Bitmap(rc.Width, rc.Height, PixelFormat.Format32bppArgb);
+                using (var pg = Graphics.FromImage(part))
+                {
+                    nint hdc = pg.GetHdc();
+                    try { PrintWindow(c, hdc, 2 /*PW_RENDERFULLCONTENT*/); }
+                    finally { pg.ReleaseHdc(hdc); }
+                }
+                if (!LooksBlank(part)) g.DrawImageUnscaled(part, rc.Location);
+            }
         }
         return bmp;
+    }
+
+    /// <summary>視窗冇被其他視窗擋住（抽幾個點檢查）就直接由螢幕複製。</summary>
+    private static Bitmap? FromScreenIfVisible(nint h, Size size)
+    {
+        var o = new POINT { X = 0, Y = 0 };
+        ClientToScreen(h, ref o);
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++)
+            {
+                var pt = new POINT { X = o.X + size.Width * (1 + 2 * i) / 6, Y = o.Y + size.Height * (1 + 2 * j) / 6 };
+                var w = WindowFromPoint(pt);
+                if (w == 0 || GetAncestor(w, 2 /*GA_ROOT*/) != GetAncestor(h, 2)) return null;
+            }
+        var bmp = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(bmp);
+        g.CopyFromScreen(o.X, o.Y, 0, 0, size, CopyPixelOperation.SourceCopy);
+        return bmp;
+    }
+
+    /// <summary>截到嘅圖係咪全黑 / 幾乎單一顏色（截圖失敗）。</summary>
+    private static bool LooksBlank(Bitmap b)
+    {
+        if (b.Width < 4 || b.Height < 4) return true;
+        int n = 0, same = 0;
+        var c0 = b.GetPixel(b.Width / 2, b.Height / 2);
+        for (int y = 1; y < 12; y++)
+            for (int x = 1; x < 12; x++)
+            {
+                var c = b.GetPixel(b.Width * x / 12, b.Height * y / 12);
+                n++;
+                if (Math.Abs(c.R - c0.R) + Math.Abs(c.G - c0.G) + Math.Abs(c.B - c0.B) < 12) same++;
+            }
+        return same >= n * 0.97;
     }
 
     private static nint MakeLParam(int x, int y) => (nint)((y << 16) | (x & 0xFFFF));
