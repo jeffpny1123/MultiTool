@@ -285,20 +285,35 @@ internal static class Upnp
 
     public static Task<bool> MapAsync(int port, CancellationToken ct) => MapAsync(port, "TCP", "MultiTool", ct);
 
-    /// <summary>喺路由器開端口（TCP / UDP）。</summary>
-    public static async Task<bool> MapAsync(int port, string proto, string desc, CancellationToken ct)
+    /// <summary>
+    /// 喺路由器開端口（TCP / UDP）。lease = 幾多秒後路由器自動閂（0 = 永久）；
+    /// 有啲路由器唔支援限時，失敗就用返永久。
+    /// </summary>
+    public static async Task<bool> MapAsync(int port, string proto, string desc, CancellationToken ct, int lease = 0)
     {
         try
         {
             _gw ??= await DiscoverAsync(ct);
             if (_gw is not { } g) return false;
             desc = System.Security.SecurityElement.Escape(desc) ?? "MultiTool";
-            string body = $"<u:AddPortMapping xmlns:u=\"{g.Service}\"><NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort>" +
+            string Body(int l) => $"<u:AddPortMapping xmlns:u=\"{g.Service}\"><NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort>" +
                           $"<NewProtocol>{proto}</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{g.Local}</NewInternalClient>" +
-                          $"<NewEnabled>1</NewEnabled><NewPortMappingDescription>{desc}</NewPortMappingDescription><NewLeaseDuration>0</NewLeaseDuration></u:AddPortMapping>";
-            return await SoapAsync(g.Control, g.Service, "AddPortMapping", body, ct);
+                          $"<NewEnabled>1</NewEnabled><NewPortMappingDescription>{desc}</NewPortMappingDescription><NewLeaseDuration>{l}</NewLeaseDuration></u:AddPortMapping>";
+            if (await SoapAsync(g.Control, g.Service, "AddPortMapping", Body(lease), ct)) return true;
+            return lease > 0 && await SoapAsync(g.Control, g.Service, "AddPortMapping", Body(0), ct);
         }
         catch { return false; }
+    }
+
+    /// <summary>閂端口（未搵過路由器都會先搵）。</summary>
+    public static async Task UnmapAsync(int port, string proto, CancellationToken ct)
+    {
+        try
+        {
+            _gw ??= await DiscoverAsync(ct);
+            Unmap(port, proto);
+        }
+        catch { }
     }
 
     /// <summary>路由器睇到嘅本機 IP（UPnP 搵到先有）。</summary>

@@ -11,8 +11,11 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v2.4.2";
+    public const string Version = "v2.5";
     public const string Author = "白兔糖v3v";
+    /// <summary>程式啟動時間；開頭幾秒當係「啟動緊」，重嘢（例如插件嘅 WebView2）遲啲先做。</summary>
+    public static readonly DateTime Started = DateTime.Now;
+    public static bool StartupDone => (DateTime.Now - Started).TotalSeconds > 6;
 
     [STAThread]
     private static void Main()
@@ -186,6 +189,8 @@ internal sealed class MainForm : Form
 
         // ---- 功能清單（以後喺度加）----
         AddPage(Lang.T("首頁"), BuildHomePage, "home");
+        AddPage(Lang.T("電子郵件"), Mail.MailPage.Build, "mail", Extensions.Mail);
+        AddPage(Lang.T("工作坊"), Plugins.PluginsPage.Build, "plugins", Extensions.Plugins);
         AddPage(Lang.T("我的腳本"), Scripts.ScriptsPage.Build, "scripts", Extensions.Scripts);
         AddPage(Lang.T("螢幕錄影"), Video.RecordPage.Build, "recorder", Extensions.Recorder);
         AddPage(Lang.T("影片剪輯"), Video.EditorPage.Build, "editor", Extensions.Editor);
@@ -200,6 +205,8 @@ internal sealed class MainForm : Form
         AddPage(Lang.T("遠端桌面（測試）"), Tools.RemotePage.Build, "remote", Extensions.Remote);
         AddPage(Lang.T("效能監控"), Tools.PerfHub.Build, "perf", Extensions.Perf);
         AddPage(Lang.T("磁碟空間及健康"), Tools.DiskPage.Build, "disk", Extensions.Disk);
+        // 加咗去工具欄嘅插件
+        foreach (var id in Plugins.PluginStore.Pinned.ToList()) AddPluginPage(id);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");
         AddPage(Lang.T("工具庫"), () => new ExtensionsPage(), "extensions");
         AddPage(Lang.T("設定"), BuildAboutPage, "settings");
@@ -208,9 +215,12 @@ internal sealed class MainForm : Form
         HotkeyHub.CurrentPage = () => _current >= 0 ? _pageKeys[_current].Key : null;
         HotkeyHub.Start();
         Tools.PerfOverlay.Wire();
+        Plugins.PluginStore.PinsChanged += () => BeginInvoke(SyncPluginPages);
+        Plugins.PluginStore.Changed += () => BeginInvoke(SyncPluginPages);
         Extensions.Changed += () => BeginInvoke(() =>
         {
             Video.EdShell.Sync();
+            SyncPluginPages();
             LayoutNav();
             // 啱啱安裝咗：即刻整好個頁（佢嘅快捷鍵唔使打開過都用得）
             for (int i = 0; i < _pages.Count; i++)
@@ -620,7 +630,57 @@ internal sealed class MainForm : Form
         menu.Show(nav, at);
     }
 
-    private bool PageVisible(int i) => _pageKeys[i].Ext is not { } e || Extensions.IsInstalled(e);
+    private bool PageVisible(int i)
+    {
+        string key = _pageKeys[i].Key;
+        if (key.StartsWith("plugin:"))
+            return Extensions.IsInstalled(Extensions.Plugins) && Plugins.PluginStore.IsPinned(key[7..]);
+        return _pageKeys[i].Ext is not { } e || Extensions.IsInstalled(e);
+    }
+
+    // ---------- 插件頁（插件工房「加到左側工具欄」）----------
+    private void AddPluginPage(string id)
+    {
+        string name = id, icon = "🧩";
+        try { var m = Plugins.PluginStore.Load(id); name = m.Name; icon = m.Icon; } catch { }
+        AddPage(name, () => new Plugins.PluginSidePage(id), "plugin:" + id);
+        var nav = _pages[^1].Nav;
+        nav.Glyph = icon;
+        nav.Hue = Ui.Accent2;
+    }
+
+    /// <summary>插件加咗 / 移除 / 改咗名：更新側欄。</summary>
+    private void SyncPluginPages()
+    {
+        foreach (var id in Plugins.PluginStore.Pinned)
+            if (!_pageKeys.Any(k => k.Key == "plugin:" + id)) AddPluginPage(id);
+        for (int i = 0; i < _pages.Count; i++)
+        {
+            string key = _pageKeys[i].Key;
+            if (!key.StartsWith("plugin:")) continue;
+            var p = _pages[i];
+            if (!PageVisible(i))
+            {
+                // 移除咗：停埋個插件
+                if (p.Page != null)
+                {
+                    if (_current == i) Show(0);
+                    _content.Controls.Remove(p.Page);
+                    p.Page.Dispose();
+                    _pages[i] = (p.Nav, p.Build, null);
+                }
+                continue;
+            }
+            try
+            {
+                var m = Plugins.PluginStore.Load(key[7..]);
+                if (p.Nav.Text != m.Name || p.Nav.Glyph != m.Icon) { p.Nav.Text = m.Name; p.Nav.Glyph = m.Icon; p.Nav.Invalidate(); }
+            }
+            catch { }
+            if (p.Page == null) EnsureBuilt(i); // 啱啱加：即刻開始運行
+        }
+        LayoutNav();
+    }
 
     /// <summary>側欄：跟用家排嘅次序，淨係顯示已安裝嘅擴充工具。</summary>
     /// <summary>側欄項目：太多就逐格縮細少少，再唔夠位就可以用滑鼠滾輪捲。</summary>

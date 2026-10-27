@@ -84,8 +84,36 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   需要額外檔案的工具會於安裝時下載（例如螢幕錄影會下載約 100 MB 的 FFmpeg），不經任何自設伺服器。
 - **Categories** (Gaming, Media, Productivity, System, Network) and **All / Installed / Not installed** tabs can be combined; commonly used tools are listed first and beta tools last.
   **分類**（遊戲、媒體、效率、系統、網絡）可與**全部／已安裝／未安裝**分頁一併篩選；常用工具排在最前，測試版排在最後。
-- Newly released tools show a **NEW** badge at the top-right of their tile.
-  新推出的工具會於方格右上角顯示 **NEW**。
+- Only the newest batch of tools shows a **NEW** badge at the top-right of their tile, and these tools are listed first; older NEW badges disappear when a newer batch is released.
+  只有最新一批推出的工具會於方格右上角顯示 **NEW** 並排在最前；推出新一批工具後，舊的 NEW 會自動消失。
+
+**Email 電子郵件** — Gmail-style email client, install it from the Tool library / 類似 Gmail 的電郵程式，於工具庫安裝
+
+- Accounts: **Gmail** (app password), **Outlook / Hotmail** (Microsoft sign-in; the first time you register a free Azure app for a Client ID — step-by-step instructions are in the Add account window) and **other IMAP** mailboxes (Yahoo, iCloud, work mail…). Passwords and tokens are encrypted with Windows DPAPI and stay on your PC.
+  帳戶：**Gmail**（應用程式密碼）、**Outlook／Hotmail**（微軟帳戶登入；首次需在 Azure 註冊免費 App 取得 Client ID，加入帳戶視窗內有詳細步驟）及**其他 IMAP** 郵箱（Yahoo、iCloud、公司郵箱等）。密碼及登入資料以 Windows DPAPI 加密，只儲存在你的電腦。
+- Several accounts at once, plus **All accounts** — every inbox merged into one list with a coloured tag showing which account each email belongs to.
+  可同時使用多個帳戶，並有**全部帳戶**——所有收件匣合併為一個清單，每封郵件以顏色標籤顯示所屬帳戶。
+- Folders, search, star, mark unread, archive, delete, spam; the list fills the window and opening an email shows it full-size (← Back / Esc returns).
+  資料夾、搜尋、星號、標為未讀、封存、刪除、垃圾郵件；清單佔滿整個畫面，開啟郵件後以全畫面顯示（按「← 返回」或 Esc 返回清單）。
+- Compose, reply, reply all and forward with attachments (drag files in); new-mail notifications.
+  撰寫、回覆、全部回覆及轉寄，支援附件（可直接拖入檔案）；有新郵件通知。
+- Emails are shown with Microsoft Edge WebView2 with scripts disabled; **remote images are blocked by default** (senders can't tell when you opened an email) — click **Show images** or always allow a sender.
+  郵件以 Microsoft Edge WebView2 顯示並停用指令碼；**預設封鎖遠端圖片**（寄件人無法得知你何時開啟郵件），可按**顯示圖片**或一律允許某寄件人。
+- **AI**: summarize an email, sort the inbox into Action needed / Later / Ads, draft a reply, or write an email for you.
+  **AI**：摘要郵件、將收件匣分為需要處理／稍後再看／廣告、草擬回覆，或代為撰寫郵件。
+
+**Workshop 工作坊** — make your own tools, install it from the Tool library / 製作自己的工具，於工具庫安裝
+
+- A plugin is a folder with `manifest.json`, `ui.html` and JavaScript. Plugins can call web APIs, show notifications, store data and encrypted keys, read files you pick, use your AI and start your scripts through the `mt.*` API.
+  插件是一個包含 `manifest.json`、`ui.html` 及 JavaScript 的資料夾，可透過 `mt.*` API 連接網上 API、彈出通知、儲存資料及加密金鑰、讀取你選擇的檔案、使用你的 AI 及開始你的腳本。
+- Built-in code editor (CodeMirror) with **Save**, **Run** (live preview on the right), a log panel and an API reference.
+  內置程式碼編輯器（CodeMirror），設有**儲存**、**試行**（右邊即時預覽）、記錄區及 API 說明。
+- **AI write**: chat with your AI, which asks about anything unclear, then writes or changes the plugin; apply or undo with one click.
+  **AI 幫我寫**：與你的 AI 對話，它會先問清楚不明確的地方，再編寫或修改插件，可一鍵套用或復原。
+- Safety: each plugin only reaches the websites listed in its manifest, permissions are shown and must be allowed before it runs, and it can't touch other files or run programs.
+  安全：插件只可連接 manifest 內列明的網站，運行前會列出權限並須同意，亦無法存取其他檔案或執行程式。
+- **Add to sidebar**: a plugin gets its own sidebar item and runs whenever MultiTool is open. Plugins follow the light / dark theme and can be exported / imported as `.mtplugin` files.
+  **加到工具欄**：插件在左側工具欄有自己的一格，開啟 MultiTool 時便會運行。插件會跟隨日光／深色主題，並可匯出／匯入為 `.mtplugin` 檔。
 
 **Screen Recorder 螢幕錄影** — install it from the Tool library / 於工具庫安裝
 
@@ -101,6 +129,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   可於任何地方以快捷鍵開始／停止。錄影期間右上角會顯示計時器，計時器不會被錄入影片。
 - **Recent recording** shows the latest video with **Play** and **Delete** (moves it to the Recycle Bin).
   **最近錄影**顯示最新的影片，可**播放**或**刪除**（移至資源回收筒）。
+- While the Screen Recorder page is open or a recording is running, a frame on screen shows the recording area (blue, red while recording). It is not captured in the video and clicks pass through it.
+  停留在螢幕錄影頁或錄影期間，畫面上會以框顯示錄影範圍（藍色，錄影時變紅色）；框不會被錄入影片，滑鼠亦可直接點穿。
 
 **Video Editor 影片剪輯** — Clipchamp-style editing, install it from the Tool library / 類似 Clipchamp 的影片剪輯，於工具庫安裝
 
@@ -184,6 +214,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   以 ID 及密碼連接另一部執行 MultiTool 的電腦並遠端控制，或讓別人連入你的電腦；全程端對端加密（ECDH P-256 交換金鑰、密碼驗證、AES-GCM）。
 - There is no relay server: the host PC must be reachable directly (same LAN, or a public IP / UPnP). It does **not** work when the host is behind CGNAT, mobile data or most public Wi-Fi; a VPN such as Tailscale works around this.
   沒有中轉伺服器：被控電腦必須可直接連線（同一區網，或有公共 IP／UPnP）。被控電腦使用 CGNAT、流動數據或大部分公共 Wi-Fi 時**無法連線**，可改用 Tailscale 等 VPN。
+- Security: the fixed password needs at least 12 characters with letters and numbers; 5 wrong passwords lock connections for 30 minutes; you get a Windows notification when someone connects, and a red frame surrounds the screen while it is being controlled.
+  安全：固定密碼最少 12 個字元並須包含英文字母及數字；連續輸入錯誤 5 次會鎖定 30 分鐘；有人連入時會彈出 Windows 通知，被控期間螢幕四邊會顯示紅框。
 
 **Game Servers 遊戲伺服器** — host dedicated servers with Valve's SteamCMD / 使用 Valve 官方 SteamCMD 架設專用伺服器
 
@@ -195,6 +227,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **檔案**分頁：常用資料夾、遊戲設定檔（內建編輯器）及檔案瀏覽；**控制台**分頁：即時輸出及輸入指令。
 - Servers stop gracefully (save first) when stopped or when MultiTool closes.
   停止伺服器或關閉 MultiTool 時，會先讓伺服器儲存再停止。
+- UPnP ports are closed as soon as a server stops (and expire after 2 hours if MultiTool closes unexpectedly); starting a server without a password shows a warning.
+  伺服器停止後會立即關閉 UPnP 連接埠（MultiTool 意外關閉時亦會於 2 小時後自動失效）；未設定密碼便開啟伺服器時會顯示警告。
 - **AI helper**: with an AI signed in, a cloud button at the bottom-right can fill in server settings ("8 players, password abc123"), edit game config files inside the server folder only, and read the last lines of the console to explain errors. **Ask AI why** appears when a server fails.
   **AI 助手**：已登入 AI 時，右下角雲朵按鈕可代為填寫伺服器設定（例如「8 人遊玩，密碼 abc123」）、只於伺服器資料夾內修改遊戲設定檔，並查看控制台最後數行解釋錯誤；伺服器出問題時會出現**問 AI 原因**按鈕。
 
@@ -247,6 +281,18 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v2.5
+- **New: Email** — a Gmail-style email client for Gmail, Outlook / Hotmail and other IMAP mailboxes: several accounts and an All accounts inbox, search, compose / reply / forward with attachments, new-mail notifications, remote images blocked by default, and AI summary / inbox sorting / reply drafts.
+  **新增：電子郵件**——類似 Gmail 的電郵程式，支援 Gmail、Outlook／Hotmail 及其他 IMAP 郵箱：多個帳戶及「全部帳戶」收件匣、搜尋、撰寫／回覆／轉寄及附件、新郵件通知、預設封鎖遠端圖片，以及 AI 摘要／整理收件匣／草擬回覆。
+- **New: Workshop** — make your own tools with HTML + JavaScript: code editor with live preview, an AI that chats with you and writes the plugin, permissions, export / import, and **Add to sidebar**.
+  **新增：工作坊**——用 HTML + JavaScript 製作自己的工具：程式碼編輯器及即時預覽、與你對話並代為編寫插件的 AI、權限管理、匯出／匯入，以及**加到工具欄**。
+- **New:** the Screen Recorder shows the recording area on screen while its page is open or a recording is running.
+  **新增：**停留在螢幕錄影頁或錄影期間，畫面上會顯示錄影範圍框。
+- **Changed: Security** — the AI assistant can only write inside the connected folder and can't run commands; My Scripts shows a notice on first use; Remote Desktop needs a stronger fixed password, locks for 30 minutes after 5 wrong passwords and notifies you on connect; Game Servers close UPnP ports when stopped and warn when there is no password.
+  **變更：安全**——AI 助手只可在已連接的資料夾內寫入檔案，亦不可執行指令；「我的腳本」首次使用時會顯示使用須知；遠端桌面需要更強的固定密碼，連續輸入錯誤 5 次會鎖定 30 分鐘，並在有人連入時通知；遊戲伺服器停止時會關閉 UPnP 連接埠，未設定密碼時會發出警告。
+- **Changed:** only the newest tools show NEW in the Tool library, and they are listed first.
+  **變更：**工具庫只有最新推出的工具顯示 NEW，並排在最前。
 
 ### v2.4.2
 - **Changed: Hotkeys** — the hotkey table was removed from Settings; every tool and script hotkey now works anywhere. Setting a hotkey that another tool or script already uses is refused with a message saying who uses it.
@@ -509,8 +555,9 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 螢幕錄影；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Manager, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗管理、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs`, `PerfExtra.cs` Performance Monitor, Ping, Game Mode 效能監控、Ping 監看、遊戲模式；`ScriptsExtra.cs` script variables, text recognition, notifications, schedule 腳本變數、文字辨識、通知、定時；`Backup.cs` backup & restore 備份及還原；`VideoEditor.cs`, `VideoEditorUi.cs` Video Editor 影片剪輯；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 螢幕錄影；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Manager, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗管理、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs`, `PerfExtra.cs` Performance Monitor, Ping, Game Mode 效能監控、Ping 監看、遊戲模式；`ScriptsExtra.cs` script variables, text recognition, notifications, schedule 腳本變數、文字辨識、通知、定時；`Backup.cs` backup & restore 備份及還原；`VideoEditor.cs`, `VideoEditorUi.cs` Video Editor 影片剪輯；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔；`Mail.cs`, `MailUi.cs`, `MailWeb.cs` Email 電子郵件；`Plugins.cs`, `PluginsUi.cs` Workshop 工作坊 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
+| `lib/` | Files embedded into `MultiTool.dll` as resources 嵌入 `MultiTool.dll` 的檔案：`webview2/` (Microsoft Edge WebView2 SDK), `codemirror/` (CodeMirror 5) |
 | `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
 | `release/` | User guide shipped with releases 隨發佈版本附上的使用說明（`使用說明.txt`） |
 | `Build/` | Local build output, ignored by git 本機打包輸出（不納入 git） |
@@ -524,7 +571,10 @@ No Windows Desktop SDK is required. Compile with Roslyn `csc` against the framew
 
 ```
 python tools/bundle.py Build/MultiTool.exe ref/
-csc -nostdlib -noconfig -target:winexe -langversion:12 -nullable:enable -optimize+ -out:MultiTool.dll -r:ref/*.dll src/*.cs
+csc -nostdlib -noconfig -target:winexe -langversion:13 -nullable:enable -unsafe -optimize+ -out:MultiTool.dll -r:ref/*.dll ^
+    -r:lib/webview2/Microsoft.Web.WebView2.Core.dll -resource:lib/webview2/Microsoft.Web.WebView2.Core.dll,wv2.core ^
+    -resource:lib/webview2/WebView2Loader.dll,wv2.loader -resource:lib/webview2/WebView2Loader.x86.dll,wv2.loader.x86 ^
+    -resource:lib/codemirror/cm.js,cm.js -resource:lib/codemirror/cm.css,cm.css src/*.cs
 python tools/make_exe.py Build/MultiTool.exe MultiTool.dll Build/MultiTool.exe.new tools/apphost.exe
 ```
 
@@ -550,6 +600,11 @@ The icon is in `assets/` (`icon.png`, `MultiTool.ico`). To change it, edit and r
 ---
 
 ## Third-party components 第三方元件
+
+Bundled in the executable / 已包含於執行檔內：
+
+- [Microsoft Edge WebView2 SDK](https://www.nuget.org/packages/Microsoft.Web.WebView2) (`Microsoft.Web.WebView2.Core.dll`, `WebView2Loader.dll`) — Microsoft WebView2 SDK license; uses the WebView2 Runtime already installed with Windows / 使用 Windows 已安裝的 WebView2 Runtime
+- [CodeMirror 5](https://codemirror.net/5/) — MIT License, used by the Workshop code editor / 工作坊程式碼編輯器使用
 
 Downloaded by the user on demand, not bundled in the executable / 由用戶按需下載，並未包含於執行檔內：
 

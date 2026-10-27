@@ -18,6 +18,14 @@ namespace MultiTool.Ai;
 /// </summary>
 internal abstract class AiProvider
 {
+    /// <summary>AI 一律唔准讀寫嘅私人位置（Claude 權限規則：~ = 用戶資料夾）。</summary>
+    protected static readonly string[] PrivatePaths =
+    {
+        "~/.ssh/**", "~/.aws/**", "~/.azure/**", "~/.config/gcloud/**", "~/.gnupg/**", "~/.claude/**", "~/.codex/**", "~/.gemini/**",
+        "~/AppData/Roaming/Microsoft/Credentials/**", "~/AppData/Local/Google/Chrome/User Data/**", "~/AppData/Local/Microsoft/Edge/User Data/**",
+        "~/AppData/Roaming/Mozilla/Firefox/Profiles/**", "~/AppData/Roaming/discord/**", "~/AppData/Roaming/Telegram Desktop/**"
+    };
+
     public abstract string Key { get; }          // 存檔用：claude / codex / gemini
     public abstract string Name { get; }         // 顯示：Claude / ChatGPT / Gemini
     public abstract string ToolName { get; }     // Claude Code / Codex CLI / Gemini CLI
@@ -208,10 +216,14 @@ internal sealed class ClaudeProvider : AiProvider
 
     public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null)
     {
-        // 冇連接資料夾：唔俾佢改檔案 / 行指令；連接咗：喺嗰個資料夾入面做嘢（佢嘅工作目錄 = 嗰個資料夾）
+        // 冇連接資料夾：唔俾佢改檔案 / 行指令。
+        // 連接咗：讀邊度都得（私人位置除外），但淨係寫得入嗰個資料夾（工作目錄）。
+        // • 寫：只批准 Edit(./**)（= 工作目錄入面，Write / MultiEdit 都跟呢條規則）；外面嘅修改冇人批准，-p 模式會直接拒絕
+        // • 一律唔俾行指令（Bash 可以繞過以上限制）；唔俾讀網頁（防止被網頁 / 檔案入面嘅指示呃咗，將資料傳出去）
         string tools = folder != null
-            ? " --permission-mode acceptEdits --allowedTools Read Write Edit MultiEdit Glob Grep Bash WebSearch WebFetch TodoWrite"
-            : " --disallowedTools Bash Edit Write NotebookEdit --allowedTools WebSearch WebFetch";
+            ? " --permission-mode default --allowedTools Read Glob Grep TodoWrite WebSearch \"Edit(./**)\"" +
+              " --disallowedTools Bash WebFetch NotebookEdit " + string.Join(" ", PrivatePaths.Select(p => $"\"Read({p})\" \"Edit({p})\""))
+            : " --disallowedTools Bash Edit Write MultiEdit NotebookEdit --allowedTools WebSearch WebFetch";
         string args = "-p --output-format json" +
                       (sessionId != null ? $" --resume {sessionId}" : "") +
                       (quick ? " --model haiku --no-session-persistence" : "") + tools;
@@ -287,6 +299,8 @@ internal sealed class CodexProvider : AiProvider
         // 唯讀 sandbox：唔俾佢改檔案
         // 連接咗資料夾：可以喺嗰個資料夾寫檔（workspace-write sandbox）；冇就唯讀
         string mode = folder != null ? "workspace-write" : "read-only";
+        // workspace-write：淨係寫得入工作目錄；sandbox 入面唔准上網、唔使問就唔行指令
+        if (folder != null) mode += " -c sandbox_workspace_write.network_access=false -c approval_policy=never";
         string common = $"--json --skip-git-repo-check -c sandbox_mode={mode} -o \"{outFile}\"" + (quick ? " --ephemeral" : "");
         // --search：俾佢上網搵資料（唔使逐次批准）
         string args = sessionId != null ? $"--search exec resume {common} {sessionId} -" : $"--search exec {common} -";
@@ -355,7 +369,8 @@ internal sealed class GeminiProvider : AiProvider
         // 新對話自己定 session id，之後用佢接返上文
         string sid = sessionId ?? Guid.NewGuid().ToString();
         string args = "--output-format json --skip-trust " + (sessionId != null ? $"--resume {sid}" : $"--session-id {sid}") +
-                      (folder != null ? " --yolo" : ""); // 連接咗資料夾先俾佢自動用工具（工作目錄 = 嗰個資料夾）
+                      (folder != null ? " --approval-mode auto_edit" : "");
+        // 連接咗資料夾：只自動批准改檔（Gemini 只准改工作區 = 嗰個資料夾入面）；行指令要批准，冇人批准就唔會行
         var (code, output, err) = await RunPromptAsync(exe, args, prompt, started, folder);
         // {"session_id":"...","response":"...","stats":{...}}；出錯時 {"error":{"message":"..."}} 會喺 stderr
         try

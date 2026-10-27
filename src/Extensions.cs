@@ -31,6 +31,8 @@ internal static class Extensions
     public const string Disk = "disk";
     public const string Doc = "doc";
     public const string Editor = "editor";
+    public const string Mail = "mail";
+    public const string Plugins = "plugins";
 
     /// <summary>工具庫分類（一個工具可以屬幾類）。</summary>
     public static readonly string[] Categories = { "game", "media", "work", "system", "net" };
@@ -61,6 +63,8 @@ internal static class Extensions
         Remote => new[] { "net", "system" },
         Perf => new[] { "system", "game" },
         Disk => new[] { "system" },
+        Mail => new[] { "work", "net" },
+        Plugins => new[] { "work" },
         _ => Array.Empty<string>()
     };
 
@@ -85,22 +89,20 @@ internal static class Extensions
         string? Since = null);                                                 // 邊個版本推出（新工具：工具庫右上角顯示 NEW）
 
     /// <summary>
-    /// 新推出嘅工具：推出嗰個版本同下一個版本都顯示 NEW（例如 v2.3 推出，v2.3、v2.4 都有）。
+    /// 新推出嘅工具：淨係最新嗰批（Since 最大嘅版本）先顯示 NEW，再新一批出咗舊嘅就冇。
     /// 以後加新工具記得喺 All 入面填 Since: "vX.Y"。
     /// </summary>
-    public static bool IsNew(Info e)
+    public static bool IsNew(Info e) => !string.IsNullOrEmpty(e.Since) && Num(e.Since) == LatestSince;
+
+    private static int Num(string v)
     {
-        static int Num(string v)
-        {
-            var p = v.Trim().TrimStart('v', 'V').Split('.');
-            int major = p.Length > 0 && int.TryParse(p[0], out var a) ? a : 0;
-            int minor = p.Length > 1 && int.TryParse(p[1], out var b) ? b : 0;
-            return major * 100 + minor;
-        }
-        if (string.IsNullOrEmpty(e.Since)) return false;
-        int since = Num(e.Since), now = Num(Program.Version);
-        return now >= since && now - since <= 1;
+        var p = v.Trim().TrimStart('v', 'V').Split('.');
+        int major = p.Length > 0 && int.TryParse(p[0], out var a) ? a : 0;
+        int minor = p.Length > 1 && int.TryParse(p[1], out var b) ? b : 0;
+        return major * 100 + minor;
     }
+
+    private static int LatestSince => All.Where(x => !string.IsNullOrEmpty(x.Since)).Select(x => Num(x.Since!)).DefaultIfEmpty(-1).Max();
 
     public static readonly List<Info> All = new()
     {
@@ -135,19 +137,29 @@ internal static class Extensions
         new(Perf, Lang.T("效能監控"),
             Lang.T("即時睇 CPU、GPU、RAM、VRAM、磁碟、網速同 GPU 溫度，仲可以喺遊戲畫面角落顯示；有 Ping 監看同一撳閂背景程式嘅遊戲模式。用 Windows 內置資料，唔使第三方程式。"), false,
             Remove: () => Tools.PerfOverlay.Set(false, false)),
+        new(Mail, Lang.T("電子郵件"),
+            Lang.T("好似 Gmail 咁收信、睇信、搜尋、寫信、回覆、轉寄同附件，支援 Gmail 同 Outlook / Hotmail 多個帳戶，有新郵件通知，仲可以叫 AI 摘要、整理收件匣同草擬回覆。"), false,
+            Remove: () => MultiTool.Mail.MailWatch.Stop(), Since: "v2.5"),
+        new(Plugins, Lang.T("工作坊"),
+            Lang.T("用 HTML + JavaScript 寫你自己嘅工具：連網上 API、彈通知、儲存資料、叫 AI 幫手。有程式碼編輯器、即時試行，唔識寫 code 可以叫 AI 幫你寫；插件可以匯出俾其他人用。"), false,
+            Remove: () => { foreach (var id in MultiTool.Plugins.PluginRuntime.Running.Keys.ToList()) MultiTool.Plugins.PluginRuntime.Stop(id); },
+            Since: "v2.5"),
         new(Disk, Lang.T("磁碟空間及健康"),
             Lang.T("睇每個磁碟剩幾多位、硬碟健康（溫度、SSD 壽命、讀寫錯誤），掃描邊個資料夾最食位，一撳掉入資源回收筒。"), false),
     };
 
-    /// <summary>工具庫 / 首頁排序：常用嘅放前，我的腳本第一，測試版最後。</summary>
+    /// <summary>工具庫 / 首頁排序：新工具最前，跟住常用嘅，我的腳本第一，測試版最後。</summary>
     private static readonly string[] Order =
-        { Scripts, Recorder, Editor, Download, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
+        { Scripts, Mail, Plugins, Recorder, Editor, Download, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
 
     private static readonly bool Sorted = SortAll();
 
     private static bool SortAll()
     {
-        All.Sort((a, b) => Rank(a.Id).CompareTo(Rank(b.Id)));
+        // 新工具（NEW）放最前，之後照 Order
+        var list = All.OrderByDescending(IsNew).ThenBy(e => Rank(e.Id)).ToList();
+        All.Clear();
+        All.AddRange(list);
         return true;
         static int Rank(string id) { int i = Array.IndexOf(Order, id); return i < 0 ? Order.Length : i; }
     }
@@ -196,6 +208,8 @@ internal static class Extensions
         Remote => ("⇆", Ui.Accent),
         Perf => ("▤", Ui.Success),
         Disk => ("◔", Ui.Accent2),
+        Mail => ("✉", Ui.Hex(0xEA4335)),
+        Plugins => ("◈", Ui.Accent2),
         Doc => ("▦", Ui.Accent),
         "ai" => ("✦", Ui.Accent2),
         "home" => ("⌂", Ui.Accent),

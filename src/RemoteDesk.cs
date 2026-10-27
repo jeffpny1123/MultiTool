@@ -68,7 +68,19 @@ internal static class RemoteSettings
     public static void NewOneTime()
     {
         const string chars = "abcdefghjkmnpqrstuvwxyz23456789";
-        OneTime = new string(Enumerable.Range(0, 8).Select(_ => chars[RandomNumberGenerator.GetInt32(chars.Length)]).ToArray());
+        OneTime = new string(Enumerable.Range(0, 10).Select(_ => chars[RandomNumberGenerator.GetInt32(chars.Length)]).ToArray());
+    }
+
+    /// <summary>固定密碼太弱就回傳原因；夠強回傳 null。</summary>
+    public static string? Weak(string p)
+    {
+        if (p.Length < 12) return Lang.T("固定密碼最少要 12 個字。");
+        if (!p.Any(char.IsLetter) || !p.Any(char.IsDigit)) return Lang.T("固定密碼要同時有英文字母同數字。");
+        if (p.Distinct().Count() < 6) return Lang.T("固定密碼太簡單（重複字太多）。");
+        string low = p.ToLowerInvariant();
+        foreach (var bad in new[] { "password", "12345678", "qwerty", "abcdefg", "11111111", "multitool" })
+            if (low.Contains(bad)) return Lang.T("固定密碼太常見，請換一個。");
+        return null;
     }
 
     public static void SetFixed(string? password)
@@ -229,7 +241,7 @@ internal static class RemoteHandshake
             var reply = await ch.ReadRawAsync(ct);
             if (reply.Length == 1) throw new UnauthorizedAccessException(reply[0] switch
             {
-                1 => Lang.T("密碼錯誤"), 2 => Lang.T("對方拒絕咗連線"), 3 => Lang.T("試錯太多次，等一分鐘再試"), _ => Lang.T("對方拒絕")
+                1 => Lang.T("密碼錯誤"), 2 => Lang.T("對方拒絕咗連線"), 3 => Lang.T("試錯太多次，對方已經鎖咗 30 分鐘"), _ => Lang.T("對方拒絕")
             });
             byte[]? key = null;
             if (reply.AsSpan().SequenceEqual(RemoteCrypto.Mac(k1, "host", transcript, shared))) key = k1;
@@ -274,6 +286,10 @@ internal static class RemoteHost
     private static CancellationTokenSource? _cts;
     private static bool _mapped;
     private static readonly List<DateTime> Fails = new();
+    private const int MaxFails = 5;                          // 連續錯 5 次 …
+    private static readonly TimeSpan LockFor = TimeSpan.FromMinutes(30); // … 鎖 30 分鐘
+    private static DateTime _lockedUntil;
+    public static DateTime LockedUntil => _lockedUntil;
     private static Control? _ui;
     private static readonly List<(CancellationTokenSource Cts, string Who)> Sessions = new();
 
@@ -419,8 +435,7 @@ internal static class RemoteHost
 
             lock (Fails)
             {
-                Fails.RemoveAll(t => (DateTime.Now - t).TotalSeconds > 60);
-                if (Fails.Count >= 5) { _ = ch.WriteRawAsync(new byte[] { 3 }, ct); return; }
+                if (DateTime.Now < _lockedUntil) { _ = ch.WriteRawAsync(new byte[] { 3 }, ct); return; }
             }
             var k1 = await Task.Run(() => RemoteCrypto.PwKey(RemoteSettings.OneTime, sessionSalt), ct);
             byte[]? key = null;
@@ -431,8 +446,20 @@ internal static class RemoteHost
             { key = RemoteSettings.FixedKey; viaFixed = true; }
             if (key == null)
             {
-                lock (Fails) Fails.Add(DateTime.Now);
+                bool locked = false;
+                lock (Fails)
+                {
+                    Fails.RemoveAll(t => (DateTime.Now - t) > LockFor);
+                    Fails.Add(DateTime.Now);
+                    if (Fails.Count >= MaxFails) { _lockedUntil = DateTime.Now + LockFor; Fails.Clear(); locked = true; }
+                }
                 Log(Lang.F("密碼錯誤：{0}", who));
+                if (locked)
+                {
+                    Log(Lang.F("密碼錯咗 {0} 次，鎖 {1} 分鐘", MaxFails, (int)LockFor.TotalMinutes));
+                    Scripts.Notifier.Send(Lang.T("遠端桌面：有人試錯密碼"),
+                        Lang.F("{0} 試錯密碼 {1} 次，已經鎖咗 {2} 分鐘。唔係你嘅話，建議換固定密碼。", who, MaxFails, (int)LockFor.TotalMinutes), true, false);
+                }
                 await ch.WriteRawAsync(new byte[] { 1 }, ct);
                 return;
             }
@@ -450,7 +477,9 @@ internal static class RemoteHost
             using var sess = CancellationTokenSource.CreateLinkedTokenSource(stop);
             lock (Sessions) Sessions.Add((sess, who));
             lock (Active) Active.Add(who);
+            lock (Fails) Fails.Clear(); // 成功登入：錯誤次數重新計
             Log(Lang.F("已連線：{0}", who));
+            Scripts.Notifier.Send(Lang.T("遠端桌面：有人連咗入嚟"), Lang.F("{0} 正在遠端控制呢部電腦。唔係你允許嘅話，即刻撳畫面頂嘅「中斷」。", who), true, false);
             Set(Lang.F("{0} 正在遠端控制呢部電腦", who));
             ShowBar(who, () => sess.Cancel());
             try { await new HostSession(ch).RunAsync(sess.Token); }
@@ -460,6 +489,7 @@ internal static class RemoteHost
                 lock (Sessions) Sessions.RemoveAll(s => s.Cts == sess);
                 lock (Active) Active.Remove(who);
                 Log(Lang.F("已中斷：{0}", who));
+                Scripts.Notifier.Send(Lang.T("遠端桌面：已中斷"), Lang.F("{0} 已經中斷連線。", who), true, false);
                 Set(Running ? Lang.T("等緊連線…") : Lang.T("已關閉"));
                 HideBar();
             }
@@ -482,6 +512,8 @@ internal static class RemoteHost
     // ---- 「有人控制緊」提示條 ----
     private static ControlBar? _bar;
 
+    private static readonly List<RemoteFrame> _frames = new();
+
     private static void ShowBar(string who, Action disconnect)
     {
         _ui?.BeginInvoke(() =>
@@ -489,6 +521,10 @@ internal static class RemoteHost
             _bar?.Close();
             _bar = new ControlBar(who, disconnect);
             _bar.Show();
+            // 成個螢幕加一圈紅框：一眼就知有人連緊
+            foreach (var f in _frames) f.Close();
+            _frames.Clear();
+            foreach (var scr in Screen.AllScreens) { var fr = new RemoteFrame(scr.Bounds); _frames.Add(fr); fr.Show(); }
         });
     }
 
@@ -496,7 +532,12 @@ internal static class RemoteHost
     {
         _ui?.BeginInvoke(() =>
         {
-            if (Active.Count == 0) { _bar?.Close(); _bar = null; }
+            if (Active.Count == 0)
+            {
+                _bar?.Close(); _bar = null;
+                foreach (var f in _frames) f.Close();
+                _frames.Clear();
+            }
         });
     }
 
@@ -736,6 +777,50 @@ internal sealed class AcceptDialog : Form
 }
 
 /// <summary>被控時螢幕頂嘅提示條（撳「中斷」即刻斷）。</summary>
+/// <summary>被控時螢幕四邊嘅紅框（撳穿、唔會出現喺對方畫面）。</summary>
+internal sealed class RemoteFrame : Form
+{
+    [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr h, uint affinity);
+    protected override bool ShowWithoutActivation => true;
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= 0x08000000 | 0x00000008 | 0x80 | 0x20 | 0x80000; // 唔攞焦點、置頂、唔喺 Alt+Tab、撳穿、layered
+            return cp;
+        }
+    }
+
+    public RemoteFrame(Rectangle bounds)
+    {
+        FormBorderStyle = FormBorderStyle.None;
+        ShowInTaskbar = false;
+        TopMost = true;
+        StartPosition = FormStartPosition.Manual;
+        Bounds = bounds;
+        BackColor = Color.Magenta;
+        TransparencyKey = Color.Magenta;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        int w = Math.Max(4, Ui.S(5));
+        using var b = new SolidBrush(Ui.Danger);
+        e.Graphics.FillRectangle(b, 0, 0, Width, w);
+        e.Graphics.FillRectangle(b, 0, Height - w, Width, w);
+        e.Graphics.FillRectangle(b, 0, 0, w, Height);
+        e.Graphics.FillRectangle(b, Width - w, 0, w, Height);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        try { SetWindowDisplayAffinity(Handle, 0x11); } catch { }
+    }
+}
+
 internal sealed class ControlBar : Form
 {
     [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr h, uint affinity);
@@ -1224,7 +1309,7 @@ internal sealed class RemotePage : ToolPage
                 Lang.T("   • UAC 管理員權限視窗、鎖定畫面、登入畫面、Ctrl+Alt+Del\n") +
                 Lang.T("   • 用管理員身份開嘅程式（被控電腦嘅 MultiTool 都要用管理員身份開先得）\n") +
                 Lang.T("✓ 補救：兩部電腦都裝 Tailscale 或者 ZeroTier（免費），再喺「對方 ID」輸入對方嘅 Tailscale IP；或者喺路由器手動轉發 TCP 47820 去被控電腦。\n") +
-                Lang.T("ℹ 全程加密（ECDH + AES-GCM），密碼唔會喺網上傳送；試錯 5 次會鎖 1 分鐘。長途連線（例如香港 ↔ 加拿大）每秒大約幾格畫面，操作冇問題，睇片就唔啱。")));
+                Lang.T("ℹ 全程加密（ECDH + AES-GCM），密碼唔會喺網上傳送；連續試錯 5 次會鎖 30 分鐘。長途連線（例如香港 ↔ 加拿大）每秒大約幾格畫面，操作冇問題，睇片就唔啱。")));
 
         // ---- 此電腦 ----
         _hostBtn = TUi.Btn("", () => { if (RemoteHost.Running) RemoteHost.Stop(); else RemoteHost.Start(); UpdateHost(); }, 200);
@@ -1317,6 +1402,8 @@ internal sealed class RemotePage : ToolPage
         _hostBtn.Kind = on ? BtnKind.Success : BtnKind.Default;
         _hostBtn.Invalidate();
         _hostStatus.Text = on ? RemoteHost.Status : Lang.T("已關閉：其他人連唔到入嚟");
+        if (on && RemoteHost.LockedUntil > DateTime.Now)
+            _hostStatus.Text = Lang.F("🔒 密碼試錯太多次，鎖到 {0:HH:mm}（期間所有人都連唔到）", RemoteHost.LockedUntil);
         _pw.Text = RemoteSettings.OneTime;
         _fixedLbl.Text = RemoteSettings.FixedKey != null ? Lang.T("已設定") : Lang.T("未設定");
         _history.SuspendLayout();
@@ -1336,7 +1423,7 @@ internal sealed class RemotePage : ToolPage
             Text = Lang.T("設定固定密碼"), FormBorderStyle = FormBorderStyle.FixedDialog, StartPosition = FormStartPosition.CenterParent,
             MinimizeBox = false, MaximizeBox = false, BackColor = Ui.Bg, ForeColor = Ui.Text, ClientSize = new Size(Ui.S(420), Ui.S(170))
         };
-        var lbl = Ui.Text_(Lang.T("固定密碼（最少 10 個字，建議混合英文、數字同符號）："), Ui.TextDim, Ui.F(9.5f), new Padding(0));
+        var lbl = Ui.Text_(Lang.T("固定密碼（最少 12 個字，要有英文字母同數字，建議加符號）："), Ui.TextDim, Ui.F(9.5f), new Padding(0));
         lbl.Location = new Point(Ui.S(16), Ui.S(16));
         var box = new TextBox { UseSystemPasswordChar = true, BorderStyle = BorderStyle.None };
         var host = new InputHost(box, Ui.S(388)) { Location = new Point(Ui.S(16), Ui.S(46)) };
@@ -1344,7 +1431,7 @@ internal sealed class RemotePage : ToolPage
         var cancel = new FancyButton { Text = Lang.T("取消"), Kind = BtnKind.Ghost, Size = new Size(Ui.S(90), Ui.S(34)), Location = new Point(Ui.S(314), Ui.S(110)) };
         ok.Click += (_, _) =>
         {
-            if (box.Text.Length < 10) { MessageBox.Show(f, Lang.T("固定密碼最少要 10 個字。"), Program.AppName); return; }
+            if (RemoteSettings.Weak(box.Text) is { } why) { MessageBox.Show(f, why, Program.AppName); return; }
             f.DialogResult = DialogResult.OK;
         };
         cancel.Click += (_, _) => f.DialogResult = DialogResult.Cancel;

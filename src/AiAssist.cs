@@ -761,7 +761,7 @@ internal sealed class ScriptAssist
         if (first)
         {
             sb.AppendLine("你係「多功能工具」入面嘅腳本助手，幫用戶寫 / 改佢而家編輯緊嘅自動化腳本（類似按鍵精靈）。");
-            sb.AppendLine("用用戶嘅語言簡短回答（用戶講廣東話就用廣東話）。唔好用任何工具，唔好讀寫檔案，直接答。");
+            sb.AppendLine(Mail.MailAi.ReplyRule + "唔好用任何工具，唔好讀寫檔案，直接答。");
             sb.AppendLine();
             sb.AppendLine(ScriptJson.Spec);
             sb.AppendLine("規則：");
@@ -769,6 +769,7 @@ internal sealed class ScriptAssist
             sb.AppendLine("- 你冇辦法整新圖片：images 只可以用下面列出嘅檔名；需要新圖就留空 []，並提用戶自己喺嗰步撳截圖。");
             sb.AppendLine("- 唔知座標就用 0,0，並提用戶之後喺嗰步撳「座標」揀位置。");
             sb.AppendLine("- 盡量保留用戶原有嘅步驟同設定，只改佢要求嘅部分。");
+            sb.AppendLine("- " + Mail.MailAi.UiTextRule);
             sb.AppendLine();
         }
         sb.AppendLine("腳本資料夾而家有嘅圖片：" + (imgs.Count > 0 ? string.Join("、", imgs) : "（冇）"));

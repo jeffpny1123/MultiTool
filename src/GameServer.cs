@@ -619,6 +619,7 @@ internal sealed class GameSrv
         StopTail();
         int code = 0;
         try { code = p.ExitCode; } catch { }
+        if (Upnp) UnmapPorts(); // 伺服器閂咗（點閂都好）：端口即刻閂返；自動重開會再開
         if (_stopping)
         {
             Log(Lang.T("伺服器已停止"));
@@ -730,16 +731,49 @@ internal sealed class GameSrv
         bool all = true;
         foreach (var (proto, port) in PortList())
         {
-            bool ok = await Scripts.Upnp.MapAsync(port, proto, "MultiTool " + DisplayName, CancellationToken.None);
+            bool ok = await Scripts.Upnp.MapAsync(port, proto, "MultiTool " + DisplayName, CancellationToken.None, LeaseSec);
             Log(ok ? Lang.F("UPnP：已開 {0} {1}", proto, port) : Lang.F("UPnP：開唔到 {0} {1}", proto, port));
             all &= ok;
         }
+        if (all && Running) KeepMapped();
         return all;
+    }
+
+    // 端口限時 2 個鐘（MultiTool 當機都唔會永遠開住），運行中每 50 分鐘續期
+    private const int LeaseSec = 7200;
+    private CancellationTokenSource? _leaseCts;
+
+    private void KeepMapped()
+    {
+        _leaseCts?.Cancel();
+        var cts = _leaseCts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            while (!cts.IsCancellationRequested)
+            {
+                try { await Task.Delay(TimeSpan.FromMinutes(50), cts.Token); } catch { return; }
+                if (!Running || !Upnp) return;
+                foreach (var (proto, port) in PortList())
+                    await Scripts.Upnp.MapAsync(port, proto, "MultiTool " + DisplayName, CancellationToken.None, LeaseSec);
+            }
+        });
     }
 
     public void UnmapPorts()
     {
+        _leaseCts?.Cancel();
+        _leaseCts = null;
         foreach (var (proto, port) in PortList()) Scripts.Upnp.Unmap(port, proto);
+    }
+
+    /// <summary>開之前檢查：冇密碼就提醒（UPnP 開咗嘅話任何人都入得）。用戶取消就回傳 false。</summary>
+    public bool ConfirmStart(IWin32Window? owner)
+    {
+        if (!Def.HasPassword || Password.Length > 0 || Running) return true;
+        string msg = Upnp
+            ? Lang.F("「{0}」冇設密碼，而且開咗自動開路由器端口（UPnP）：知道你 IP 嘅任何人都入得嚟。\n建議喺「管理 → 設定」加密碼。\n\n照開？", DisplayName)
+            : Lang.F("「{0}」冇設密碼：連到你網絡（或者你轉發咗端口）嘅人都入得嚟。\n建議喺「管理 → 設定」加密碼。\n\n照開？", DisplayName);
+        return MessageBox.Show(owner, msg, Program.AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
     }
 
     // ---------- 備份 ----------
@@ -880,6 +914,9 @@ internal static class GameServers
                 }
         }
         catch (Exception ex) { AppPaths.LogError("讀伺服器清單", ex); }
+        // 上次 MultiTool 冇正常閂（例如當機）可能留低開咗嘅端口：冇開緊嘅伺服器一律閂返
+        foreach (var s in List.Where(s => s.Upnp && !(s.AutoStart && s.Installed)))
+            foreach (var (proto, port) in s.PortList()) _ = Scripts.Upnp.UnmapAsync(port, proto, CancellationToken.None);
         foreach (var s in List.Where(s => s.AutoStart && s.Installed)) _ = s.StartAsync();
         _timer = new System.Windows.Forms.Timer { Interval = 60_000 };
         _timer.Tick += (_, _) =>
@@ -1087,7 +1124,7 @@ internal sealed class GameServerPage : Panel
                 AutoEllipsis = true, Margin = new Padding(0, 0, Ui.S(10), 0)
             };
             var toggle = TUi.Btn(s.Running ? Lang.T("■ 停止") : Lang.T("▶ 開始"),
-                () => _ = s.Running ? s.StopAsync() : s.StartAsync(), 90, s.Running ? BtnKind.Danger : BtnKind.Success);
+                () => { if (s.Running) _ = s.StopAsync(); else if (s.ConfirmStart(FindForm())) _ = s.StartAsync(); }, 90, s.Running ? BtnKind.Danger : BtnKind.Success);
             toggle.Enabled = !s.Busy && (s.Installed || s.Running);
             var manage = TUi.Btn(Lang.T("管理 →"), () => OpenDetail(s), 90);
             var row = TUi.Row(name, st, toggle, manage);
@@ -1310,7 +1347,7 @@ internal sealed class ServerDetail : Panel
         _title = title;
         var sub = Ui.Text_(s.AppId > 0 ? $"Steam App {s.AppId}" + (s.Def.Size.Length > 0 ? " · " + s.Def.Size : "") : "", Ui.TextFaint, Ui.F(9f),
             new Padding(0, Ui.S(11), 0, 0));
-        _start = TUi.Btn(Lang.T("▶ 開始"), () => _ = s.StartAsync(), 90, BtnKind.Success);
+        _start = TUi.Btn(Lang.T("▶ 開始"), () => { if (s.ConfirmStart(FindForm())) _ = s.StartAsync(); }, 90, BtnKind.Success);
         _stop = TUi.Btn(Lang.T("■ 停止"), () => _ = s.StopAsync(), 90, BtnKind.Danger);
         _restart = TUi.Btn(Lang.T("↻ 重啟"), () => _ = s.RestartAsync(), 100);
         _install = TUi.Btn("", () => { if (s.Status == GameSrv.State.Installing) s.CancelInstall(); else _ = s.InstallAsync(); }, 170, BtnKind.Primary);
@@ -1536,12 +1573,21 @@ internal sealed class ServerDetail : Panel
         lan = TUi.L("", Ui.Text);
         var copy = TUi.Btn(Lang.T("複製"), () => { try { Clipboard.SetText($"{_publicIp}:{s.Port}"); Toast.Show(Lang.T("已複製"), Ui.Success, 1200); } catch { } }, 70);
         var upnpLbl = TUi.L("");
-        var upnp = TUi.Check(Lang.T("開伺服器時自動開路由器端口（UPnP）"), s.Upnp, v => { s.Upnp = v; s.Save(); });
+        var upnp = TUi.Check(Lang.T("開伺服器時自動開路由器端口（UPnP）"), s.Upnp, v =>
+        {
+            s.Upnp = v;
+            s.Save();
+            // 運行中改：即刻開 / 閂
+            if (s.Running && v) { _ = s.MapPortsAsync(); }
+            else if (!v) Task.Run(s.UnmapPorts);
+        });
         var mapNow = TUi.Btn(Lang.T("而家試開端口"), async () =>
         {
             upnpLbl.Text = Lang.T("試緊…");
             bool ok = await s.MapPortsAsync();
-            upnpLbl.Text = ok ? Lang.T("✓ 成功") : Lang.T("✗ 失敗：路由器可能關咗 UPnP，要手動轉發端口");
+            if (ok && !s.Running) await Task.Run(s.UnmapPorts); // 淨係試：伺服器未開就即刻閂返
+            upnpLbl.Text = ok ? (s.Running ? Lang.T("✓ 成功") : Lang.T("✓ 成功（伺服器未開，已經閂返；開伺服器時會自動再開）"))
+                              : Lang.T("✗ 失敗：路由器可能關咗 UPnP，要手動轉發端口");
             upnpLbl.ForeColor = ok ? Ui.Success : Ui.Danger;
         });
         var fw = TUi.Btn(Lang.T("加入防火牆例外"), () =>
@@ -1864,7 +1910,7 @@ internal sealed class ServerAssist
                 sb.AppendLine("  呢個係自訂 Steam 遊戲伺服器，仲可以填：\"appid\"（專用伺服器嘅 Steam App ID，要支援匿名下載）、\"exe\"（安裝資料夾 game\\ 入面嘅執行檔相對路徑）、\"args\"（啟動參數，可以用 {port} {players} {name} {password} {admin} {save}）。唔肯定 App ID 就講清楚。");
             sb.AppendLine("  用戶撳「套用設定」先會生效；講清楚你填咗乜。");
             sb.AppendLine("- 伺服器運行緊時改設定要提用戶重啟；有啲遊戲停機時會覆蓋設定檔，最好叫用戶先停伺服器再改。");
-            sb.AppendLine("- 用用戶嘅語言簡短回答（用戶講廣東話就用廣東話）。");
+            sb.AppendLine("- " + Mail.MailAi.ReplyRule);
             sb.AppendLine();
         }
         sb.AppendLine($"伺服器狀態：{GameServerPage.StateText(_s)}；" + (_s.Installed ? "已安裝" : "未安裝"));

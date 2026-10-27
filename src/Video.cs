@@ -693,6 +693,74 @@ internal sealed class RegionPicker : Form
 // ---------------------------------------------------------------------
 //  錄緊時右上角細窗（唔會錄入片）
 // ---------------------------------------------------------------------
+/// <summary>錄影範圍框：撳穿、置頂、唔會錄入片（框畫喺範圍外面）。</summary>
+internal sealed class RecordFrame : Form
+{
+    [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr h, uint affinity);
+    private Rectangle _rect;
+    private bool _inside, _rec;
+    private string _tag = "";
+    private int Thick => Math.Max(3, Ui.S(3));
+    private int TagH => Ui.S(22);
+    protected override bool ShowWithoutActivation => true;
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= 0x08000000 | 0x00000008 | 0x80 | 0x20 | 0x80000; // 唔攞焦點、置頂、唔喺 Alt+Tab、撳穿、layered
+            return cp;
+        }
+    }
+
+    public RecordFrame()
+    {
+        FormBorderStyle = FormBorderStyle.None;
+        ShowInTaskbar = false;
+        TopMost = true;
+        StartPosition = FormStartPosition.Manual;
+        BackColor = Color.Magenta;
+        TransparencyKey = Color.Magenta;
+    }
+
+    public void Set(Rectangle r, bool inside, string tag, bool recording)
+    {
+        if (r == _rect && inside == _inside && tag == _tag && recording == _rec) return;
+        _rect = r; _inside = inside; _tag = tag; _rec = recording;
+        int t = Thick;
+        // 範圍外面加一圈框 + 頂部標籤位；全螢幕就直接用螢幕範圍
+        var b = inside ? r : Rectangle.FromLTRB(r.Left - t, r.Top - t - TagH, r.Right + t, r.Bottom + t);
+        if (Bounds != b) Bounds = b;
+        Invalidate();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        try { SetWindowDisplayAffinity(Handle, 0x11 /*WDA_EXCLUDEFROMCAPTURE*/); } catch { }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        int t = Thick;
+        var color = _rec ? Ui.Danger : Ui.Accent;
+        using var b = new SolidBrush(color);
+        int top = _inside ? 0 : TagH;
+        g.FillRectangle(b, 0, top, Width, t);
+        g.FillRectangle(b, 0, Height - t, Width, t);
+        g.FillRectangle(b, 0, top, t, Height - top);
+        g.FillRectangle(b, Width - t, top, t, Height - top);
+        // 標籤
+        var f = Ui.F(8.75f, FontStyle.Bold);
+        int tw = TextRenderer.MeasureText(_tag, f).Width + Ui.S(14);
+        var tr = _inside ? new Rectangle(t, t, Math.Min(tw, Width - 2 * t), TagH) : new Rectangle(0, 0, Math.Min(tw, Width), TagH);
+        g.FillRectangle(b, tr);
+        TextRenderer.DrawText(g, _tag, f, tr, Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+    }
+}
+
 internal sealed class RecordBar : Form
 {
     [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr h, uint affinity);
@@ -759,6 +827,9 @@ public sealed class RecordPage : Panel
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 30 };
     private RecordSession? _session;
     private RecordBar? _bar;
+    private RecordFrame? _frame;                 // 喺螢幕顯示錄影範圍嘅框
+    private bool _picking;                       // 揀緊範圍：收埋個框
+    private readonly System.Windows.Forms.Timer _frameTimer = new() { Interval = 400 };
     private bool _busy, _hkWas;
     private string? _lastFile;
 
@@ -858,6 +929,10 @@ public sealed class RecordPage : Panel
         _lastFile = LatestFile();
         UpdateLabels();
         _timer.Tick += async (_, _) => await TickAsync();
+        // 錄影範圍框：喺「螢幕錄影」頁或者錄緊嘅時候一直顯示
+        _frameTimer.Tick += (_, _) => SyncFrame();
+        _frameTimer.Start();
+        Disposed += (_, _) => { _frameTimer.Stop(); _frame?.Close(); };
         _timer.Start();
         HandleDestroyed += async (_, _) => { _timer.Stop(); if (_session != null) await _session.StopAsync(); };
     }
@@ -1030,8 +1105,12 @@ public sealed class RecordPage : Panel
         var region = new ToolStripMenuItem(Lang.T("揀範圍…")) { Checked = RecSettings.Mode == CaptureMode.Region };
         region.Click += (_, _) => BeginInvoke(() =>
         {
+            _picking = true;
+            SyncFrame();
             using var p = new RegionPicker();
-            if (p.ShowDialog(FindForm()) != DialogResult.OK) return;
+            var res = p.ShowDialog(FindForm());
+            _picking = false;
+            if (res != DialogResult.OK) return;
             RecSettings.Mode = CaptureMode.Region;
             RecSettings.Region = p.Result;
             RecSettings.Save();
@@ -1098,6 +1177,31 @@ public sealed class RecordPage : Panel
                 _status.Text = Lang.T("錄影中斷：") + tail;
             }
         }
+    }
+
+    /// <summary>顯示 / 收埋 / 移動錄影範圍框。</summary>
+    private void SyncFrame()
+    {
+        var form = FindForm();
+        bool pageOn = Visible && form is { Visible: true } && form.WindowState != FormWindowState.Minimized;
+        Rectangle? rect = null;
+        if (!_picking && (pageOn || _session != null))
+            try { rect = RecordSession.TargetRect(RecSettings.Snapshot(), out _); } catch { }
+        if (rect is not { Width: > 0, Height: > 0 } r)
+        {
+            if (_frame != null) { _frame.Close(); _frame = null; }
+            return;
+        }
+        bool inside = RecSettings.Mode == CaptureMode.Screen; // 全螢幕：框畫喺螢幕邊入面
+        string tag = RecSettings.Mode switch
+        {
+            CaptureMode.Screen => Lang.T("錄影範圍：全螢幕"),
+            CaptureMode.Window => Lang.F("錄影範圍：{0}（{1}×{2}）", RecSettings.WinProcess, r.Width, r.Height),
+            _ => Lang.F("錄影範圍：{0}×{1}", r.Width, r.Height)
+        };
+        if (_session != null) tag = "● " + tag;
+        if (_frame == null || _frame.IsDisposed) { _frame = new RecordFrame(); _frame.Set(r, inside, tag, _session != null); _frame.Show(); }
+        else _frame.Set(r, inside, tag, _session != null);
     }
 
     private async Task ToggleAsync()

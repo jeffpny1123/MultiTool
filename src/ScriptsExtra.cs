@@ -235,6 +235,23 @@ internal static class ScriptVars
 }
 
 /// <summary>通知：Windows 通知 + Discord webhook（網址喺「設定 → 通知」）。</summary>
+/// <summary>「我的腳本」第一次用嘅免責聲明（同意咗記喺 data\scripts_ack.txt）。</summary>
+internal static class ScriptDisclaimer
+{
+    private static string File_ => Path.Combine(AppPaths.Data, "scripts_ack.txt");
+    public static bool Accepted => File.Exists(File_);
+
+    public static bool Ask(IWin32Window? owner)
+    {
+        var r = MessageBox.Show(owner,
+            Lang.T("使用「我的腳本」之前請注意：\n\n• 腳本會模擬滑鼠、鍵盤同讀取畫面。好多網上遊戲（特別係有反作弊嘅）會當自動化係外掛，用咗可能會被封號。\n• 建議只用喺單機遊戲、模擬器或者日常工作；用喺網上遊戲之前，請先睇清楚遊戲條款。\n• 腳本會真係控制你部電腦，開始前請確認步驟啱，唔好用嚟刪除或者傳送重要資料。\n• 因使用腳本而引致嘅封號、資料損失或者其他後果，由使用者自行承擔。\n\n撳「是」代表你明白並同意，之後唔會再問。"),
+            Lang.T("我的腳本：使用須知"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        if (r != DialogResult.Yes) return false;
+        try { Directory.CreateDirectory(AppPaths.Data); File.WriteAllText(File_, DateTime.Now.ToString("yyyy-MM-dd HH:mm")); } catch { }
+        return true;
+    }
+}
+
 internal static class Notifier
 {
     private static string File_ => Path.Combine(AppPaths.Data, "notify.txt");
@@ -699,7 +716,7 @@ internal sealed class DebugSession
         int n = Interlocked.Increment(ref _shot);
         if (n > 20000)
         {
-            if (n == 20001) Log("截圖超過 20000 張，之後唔再存");
+            if (n == 20001) Log(Lang.T("截圖超過 20000 張，之後唔再存"));
             return "";
         }
         string f = $"{n:00000}_{tag}.png";

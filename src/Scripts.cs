@@ -808,6 +808,14 @@ public static class ScriptRunner
             Status?.Invoke(s.Id, Lang.T("冇步驟，行唔到"));
             return;
         }
+        // 第一次用：先睇免責聲明（唔同意就唔行）
+        if (!ScriptDisclaimer.Accepted)
+        {
+            if (_dialogOpen) return;
+            _dialogOpen = true;
+            try { if (!ScriptDisclaimer.Ask(_ui.FindForm())) return; }
+            finally { _dialogOpen = false; }
+        }
         // 開始前先檢查有冇未設定好嘅步驟
         var problems = Validate(s);
         if (problems.Count > 0)
