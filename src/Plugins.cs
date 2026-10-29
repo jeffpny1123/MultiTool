@@ -268,7 +268,8 @@ internal sealed class PluginWeb
         st.AreBrowserAcceleratorKeysEnabled = dev;
         string hostName = m.Id + ".plugin.mt";
         w._origin = "https://" + hostName + "/";
-        wv.SetVirtualHostNameToFolderMapping(hostName, PluginStore.PathOf(m.Id), CoreWebView2HostResourceAccessKind.Deny);
+        // 唔用 SetVirtualHostNameToFolderMapping：佢嘅請求唔經 WebResourceRequested，加唔到主題顏色同 no-store。
+        // 全部檔案由下面 WebResourceRequested 自己讀出嚟俾佢。
         await wv.AddScriptToExecuteOnDocumentCreatedAsync(PluginBridgeJs.Script);
         // 只准喺自己個插件入面轉頁；外面連結用瀏覽器開
         wv.NavigationStarting += (_, e) =>
@@ -716,7 +717,7 @@ internal static class PluginTemplates
         "  }\n" +
         "}\n";
 
-    public const string Html = """
+    private const string HtmlHant = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -742,7 +743,61 @@ internal static class PluginTemplates
 </html>
 """;
 
-    public const string Js = """
+    private const string HtmlHans = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* 颜色使用 --mt-* 变数，会跟随 MultiTool 的日光／深色主题自动切换 */
+  body { background:var(--mt-bg); color:var(--mt-text); font-family:'Segoe UI','Microsoft JhengHei UI',sans-serif; margin:24px; }
+  .card { background:var(--mt-card); border:1px solid var(--mt-border); border-radius:12px; padding:20px; max-width:520px; }
+  button { background:var(--mt-accent); color:#fff; border:0; border-radius:8px; padding:8px 16px; font-size:14px; cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  input { background:var(--mt-input); color:var(--mt-text); border:1px solid var(--mt-border); border-radius:8px; padding:8px 10px; font-size:14px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>👋 Hello</h2>
+    <p>已按 <b id="count">0</b> 次</p>
+    <input id="msg" placeholder="通知内容" value="Hello from my plugin!">
+    <button id="btn">按我</button>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>
+""";
+
+    private const string HtmlEn = """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* Use the --mt-* colour variables so the plugin follows MultiTool's light / dark theme */
+  body { background:var(--mt-bg); color:var(--mt-text); font-family:'Segoe UI','Microsoft JhengHei UI',sans-serif; margin:24px; }
+  .card { background:var(--mt-card); border:1px solid var(--mt-border); border-radius:12px; padding:20px; max-width:520px; }
+  button { background:var(--mt-accent); color:#fff; border:0; border-radius:8px; padding:8px 16px; font-size:14px; cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  input { background:var(--mt-input); color:var(--mt-text); border:1px solid var(--mt-border); border-radius:8px; padding:8px 10px; font-size:14px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>👋 Hello</h2>
+    <p>Clicked <b id="count">0</b> times</p>
+    <input id="msg" placeholder="Notification text" value="Hello from my plugin!">
+    <button id="btn">Click me</button>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>
+""";
+
+    public static string Html => Lang.Base switch { Language.En => HtmlEn, Language.ZhHans => HtmlHans, _ => HtmlHant };
+
+    private const string JsHant = """
 // 在此編寫工具的邏輯。可使用 mt.* API（詳見上方「API 說明」）
 const countEl = document.getElementById('count');
 
@@ -762,8 +817,49 @@ document.getElementById('btn').onclick = async () => {
 init();
 """;
 
-    /// <summary>API 說明（介面「API 說明」同 AI 都用）。</summary>
-    public const string ApiDoc = """
+    private const string JsHans = """
+// 在此编写工具的逻辑。可使用 mt.* API（详见上方「API 说明」）
+const countEl = document.getElementById('count');
+
+async function init() {
+  const n = (await mt.storage.get('count')) || 0;   // 读取上次储存的次数
+  countEl.textContent = n;
+}
+
+document.getElementById('btn').onclick = async () => {
+  const n = ((await mt.storage.get('count')) || 0) + 1;
+  await mt.storage.set('count', n);
+  countEl.textContent = n;
+  await mt.notify('Hello', document.getElementById('msg').value);
+  console.log('已按', n, '次');
+};
+
+init();
+""";
+
+    private const string JsEn = """
+// Write your tool's logic here. You can use the mt.* API (see "API reference" above).
+const countEl = document.getElementById('count');
+
+async function init() {
+  const n = (await mt.storage.get('count')) || 0;   // read the count saved last time
+  countEl.textContent = n;
+}
+
+document.getElementById('btn').onclick = async () => {
+  const n = ((await mt.storage.get('count')) || 0) + 1;
+  await mt.storage.set('count', n);
+  countEl.textContent = n;
+  await mt.notify('Hello', document.getElementById('msg').value);
+  console.log('Clicked', n, 'times');
+};
+
+init();
+""";
+
+    public static string Js => Lang.Base switch { Language.En => JsEn, Language.ZhHans => JsHans, _ => JsHant };
+
+    private const string ApiDocHant = """
 MultiTool 插件 API（v1）
 
 每個插件是一個資料夾：
@@ -811,6 +907,107 @@ manifest.json：
   • 加到左側工具欄的插件會在開啟 MultiTool 時自動運行，可用 setInterval 定時執行。
   • 介面文字請使用書面語。
 """;
+
+    private const string ApiDocHans = """
+MultiTool 插件 API（v1）
+
+每个插件是一个资料夹：
+  manifest.json   名称、版本、图示、入口、权限
+  ui.html         介面（一般 HTML / CSS / JavaScript）
+  main.js 等      其他档案，在 ui.html 以 <script src="main.js"> 载入
+
+manifest.json：
+{
+  "name": "工具名称", "version": "1.0.0", "author": "", "description": "", "icon": "🧩",
+  "entry": "ui.html",
+  "permissions": {
+    "net": ["api.example.com", "*.example.org"],   // 允许连接的网站；"*" = 任何网站（会显示警告）
+    "notify": true,               // mt.notify
+    "clipboard": true,            // mt.clipboard
+    "secrets": true,              // mt.secrets（加密储存 API key）
+    "ai": true,                   // mt.ai.ask
+    "scripts": true               // mt.scripts（开始「我的脚本」）
+  }
+}
+
+所有 API 都是非同步（回传 Promise），须使用 await：
+  mt.info()                          → { id, name, version, lang, app, theme }
+  mt.log(...)                        → 写入编写器的记录（console.log 亦可）
+  mt.storage.get(key) / set(key, value) / remove(key) / all()   插件专用的储存（JSON 值）
+  mt.secrets.get(key) / set(key, text)                           加密储存（需要 "secrets"）
+  mt.net.fetch(url, { method, headers, body, binary })           → { status, ok, headers, text, base64 }（网站需在 "net" 内，没有 CORS 限制）
+  mt.net.json(url, options)                                       → 直接回传已解析的 JSON
+  mt.notify(title, body)                                          Windows 通知（需要 "notify"）
+  mt.clipboard.read() / write(text)                               （需要 "clipboard"）
+  mt.file.read(name) / write(name, text) / delete(name) / list()  插件专用的档案资料夹
+  mt.file.pick({ filter: "文字档|*.txt", binary })                 让使用者选择档案 → { name, size, text, base64 }
+  mt.file.save(name, content, isBase64)                           让使用者选择储存位置
+  mt.open(url)                                                    以浏览器开启网址
+  mt.ai.ask(prompt)                                               → AI 回复文字（需要 "ai"）
+  mt.scripts.list() / run(name)                                   （需要 "scripts"）
+
+注意：
+  • 页面直接 fetch 或 <img> 只能连接 manifest "net" 允许的网站，其他会被封锁；呼叫 API 建议使用 mt.net.fetch。
+  • 主题：介面会跟随 MultiTool 的日光／深色主题。颜色请使用以下 CSS 变数，不要写死颜色：
+      var(--mt-bg) 背景、var(--mt-card) 卡片、var(--mt-card-hi) 卡片（滑鼠经过）、var(--mt-input) 输入框、
+      var(--mt-border) 边框、var(--mt-text) 文字、var(--mt-text-dim) 次要文字、var(--mt-text-faint) 提示文字、
+      var(--mt-accent) 强调色、var(--mt-accent2)、var(--mt-success) 成功、var(--mt-danger) 错误
+    <html> 有 data-theme="light" 或 "dark"；mt.info().theme 亦可取得目前主题。
+  • 加到左侧工具栏的插件会在开启 MultiTool 时自动运行，可用 setInterval 定时执行。
+  • 介面文字请使用书面语。
+""";
+
+    private const string ApiDocEn = """
+MultiTool plugin API (v1)
+
+A plugin is a folder:
+  manifest.json   name, version, icon, entry page, permissions
+  ui.html         the interface (plain HTML / CSS / JavaScript)
+  main.js etc.    other files, loaded from ui.html with <script src="main.js">
+
+manifest.json:
+{
+  "name": "Tool name", "version": "1.0.0", "author": "", "description": "", "icon": "🧩",
+  "entry": "ui.html",
+  "permissions": {
+    "net": ["api.example.com", "*.example.org"],   // websites it may connect to; "*" = any website (shows a warning)
+    "notify": true,               // mt.notify
+    "clipboard": true,            // mt.clipboard
+    "secrets": true,              // mt.secrets (encrypted storage for API keys)
+    "ai": true,                   // mt.ai.ask
+    "scripts": true               // mt.scripts (start "My Scripts")
+  }
+}
+
+Every API is asynchronous (returns a Promise) — use await:
+  mt.info()                          → { id, name, version, lang, app, theme }
+  mt.log(...)                        → writes to the editor's log (console.log works too)
+  mt.storage.get(key) / set(key, value) / remove(key) / all()   the plugin's own storage (JSON values)
+  mt.secrets.get(key) / set(key, text)                           encrypted storage (needs "secrets")
+  mt.net.fetch(url, { method, headers, body, binary })           → { status, ok, headers, text, base64 } (site must be in "net"; no CORS limits)
+  mt.net.json(url, options)                                       → the parsed JSON
+  mt.notify(title, body)                                          Windows notification (needs "notify")
+  mt.clipboard.read() / write(text)                               (needs "clipboard")
+  mt.file.read(name) / write(name, text) / delete(name) / list()  the plugin's own file folder
+  mt.file.pick({ filter: "Text files|*.txt", binary })            let the user pick a file → { name, size, text, base64 }
+  mt.file.save(name, content, isBase64)                           let the user choose where to save
+  mt.open(url)                                                    open a URL in the browser
+  mt.ai.ask(prompt)                                               → the AI's reply text (needs "ai")
+  mt.scripts.list() / run(name)                                   (needs "scripts")
+
+Notes:
+  • fetch / <img> in the page can only reach sites allowed in the manifest's "net"; others are blocked. Use mt.net.fetch for API calls.
+  • Theme: the interface follows MultiTool's light / dark theme. Use these CSS variables instead of fixed colours:
+      var(--mt-bg) background, var(--mt-card) card, var(--mt-card-hi) card (hover), var(--mt-input) input box,
+      var(--mt-border) border, var(--mt-text) text, var(--mt-text-dim) secondary text, var(--mt-text-faint) hint text,
+      var(--mt-accent) accent, var(--mt-accent2), var(--mt-success) success, var(--mt-danger) error
+    <html> has data-theme="light" or "dark"; mt.info().theme also returns the current theme.
+  • Plugins added to the sidebar run automatically when MultiTool opens; use setInterval for timed jobs.
+  • Write interface text in the user's interface language.
+""";
+
+    public static string ApiDoc => Lang.Base switch { Language.En => ApiDocEn, Language.ZhHans => ApiDocHans, _ => ApiDocHant };
+
 }
 
 /// <summary>開咗嘅插件（背景插件開程式就開始）。</summary>

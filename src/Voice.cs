@@ -27,9 +27,9 @@ internal static class VoiceSettings
     public static string Model = "turbo"; // Whisper 模型：base / small / turbo
     public static SpeechLang Speech = Lang.Current switch
     {
+        Language.ZhHant => SpeechLang.Cantonese,
         Language.ZhHans => SpeechLang.Mandarin,
-        Language.En => SpeechLang.Auto,
-        _ => SpeechLang.Cantonese
+        _ => SpeechLang.Auto
     };
 
     static VoiceSettings() => Load();

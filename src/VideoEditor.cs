@@ -45,6 +45,11 @@ internal sealed class EdClip
     public double TransDur = 0.5;
     public double FadeIn, FadeOut;      // 開頭 / 結尾淡入淡出（秒，0 = 冇）
     public string FadeColor = "#000000"; // 淡入淡出嘅顏色（黑、白或者自己揀）
+    // 喺畫面嘅位置同大細（可以喺預覽度拖）：X / Y = 中心（畫面比例 0–1），Zoom = 相對「完整顯示 / 填滿」嘅倍數
+    public double X = 0.5, Y = 0.5, Zoom = 1;
+    public int SrcW, SrcH;              // 原片闊高（預覽計框用；0 = 未知）
+
+    public bool Moved => Math.Abs(X - 0.5) > 0.0005 || Math.Abs(Y - 0.5) > 0.0005 || Math.Abs(Zoom - 1) > 0.0005;
 
     public double Len => Math.Max(0.05, (Out - In) / (IsImage ? 1 : Speed));
     public string Name => System.IO.Path.GetFileName(Path);
@@ -442,7 +447,17 @@ internal static class EdGraph
                 else if (c.Rotate == 180) f.Add("transpose=1,transpose=1");
                 else if (c.Rotate == 270) f.Add("transpose=2");
                 if (c.Flip) f.Add("hflip");
-                if (c.Fill) f.Add($"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}");
+                if (c.Moved)
+                {
+                    // 搬咗位 / 改咗大細：先縮放，四邊加一個畫面咁闊嘅黑邊，再由中心位置裁返 W×H（超出畫面嘅部分會被裁走）
+                    double z = Math.Clamp(c.Zoom, 0.05, 5);
+                    int zw = Math.Max(2, (int)Math.Round(W * z / 2) * 2), zh = Math.Max(2, (int)Math.Round(H * z / 2) * 2);
+                    string mode = c.Fill ? "increase" : "decrease";
+                    f.Add($"scale={zw}:{zh}:force_original_aspect_ratio={mode}:force_divisible_by=2");
+                    f.Add($"pad=iw+{2 * W}:ih+{2 * H}:{W}:{H}:color=black");
+                    f.Add($"crop={W}:{H}:iw/2-{F(W * Math.Clamp(c.X, 0, 1))}:ih/2-{F(H * Math.Clamp(c.Y, 0, 1))}");
+                }
+                else if (c.Fill) f.Add($"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}");
                 else f.Add($"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black");
                 double sat = c.Gray ? 0 : c.Sat;
                 if (Math.Abs(c.Bright) > 0.001 || Math.Abs(c.Contrast - 1) > 0.001 || Math.Abs(sat - 1) > 0.001)

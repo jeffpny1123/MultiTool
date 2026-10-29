@@ -691,17 +691,15 @@ internal sealed class RegionPicker : Form
 }
 
 // ---------------------------------------------------------------------
-//  錄緊時右上角細窗（唔會錄入片）
+//  錄影範圍框 + 錄緊時右上角細窗（都唔會錄入片）
 // ---------------------------------------------------------------------
-/// <summary>錄影範圍框：撳穿、置頂、唔會錄入片（框畫喺範圍外面）。</summary>
-internal sealed class RecordFrame : Form
+/// <summary>全螢幕錄影用嘅框：畫喺螢幕邊入面，滑鼠完全撳穿（唔阻住其他程式）。</summary>
+internal sealed class RecordRing : Form
 {
     [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr h, uint affinity);
     private Rectangle _rect;
-    private bool _inside, _rec;
-    private string _tag = "";
+    private bool _rec;
     private int Thick => Math.Max(3, Ui.S(3));
-    private int TagH => Ui.S(22);
     protected override bool ShowWithoutActivation => true;
 
     protected override CreateParams CreateParams
@@ -714,7 +712,7 @@ internal sealed class RecordFrame : Form
         }
     }
 
-    public RecordFrame()
+    public RecordRing()
     {
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
@@ -724,14 +722,107 @@ internal sealed class RecordFrame : Form
         TransparencyKey = Color.Magenta;
     }
 
+    public void Set(Rectangle r, bool recording)
+    {
+        if (r == _rect && recording == _rec) return;
+        _rect = r; _rec = recording;
+        if (Bounds != r) Bounds = r;
+        Invalidate();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        try { SetWindowDisplayAffinity(Handle, 0x11 /*WDA_EXCLUDEFROMCAPTURE*/); } catch { }
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        int t = Thick;
+        using var b = new SolidBrush(_rec ? Ui.Danger : Ui.Accent);
+        var g = e.Graphics;
+        g.FillRectangle(b, 0, 0, Width, t);
+        g.FillRectangle(b, 0, Height - t, Width, t);
+        g.FillRectangle(b, 0, 0, t, Height);
+        g.FillRectangle(b, Width - t, 0, t, Height);
+    }
+}
+
+/// <summary>
+/// 錄影範圍框（錄影時唔會錄到）：頂部標籤撳一下 = 揀錄影範圍；拖標籤右邊嘅空位 = 搬位；拖四邊 / 四角 = 改大細。
+/// 全螢幕模式只有標籤（框由 RecordRing 畫）。錄緊嘅時候唔可以搬 / 改。
+/// </summary>
+internal sealed class RecordFrame : Form
+{
+    [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr h, uint affinity);
+    private Rectangle _rect;
+    private bool _inside, _rec;
+    private string _tag = "";
+    private int Line => Math.Max(3, Ui.S(3));     // 顏色線
+    private int Grip => Math.Max(7, Ui.S(7));     // 可以拖嘅邊（顏色線 + 外面深色邊）
+    private int TagH => Ui.S(24);
+    private int TagW => TextRenderer.MeasureText(_tag, TagFont).Width + Ui.S(16);
+    private static Font TagFont => Ui.F(8.75f, FontStyle.Bold);
+    protected override bool ShowWithoutActivation => true;
+
+    /// <summary>撳咗標籤：喺呢個螢幕位置彈出揀範圍選單。</summary>
+    public event Action<Point>? MenuRequested;
+    /// <summary>拖緊（搬位 / 改大細）：新嘅錄影範圍。</summary>
+    public event Action<Rectangle>? Dragging;
+    /// <summary>拖完。</summary>
+    public event Action<Rectangle>? DragDone;
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var cp = base.CreateParams;
+            cp.ExStyle |= 0x08000000 | 0x00000008 | 0x80; // 唔攞焦點、置頂、唔喺 Alt+Tab
+            return cp;
+        }
+    }
+
+    public RecordFrame()
+    {
+        FormBorderStyle = FormBorderStyle.None;
+        ShowInTaskbar = false;
+        TopMost = true;
+        StartPosition = FormStartPosition.Manual;
+        BackColor = Ui.Accent;
+        DoubleBuffered = true;
+    }
+
+    public bool Busy => _mode != Zone.None;
+
     public void Set(Rectangle r, bool inside, string tag, bool recording)
     {
+        if (Busy) return; // 拖緊：唔好俾外面嘅更新蓋過
         if (r == _rect && inside == _inside && tag == _tag && recording == _rec) return;
         _rect = r; _inside = inside; _tag = tag; _rec = recording;
-        int t = Thick;
-        // 範圍外面加一圈框 + 頂部標籤位；全螢幕就直接用螢幕範圍
-        var b = inside ? r : Rectangle.FromLTRB(r.Left - t, r.Top - t - TagH, r.Right + t, r.Bottom + t);
+        Relayout();
+    }
+
+    private void Relayout()
+    {
+        int g = Grip;
+        Rectangle b;
+        Region rg;
+        if (_inside)
+        {
+            // 全螢幕：只係左上角個標籤
+            b = new Rectangle(_rect.X + Line, _rect.Y + Line, Math.Min(TagW, _rect.Width - 2 * Line), TagH);
+            rg = new Region(new Rectangle(0, 0, b.Width, b.Height));
+        }
+        else
+        {
+            b = Rectangle.FromLTRB(_rect.Left - g, _rect.Top - g - TagH, _rect.Right + g, _rect.Bottom + g);
+            rg = new Region(new Rectangle(0, 0, b.Width, b.Height));
+            rg.Exclude(new Rectangle(g, g + TagH, _rect.Width, _rect.Height)); // 中間挖空：滑鼠可以撳落下面嘅程式
+        }
         if (Bounds != b) Bounds = b;
+        var old = Region;
+        Region = rg;
+        old?.Dispose();
         Invalidate();
     }
 
@@ -744,20 +835,133 @@ internal sealed class RecordFrame : Form
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        int t = Thick;
         var color = _rec ? Ui.Danger : Ui.Accent;
-        using var b = new SolidBrush(color);
-        int top = _inside ? 0 : TagH;
-        g.FillRectangle(b, 0, top, Width, t);
-        g.FillRectangle(b, 0, Height - t, Width, t);
-        g.FillRectangle(b, 0, top, t, Height - top);
-        g.FillRectangle(b, Width - t, top, t, Height - top);
-        // 標籤
-        var f = Ui.F(8.75f, FontStyle.Bold);
-        int tw = TextRenderer.MeasureText(_tag, f).Width + Ui.S(14);
-        var tr = _inside ? new Rectangle(t, t, Math.Min(tw, Width - 2 * t), TagH) : new Rectangle(0, 0, Math.Min(tw, Width), TagH);
-        g.FillRectangle(b, tr);
-        TextRenderer.DrawText(g, _tag, f, tr, Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        var dark = Color.FromArgb(230, ControlPaint.Dark(color, 0.35f));
+        using var cb = new SolidBrush(color);
+        using var db = new SolidBrush(dark);
+        if (_inside)
+        {
+            g.FillRectangle(cb, ClientRectangle);
+            TextRenderer.DrawText(g, _tag + "  ▾", TagFont, ClientRectangle, Color.White,
+                TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            return;
+        }
+        int gp = Grip, ln = Line;
+        // 外面一圈深色（方便拖），裏面一圈顏色線
+        g.FillRectangle(db, ClientRectangle);
+        var inner = new Rectangle(gp, gp + TagH, _rect.Width, _rect.Height);
+        var line = Rectangle.Inflate(inner, ln, ln);
+        g.FillRectangle(cb, line.X, line.Y, line.Width, ln);
+        g.FillRectangle(cb, line.X, line.Bottom - ln, line.Width, ln);
+        g.FillRectangle(cb, line.X, line.Y, ln, line.Height);
+        g.FillRectangle(cb, line.Right - ln, line.Y, ln, line.Height);
+        // 頂部：標籤 + 拖動位
+        var tr = TagRect();
+        g.FillRectangle(cb, tr);
+        TextRenderer.DrawText(g, _tag + "  ▾", TagFont, tr, Color.White,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        if (!_rec && Width - tr.Right > Ui.S(60))
+        {
+            var hint = new Rectangle(tr.Right, 0, Width - tr.Right - Ui.S(6), TagH);
+            TextRenderer.DrawText(g, "⠿ " + Lang.T("拖動"), Ui.F(8.25f), hint, Color.FromArgb(200, 255, 255, 255),
+                TextFormatFlags.VerticalCenter | TextFormatFlags.Right | TextFormatFlags.NoPrefix);
+        }
+    }
+
+    private Rectangle TagRect() => _inside ? ClientRectangle : new Rectangle(0, 0, Math.Min(TagW, Width), TagH);
+
+    // ---------- 滑鼠 ----------
+    [Flags] private enum Zone { None = 0, L = 1, R = 2, T = 4, B = 8, Move = 16, Tag = 32 }
+    private Zone _mode;
+    private Point _down;
+    private Rectangle _orig;
+    private bool _moved;
+
+    private Zone HitZone(Point p)
+    {
+        if (TagRect().Contains(p)) return Zone.Tag;
+        if (_inside || _rec) return Zone.None;
+        if (p.Y < TagH) return Zone.Move;
+        int gp = Grip + Ui.S(4); // 角位闊啲易撳
+        var z = Zone.None;
+        if (p.X < gp) z |= Zone.L;
+        if (p.X >= Width - gp) z |= Zone.R;
+        if (p.Y < TagH + gp) z |= Zone.T;
+        if (p.Y >= Height - gp) z |= Zone.B;
+        return z;
+    }
+
+    private static Cursor CursorFor(Zone z) => z switch
+    {
+        Zone.Tag => Cursors.Hand,
+        Zone.Move => Cursors.SizeAll,
+        Zone.L or Zone.R => Cursors.SizeWE,
+        Zone.T or Zone.B => Cursors.SizeNS,
+        Zone.L | Zone.T or Zone.R | Zone.B => Cursors.SizeNWSE,
+        Zone.R | Zone.T or Zone.L | Zone.B => Cursors.SizeNESW,
+        _ => Cursors.Default
+    };
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (e.Button != MouseButtons.Left) return;
+        _mode = HitZone(e.Location);
+        if (_mode == Zone.None) return;
+        _down = Cursor.Position;
+        _orig = _rect;
+        _moved = false;
+        Capture = true;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (_mode == Zone.None) { Cursor = CursorFor(HitZone(e.Location)); return; }
+        var p = Cursor.Position;
+        int dx = p.X - _down.X, dy = p.Y - _down.Y;
+        if (!_moved && Math.Abs(dx) < Ui.S(3) && Math.Abs(dy) < Ui.S(3)) return;
+        var z = _mode;
+        if (z == Zone.Tag) { if (_inside || _rec) return; z = _mode = Zone.Move; } // 由標籤拖都可以搬位
+        _moved = true;
+        var vs = SystemInformation.VirtualScreen;
+        int min = 32;
+        Rectangle r;
+        if (z == Zone.Move)
+        {
+            int x = Math.Clamp(_orig.X + dx, vs.Left - _orig.Width + min, vs.Right - min);
+            int y = Math.Clamp(_orig.Y + dy, vs.Top, vs.Bottom - min);
+            r = new Rectangle(x, y, _orig.Width, _orig.Height);
+        }
+        else
+        {
+            int l = _orig.Left, t = _orig.Top, rr = _orig.Right, bb = _orig.Bottom;
+            if (z.HasFlag(Zone.L)) l = Math.Clamp(l + dx, vs.Left, rr - min);
+            if (z.HasFlag(Zone.R)) rr = Math.Clamp(rr + dx, l + min, vs.Right);
+            if (z.HasFlag(Zone.T)) t = Math.Clamp(t + dy, vs.Top, bb - min);
+            if (z.HasFlag(Zone.B)) bb = Math.Clamp(bb + dy, t + min, vs.Bottom);
+            r = Rectangle.FromLTRB(l, t, rr, bb);
+        }
+        if (r == _rect) return;
+        _rect = r;
+        Relayout();
+        Update();
+        Dragging?.Invoke(r);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        var m = _mode;
+        _mode = Zone.None;
+        Capture = false;
+        if (m == Zone.None) return;
+        if (!_moved)
+        {
+            if (m == Zone.Tag) MenuRequested?.Invoke(PointToScreen(new Point(0, TagRect().Bottom)));
+            return;
+        }
+        DragDone?.Invoke(_rect);
     }
 }
 
@@ -827,7 +1031,8 @@ public sealed class RecordPage : Panel
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 30 };
     private RecordSession? _session;
     private RecordBar? _bar;
-    private RecordFrame? _frame;                 // 喺螢幕顯示錄影範圍嘅框
+    private RecordFrame? _frame;                 // 喺螢幕顯示錄影範圍嘅框（可以拖）
+    private RecordRing? _ring;                   // 全螢幕：畫喺螢幕邊嘅框
     private bool _picking;                       // 揀緊範圍：收埋個框
     private readonly System.Windows.Forms.Timer _frameTimer = new() { Interval = 400 };
     private bool _busy, _hkWas;
@@ -855,7 +1060,7 @@ public sealed class RecordPage : Panel
             return r;
         }
 
-        _area = Btn("", ShowAreaMenu, 260);
+        _area = Btn("", () => ShowAreaMenu(null), 260);
         _fps = Btn("", ShowFpsMenu, 100);
         _res = Btn("", ShowResMenu, 130);
         _codec = Btn("", ShowCodecMenu, 170);
@@ -932,7 +1137,7 @@ public sealed class RecordPage : Panel
         // 錄影範圍框：喺「螢幕錄影」頁或者錄緊嘅時候一直顯示
         _frameTimer.Tick += (_, _) => SyncFrame();
         _frameTimer.Start();
-        Disposed += (_, _) => { _frameTimer.Stop(); _frame?.Close(); };
+        Disposed += (_, _) => { _frameTimer.Stop(); _frame?.Close(); _ring?.Close(); };
         _timer.Start();
         HandleDestroyed += async (_, _) => { _timer.Stop(); if (_session != null) await _session.StopAsync(); };
     }
@@ -1085,7 +1290,8 @@ public sealed class RecordPage : Panel
         menu.Show(_res, new Point(0, _res.Height));
     }
 
-    private void ShowAreaMenu()
+    /// <summary>揀錄影範圍選單：at = 螢幕位置（由錄影框個標籤撳出嚟）；null = 喺「錄影範圍」掣下面。</summary>
+    private void ShowAreaMenu(Point? at)
     {
         if (_session != null) return;
         var menu = new ContextMenuStrip();
@@ -1139,7 +1345,8 @@ public sealed class RecordPage : Panel
         if (win.DropDownItems.Count == 0) win.Enabled = false;
         menu.Items.Add(win);
         menu.Closed += (_, _) => BeginInvoke(() => menu.Dispose());
-        menu.Show(_area, new Point(0, _area.Height + Ui.S(2)));
+        if (at is { } pt) menu.Show(pt);
+        else menu.Show(_area, new Point(0, _area.Height + Ui.S(2)));
     }
 
     private void ChangeFolder()
@@ -1179,19 +1386,23 @@ public sealed class RecordPage : Panel
         }
     }
 
-    /// <summary>顯示 / 收埋 / 移動錄影範圍框。</summary>
+    /// <summary>
+    /// 顯示 / 收埋 / 移動錄影範圍框：喺「螢幕錄影」頁一直顯示；錄緊嘅時候去咗其他工具都照顯示，錄完先收埋。
+    /// 個框唔會錄入片（WDA_EXCLUDEFROMCAPTURE）。
+    /// </summary>
     private void SyncFrame()
     {
-        var form = FindForm();
-        bool pageOn = Visible && form is { Visible: true } && form.WindowState != FormWindowState.Minimized;
+        if (_frame is { Busy: true }) return; // 拖緊個框
         Rectangle? rect = null;
-        if (!_picking && (pageOn || _session != null))
+        if (!_picking && (Visible || _session != null))
             try { rect = RecordSession.TargetRect(RecSettings.Snapshot(), out _); } catch { }
         if (rect is not { Width: > 0, Height: > 0 } r)
         {
             if (_frame != null) { _frame.Close(); _frame = null; }
+            if (_ring != null) { _ring.Close(); _ring = null; }
             return;
         }
+        bool rec = _session != null;
         bool inside = RecSettings.Mode == CaptureMode.Screen; // 全螢幕：框畫喺螢幕邊入面
         string tag = RecSettings.Mode switch
         {
@@ -1199,9 +1410,41 @@ public sealed class RecordPage : Panel
             CaptureMode.Window => Lang.F("錄影範圍：{0}（{1}×{2}）", RecSettings.WinProcess, r.Width, r.Height),
             _ => Lang.F("錄影範圍：{0}×{1}", r.Width, r.Height)
         };
-        if (_session != null) tag = "● " + tag;
-        if (_frame == null || _frame.IsDisposed) { _frame = new RecordFrame(); _frame.Set(r, inside, tag, _session != null); _frame.Show(); }
-        else _frame.Set(r, inside, tag, _session != null);
+        if (rec) tag = "● " + tag;
+        if (inside)
+        {
+            if (_ring == null || _ring.IsDisposed)
+            {
+                // 新開嘅視窗會喺最上面：重開埋個框，等標籤喺 RecordRing 上面撳得到
+                if (_frame != null) { _frame.Close(); _frame = null; }
+                _ring = new RecordRing(); _ring.Set(r, rec); _ring.Show();
+            }
+            else _ring.Set(r, rec);
+        }
+        else if (_ring != null) { _ring.Close(); _ring = null; }
+        if (_frame == null || _frame.IsDisposed)
+        {
+            _frame = new RecordFrame();
+            _frame.MenuRequested += pt => ShowAreaMenu(pt);
+            _frame.Dragging += nr =>
+            {
+                // 拖緊：即刻變做「範圍」模式（未儲存）
+                RecSettings.Mode = CaptureMode.Region;
+                RecSettings.Region = nr;
+                UpdateLabels();
+            };
+            _frame.DragDone += nr =>
+            {
+                RecSettings.Mode = CaptureMode.Region;
+                RecSettings.Region = nr;
+                RecSettings.Save();
+                UpdateLabels();
+                SyncFrame();
+            };
+            _frame.Set(r, inside, tag, rec);
+            _frame.Show();
+        }
+        else _frame.Set(r, inside, tag, rec);
     }
 
     private async Task ToggleAsync()

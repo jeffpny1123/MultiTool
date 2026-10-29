@@ -2068,5 +2068,7 @@ public static partial class Lang
         ["工作坊"] = new[] { "工作坊", "工作坊", "Workshop" },
         ["✓ 已加到工具欄"] = new[] { "✓ 已加到工具欄", "✓ 已加到工具栏", "✓ In sidebar" },
         ["📌 加到工具欄"] = new[] { "📌 加到工具欄", "📌 加到工具栏", "📌 Add to sidebar" },
+        ["重設位置及大細"] = new[] { "重設位置及大小", "重设位置及大小", "Reset position and size" },
+        ["拖動"] = new[] { "拖動", "拖动", "Drag" },
     };
 }

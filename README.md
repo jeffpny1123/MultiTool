@@ -7,7 +7,7 @@ A lightweight Windows automation tool (.NET 9 WinForms, single-file `.exe`). Bui
 一款輕量的 Windows 自動化工具（.NET 9 WinForms，單一 `.exe` 檔案）。可自行編寫巨集腳本，支援鍵盤與滑鼠操作、螢幕圖像比對、循環、條件判斷及背景執行；亦可透過文字或語音連接你自己的 AI（Claude／ChatGPT／Gemini，或免費的本地 AI），進行問答、開啟程式及網頁，或協助編寫腳本。
 
 Developed by / 開發者：**白兔糖v3v**
-Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, English / 繁體中文、簡體中文、英文 — switch at the bottom-left; the system language is used on first launch / 可於左下角切換，首次開啟時跟隨系統語言
+Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, English, Japanese, Korean, Russian, Spanish, Portuguese (Brazil), German, French / 繁體中文、簡體中文、英文、日文、韓文、俄文、西班牙文、葡萄牙文（巴西）、德文、法文 — switch at the bottom-left; the system language is used on first launch / 可於左下角切換，首次開啟時跟隨系統語言
 
 ---
 
@@ -129,8 +129,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   可於任何地方以快捷鍵開始／停止。錄影期間右上角會顯示計時器，計時器不會被錄入影片。
 - **Recent recording** shows the latest video with **Play** and **Delete** (moves it to the Recycle Bin).
   **最近錄影**顯示最新的影片，可**播放**或**刪除**（移至資源回收筒）。
-- While the Screen Recorder page is open or a recording is running, a frame on screen shows the recording area (blue, red while recording). It is not captured in the video and clicks pass through it.
-  停留在螢幕錄影頁或錄影期間，畫面上會以框顯示錄影範圍（藍色，錄影時變紅色）；框不會被錄入影片，滑鼠亦可直接點穿。
+- While the Screen Recorder page is open or a recording is running (even after switching to another tool), a frame on screen shows the recording area (blue, red while recording); it is not captured in the video. Drag its edges or corners to resize, drag the top bar to move, and click the label at the top-left to choose another recording area.
+  停留在螢幕錄影頁或錄影期間（即使切換到其他工具），畫面上會以框顯示錄影範圍（藍色，錄影時變紅色），框不會被錄入影片；可拖曳四邊或四角調整大小、拖曳頂部移動位置，按左上角標籤可選擇其他錄影範圍。
 
 **Video Editor 影片剪輯** — Clipchamp-style editing, install it from the Tool library / 類似 Clipchamp 的影片剪輯，於工具庫安裝
 
@@ -142,6 +142,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **文字**標題／字幕（位置、大小、顏色、黑色底、淡入淡出）、**背景音樂**（音量、淡入／淡出）、片段之間的**轉場**（淡入淡出、溶解、滑動、擦除、圓形、馬賽克等）、**速度** 0.25x – 4x、旋轉／翻轉、完整顯示或填滿、亮度／對比／飽和度／黑白。
 - **Image overlays** (stickers / logos): drop a photo onto the preview or onto Video 2+, drag text and images to position them, drag a corner or scroll to resize; opacity and fade.
   **疊圖**（貼圖／logo）：把相片拖入預覽畫面或影片 2 軌以上，可直接拖曳文字及圖片調整位置、拖曳四角或滾輪調整大小；可調不透明度及淡入淡出。
+- **Main video position and size**: click the main video in the preview, then drag it to move it or drag a corner / scroll to resize; X, Y and size can also be set on the right.
+  **主影片位置及大小**：在預覽畫面點選主影片，可拖曳移動，或拖曳四角／滾輪調整大小；亦可在右邊設定橫向、直向位置及大小。
 - **Multiple tracks of every kind** — click “+” next to a track name to add text, video or audio tracks (drag a track name to reorder); items on different tracks can overlap (e.g. background music + sound effects), drag up / down to change track. **Video 2 and above = overlays (picture-in-picture / images)**. Clips snap to each other's edges, Shift + click selects several clips, and **Merge** joins adjacent clips. **Detach audio** from a video clip onto an audio track. The time display also shows the current / total frame.
   **每種軌都可以加多條**——按軌名旁的「+」新增文字、影片或音軌（拖曳軌名可調整次序），不同軌可以重疊（例如背景音樂＋音效），上下拖曳可換軌；**影片 2 軌以上＝疊加（子母畫面／圖片）**。拖曳時會吸附其他片段頭尾；Shift + 左鍵可多選，**合併**可把相連片段合成一段。可把影片的聲音**分離音軌**到音訊軌。時間旁亦顯示目前幀數／總幀數。
 - **Open with**: right-click a video or photo in File Explorer → Open with → Video Editor (MultiTool) opens it in a new project (registered for the current user only, removed when the tool is uninstalled).
@@ -281,6 +283,18 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v2.5.1
+- **New: Interface languages** — Japanese, Korean, Russian, Spanish, Portuguese (Brazil), German and French (bottom-left menu).
+  **新增：介面語言**——日文、韓文、俄文、西班牙文、葡萄牙文（巴西）、德文及法文（左下角選單）。
+- **New: Video Editor** — the main video can be moved and resized in the preview, or with X / Y / size on the right.
+  **新增：影片剪輯**——主影片可在預覽畫面拖曳移動及調整大小，亦可在右邊設定位置及大小。
+- **New: Screen Recorder** — the recording area frame can be resized and moved, its label opens the area menu, and it stays on screen during a recording even on other tools.
+  **新增：螢幕錄影**——錄影範圍框可調整大小及移動，按標籤可選擇錄影範圍；錄影期間切換到其他工具時框仍會顯示。
+- **Fixed: Video Downloader** — Bilibili videos could not be downloaded after Bilibili changed its video page addresses.
+  **修正：影片下載**——Bilibili 更改影片網址後無法下載的問題。
+- **Changed: Workshop** — new plugin templates and the API reference follow the interface language; plugin previews always load the latest files and follow the theme.
+  **變更：工作坊**——新插件範本及 API 說明跟隨介面語言；插件預覽一律載入最新檔案並跟隨主題。
 
 ### v2.5
 - **New: Email** — a Gmail-style email client for Gmail, Outlook / Hotmail and other IMAP mailboxes: several accounts and an All accounts inbox, search, compose / reply / forward with attachments, new-mail notifications, remote images blocked by default, and AI summary / inbox sorting / reply drafts.
@@ -574,9 +588,18 @@ python tools/bundle.py Build/MultiTool.exe ref/
 csc -nostdlib -noconfig -target:winexe -langversion:13 -nullable:enable -unsafe -optimize+ -out:MultiTool.dll -r:ref/*.dll ^
     -r:lib/webview2/Microsoft.Web.WebView2.Core.dll -resource:lib/webview2/Microsoft.Web.WebView2.Core.dll,wv2.core ^
     -resource:lib/webview2/WebView2Loader.dll,wv2.loader -resource:lib/webview2/WebView2Loader.x86.dll,wv2.loader.x86 ^
-    -resource:lib/codemirror/cm.js,cm.js -resource:lib/codemirror/cm.css,cm.css src/*.cs
+    -resource:lib/codemirror/cm.js,cm.js -resource:lib/codemirror/cm.css,cm.css -resource:lib/ytdlp/multitool_bili.py,ytdlp.bili.py ^
+    -resource:lib/lang/ja.json,lang.ja.json -resource:lib/lang/ko.json,lang.ko.json -resource:lib/lang/ru.json,lang.ru.json ^
+    -resource:lib/lang/es.json,lang.es.json -resource:lib/lang/pt-BR.json,lang.pt-BR.json -resource:lib/lang/de.json,lang.de.json ^
+    -resource:lib/lang/fr.json,lang.fr.json src/*.cs
 python tools/make_exe.py Build/MultiTool.exe MultiTool.dll Build/MultiTool.exe.new tools/apphost.exe
 ```
+
+Interface languages: Traditional / Simplified Chinese and English live in `src/LangTable.cs` (generated by `tools/i18n/gen.py`); Japanese, Korean, Russian, Spanish, Portuguese (Brazil), German and French are `lib/lang/<code>.json` (same key as `LangTable.cs` → translation), embedded as resources. Missing entries fall back to English. A file at `data\lang\<code>.json` overrides the embedded one, so translations can be fixed without rebuilding.
+介面語言：繁體中文、簡體中文及英文位於 `src/LangTable.cs`（由 `tools/i18n/gen.py` 產生）；日文、韓文、俄文、西班牙文、葡萄牙文（巴西）、德文及法文為 `lib/lang/<代碼>.json`（鍵與 `LangTable.cs` 相同 → 譯文），編譯時嵌入。缺少的條目會改用英文。放於 `data\lang\<代碼>.json` 的檔案會覆蓋內嵌版本，毋須重新編譯即可修正譯文。
+
+`lib/ytdlp/multitool_bili.py` is a yt-dlp extractor plugin written to `data\tools\yt-dlp\yt-dlp-plugins\` at run time; it lets yt-dlp read Bilibili video pages with a language path (`/en/video/…`) until yt-dlp fixes this itself.
+`lib/ytdlp/multitool_bili.py` 為 yt-dlp 擷取器插件，執行時寫入 `data\tools\yt-dlp\yt-dlp-plugins\`；在 yt-dlp 自行修正前，令其可讀取帶語言路徑（`/en/video/…`）的 Bilibili 影片頁。
 
 `make_exe.py` uses the previous `Build/MultiTool.exe` as its base (runtime), so keep that file. The optional last argument `tools/apphost.exe` is the app host with the MultiTool icon.
 `make_exe.py` 以上一版 `Build/MultiTool.exe` 作為基礎（執行環境），因此請保留該檔案。最後一個可選參數 `tools/apphost.exe` 為已加入 MultiTool 圖示的應用程式主機。

@@ -821,8 +821,8 @@ internal sealed class EdTimeline : Control
         {
             // 影片 / 圖片 → 主影片軌（插入去放手位置）
             var c2 = ov.IsVideo
-                ? new EdClip { Path = ov.Path, In = ov.In, Out = ov.In + ov.Dur, SrcDur = ov.SrcDur, HasAudio = ov.HasAudio, Mute = ov.Mute, Volume = ov.Volume }
-                : new EdClip { Path = ov.Path, IsImage = true, In = 0, Out = ov.Dur };
+                ? new EdClip { Path = ov.Path, In = ov.In, Out = ov.In + ov.Dur, SrcDur = ov.SrcDur, HasAudio = ov.HasAudio, Mute = ov.Mute, Volume = ov.Volume, SrcW = ov.ImgW, SrcH = ov.ImgH }
+                : new EdClip { Path = ov.Path, IsImage = true, In = 0, Out = ov.Dur, SrcW = ov.ImgW, SrcH = ov.ImgH };
             int to = InsertIndex(e.X);
             P.Overlays.Remove(ov);
             P.Clips.Insert(Math.Clamp(to, 0, P.Clips.Count), c2);
@@ -924,6 +924,22 @@ internal sealed class EdPreview : Control
             case EdOverlay:
                 using (var b = new SolidBrush(Color.FromArgb(90, Ui.Accent))) g.FillRectangle(b, rr);
                 break;
+            case EdClip:
+            {
+                // 主影片：成個畫面先塗黑（舊位置嘅畫面唔要），再喺新位置畫嗰格
+                var fr = Frame();
+                var st = g.Save();
+                g.SetClip(fr);
+                g.FillRectangle(Brushes.Black, fr);
+                if (LiveImg != null)
+                {
+                    g.InterpolationMode = InterpolationMode.Bilinear;
+                    g.DrawImage(LiveImg, rr);
+                }
+                else using (var b = new SolidBrush(Color.FromArgb(90, Ui.Accent))) g.FillRectangle(b, rr);
+                g.Restore(st);
+                break;
+            }
             case EdText t:
             {
                 var fr = Frame();
@@ -961,6 +977,8 @@ internal sealed class EdPreview : Control
         var list = new List<(object, RectangleF)>();
         var fr = Frame();
         double t = Playhead();
+        // 主影片軌：播放頭所在嗰段（放最底，所以疊圖 / 文字會先被撳中）
+        if (ClipAt(t) is { } mc) list.Add((mc, ClipRect(mc, fr)));
         foreach (var o in P.OverlayOrder())
         {
             if (t < o.Start || t >= o.Start + o.Dur) continue;
@@ -983,6 +1001,46 @@ internal sealed class EdPreview : Control
         return list;
     }
 
+    /// <summary>播放頭所在嘅主影片段。</summary>
+    private EdClip? ClipAt(double t)
+    {
+        var st = P.Starts();
+        for (int i = 0; i < P.Clips.Count && i < st.Length; i++)
+            if (t >= st[i] && t < st[i] + P.Clips[i].Len) return P.Clips[i];
+        return null;
+    }
+
+    private readonly HashSet<string> _probing = new();
+
+    /// <summary>主影片段喺預覽嘅框（螢幕座標）：同 EdGraph 一樣計（完整顯示 / 填滿 × Zoom，中心 X / Y）。</summary>
+    private RectangleF ClipRect(EdClip c, Rectangle fr)
+    {
+        double sw = c.SrcW, sh = c.SrcH;
+        if (sw <= 0 || sh <= 0)
+        {
+            // 舊專案未記低原片大細：喺背景讀一次，讀到再重畫
+            if (Ffmpeg.Ready && IsHandleCreated && _probing.Add(c.Path))
+            {
+                string path = c.Path;
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        var info = MediaInfo.Probe(path);
+                        if (!IsDisposed) BeginInvoke(() => { foreach (var x in P.Clips.Where(x => x.Path == path)) { x.SrcW = info.W; x.SrcH = info.H; } Invalidate(); });
+                    }
+                    catch { }
+                });
+            }
+            sw = fr.Width; sh = fr.Height;
+        }
+        if (c.Rotate is 90 or 270) (sw, sh) = (sh, sw);
+        double k = c.Fill ? Math.Max(fr.Width / sw, fr.Height / sh) : Math.Min(fr.Width / sw, fr.Height / sh);
+        k *= Math.Clamp(c.Zoom, 0.05, 5);
+        float w = (float)(sw * k), h = (float)(sh * k);
+        return new RectangleF(fr.X + (float)(fr.Width * c.X) - w / 2, fr.Y + (float)(fr.Height * c.Y) - h / 2, w, h);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
@@ -1002,6 +1060,7 @@ internal sealed class EdPreview : Control
         foreach (var (obj, rr) in Items())
         {
             bool sel = obj == Selected;
+            if (obj is EdClip && !sel) continue;
             using var pen = new Pen(sel ? Ui.Accent : Color.FromArgb(120, 255, 255, 255), sel ? Ui.S(2f) : 1f);
             if (!sel) pen.DashStyle = DashStyle.Dash;
             g.DrawRectangle(pen, rr.X, rr.Y, rr.Width, rr.Height);
@@ -1056,7 +1115,7 @@ internal sealed class EdPreview : Control
             _moved = false;
             _rCenter = new PointF(cr.X + cr.Width / 2, cr.Y + cr.Height / 2);
             _rDist = Math.Max(4, Dist(e.Location, _rCenter));
-            _rOrig = Selected switch { EdOverlay o => o.Scale, EdText t => t.Size, _ => 1 };
+            _rOrig = Selected switch { EdOverlay o => o.Scale, EdText t => t.Size, EdClip c => c.Zoom, _ => 1 };
             return;
         }
         var items = Items();
@@ -1079,12 +1138,16 @@ internal sealed class EdPreview : Control
         }
     }
 
+    /// <summary>主影片大細貼近 100% 就吸住（易啲拉返原本大細）。</summary>
+    private static double SnapZoom(double z) => Math.Abs(z - 1) < 0.03 ? 1 : z;
+
     private static double Dist(PointF a, PointF b) => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
 
     private static (double X, double Y) Center(object o) => o switch
     {
         EdOverlay ov => (ov.X, ov.Y),
         EdText t => EdGraph.TextPos(t),
+        EdClip c => (c.X, c.Y),
         _ => (0.5, 0.5)
     };
 
@@ -1117,6 +1180,7 @@ internal sealed class EdPreview : Control
             {
                 case EdOverlay o: o.Scale = Math.Clamp(_rOrig * k, 0.02, 2); break;
                 case EdText t: t.Size = (int)Math.Clamp(Math.Round(_rOrig * k), 12, 300); break;
+                case EdClip c: c.Zoom = SnapZoom(Math.Clamp(_rOrig * k, 0.1, 5)); break;
             }
             Invalidate();
             return;
@@ -1132,6 +1196,7 @@ internal sealed class EdPreview : Control
         {
             case EdOverlay o: o.X = nx; o.Y = ny; break;
             case EdText t: t.X = nx; t.Y = ny; break;
+            case EdClip c: c.X = nx; c.Y = ny; break;
         }
         Invalidate();
     }
@@ -1156,6 +1221,7 @@ internal sealed class EdPreview : Control
         {
             case EdOverlay o: o.Scale = Math.Clamp(o.Scale * (e.Delta > 0 ? 1.1 : 1 / 1.1), 0.02, 2); break;
             case EdText t: t.Size = Math.Clamp(t.Size + (e.Delta > 0 ? 4 : -4), 12, 300); break;
+            case EdClip c: c.Zoom = SnapZoom(Math.Clamp(c.Zoom * (e.Delta > 0 ? 1.1 : 1 / 1.1), 0.1, 5)); break;
         }
         Invalidate();
         Moved?.Invoke();
@@ -1556,11 +1622,11 @@ internal sealed class EditorPage : Panel
                 if (MediaInfo.IsImage(f) && at != null)
                     added.Add(NewOverlay(f, info.W, info.H, at.Value.X, at.Value.Y));
                 else if (MediaInfo.IsImage(f))
-                    added.Add(new EdClip { Path = f, IsImage = true, In = 0, Out = 4 });
+                    added.Add(new EdClip { Path = f, IsImage = true, In = 0, Out = 4, SrcW = info.W, SrcH = info.H });
                 else if (!info.Video || MediaInfo.IsAudio(f))
                     added.Add(new EdMusic { Path = f, In = 0, Out = info.Dur > 0 ? info.Dur : 10, SrcDur = info.Dur });
                 else
-                    added.Add(new EdClip { Path = f, In = 0, Out = info.Dur > 0 ? info.Dur : 5, SrcDur = info.Dur, HasAudio = info.Audio });
+                    added.Add(new EdClip { Path = f, In = 0, Out = info.Dur > 0 ? info.Dur : 5, SrcDur = info.Dur, HasAudio = info.Audio, SrcW = info.W, SrcH = info.H });
             }
             catch (Exception ex) { errs.Add(ex.Message); }
         }
@@ -1945,6 +2011,30 @@ internal sealed class EditorPage : Panel
         double at = Math.Min(_tl.Playhead, Math.Max(0, _p.Duration - 0.05));
         // 嗰樣嘢嘅樣
         _pv.LiveImg = null;
+        if (o is EdClip clip)
+        {
+            int ci = _p.Clips.IndexOf(clip);
+            if (ci < 0) return;
+            string path = clip.Path;
+            double t = clip.IsImage ? 0 : clip.In + Math.Max(0, at - _p.Starts()[ci]) * clip.Speed;
+            var src = clip.IsImage ? LoadImg(path) : null;
+            var th = clip.IsImage ? (src != null ? new Bitmap(src) : null)
+                                  : await Task.Run(() => { try { return MediaInfo.Thumb(path, t, 480); } catch { return null; } });
+            if (_pv.Live != o) { th?.Dispose(); return; }
+            if (th != null)
+            {
+                var rf = clip.Rotate switch { 90 => RotateFlipType.Rotate90FlipNone, 180 => RotateFlipType.Rotate180FlipNone, 270 => RotateFlipType.Rotate270FlipNone, _ => RotateFlipType.RotateNoneFlipNone };
+                if (clip.Flip) rf = rf switch
+                {
+                    RotateFlipType.Rotate90FlipNone => RotateFlipType.Rotate90FlipX, RotateFlipType.Rotate180FlipNone => RotateFlipType.Rotate180FlipX,
+                    RotateFlipType.Rotate270FlipNone => RotateFlipType.Rotate270FlipX, _ => RotateFlipType.RotateNoneFlipX
+                };
+                th.RotateFlip(rf);
+            }
+            var old = _liveThumb; _liveThumb = th; _pv.LiveImg = th; old?.Dispose();
+            _pv.Invalidate();
+            return;
+        }
         if (o is EdOverlay ov)
         {
             if (!ov.IsVideo) _pv.LiveImg = LoadImg(ov.Path);
@@ -2245,6 +2335,15 @@ internal sealed class EditorPage : Panel
         pic.Add(Pick(Lang.T("旋轉"), new[] { ("0°", 0), ("90°", 90), ("180°", 180), ("270°", 270) }, c.Rotate, v => c.Rotate = v));
         pic.Add(Check(Lang.T("左右反轉"), c.Flip, v => c.Flip = v));
         add.Add(pic);
+
+        var pos = Section(Lang.T("位置及大細"), "clippos", c.Moved);
+        pos.Add(Small(Lang.T("喺預覽畫面拖中間搬位，拖四角（或者滾輪）改大細。")));
+        pos.Add(Num(Lang.T("大細"), c.Zoom * 100, 10, 500, 0, 5, v => c.Zoom = v / 100, () => c.Zoom * 100, "%"));
+        PosRows(pos, () => (c.X, c.Y), (x, y) => { c.X = x; c.Y = y; });
+        var center = TUi.Btn(Lang.T("重設位置及大細"), () => { PushUndo(); c.X = 0.5; c.Y = 0.5; c.Zoom = 1; BuildProps(); Dirty(); });
+        center.Margin = new Padding(0, 0, 0, Ui.S(4));
+        pos.Add(center);
+        add.Add(pos);
 
         bool filtered = Math.Abs(c.Bright) > 0.001 || Math.Abs(c.Contrast - 1) > 0.001 || Math.Abs(c.Sat - 1) > 0.001 || c.Gray;
         var flt = Section(Lang.T("濾鏡"), "filter", filtered);

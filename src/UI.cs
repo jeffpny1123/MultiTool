@@ -78,9 +78,11 @@ namespace UI
 
         public static string UiFamily => Lang.Current switch
         {
+            Language.ZhHant => "Microsoft JhengHei UI",
             Language.ZhHans => "Microsoft YaHei UI",
-            Language.En => "Segoe UI",
-            _ => "Microsoft JhengHei UI"
+            Language.Ja => "Yu Gothic UI",
+            Language.Ko => "Malgun Gothic",
+            _ => "Segoe UI"
         };
         public const string MonoFamily = "Consolas";
 

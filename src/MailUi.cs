@@ -175,9 +175,9 @@ internal static class MailAi
 {
     public static string UiLang => Lang.Current switch
     {
-        Language.En => "English",
+        Language.ZhHant => "繁體中文書面語（香港用字）",
         Language.ZhHans => "简体中文",
-        _ => "繁體中文書面語（香港用字）"
+        _ => Lang.EnglishName(Lang.Current)
     };
 
     /// <summary>AI 對話回答：用家用咩語言就用咩（廣東話就廣東話、書面語就書面語、英文就英文）。</summary>
@@ -186,9 +186,9 @@ internal static class MailAi
     /// <summary>AI 寫出嚟、會喺介面顯示嘅文字（插件介面、通知內容等）一律用書面語。</summary>
     public static string UiTextRule => Lang.Current switch
     {
-        Language.En => "Any text shown in the user interface (labels, buttons, messages, notifications) must be in English.",
+        Language.ZhHant => "所有會喺介面顯示嘅文字（標籤、按鈕、訊息、通知內容）一律用繁體中文書面語（香港用字），唔好用廣東話口語（例如唔好用「嘅、咗、唔、係、喺、嚟、佢、冇、撳、睇」）。",
         Language.ZhHans => "所有會在介面顯示的文字（標籤、按鈕、訊息、通知）一律用简体中文书面语。",
-        _ => "所有會喺介面顯示嘅文字（標籤、按鈕、訊息、通知內容）一律用繁體中文書面語（香港用字），唔好用廣東話口語（例如唔好用「嘅、咗、唔、係、喺、嚟、佢、冇、撳、睇」）。"
+        _ => "Any text shown in the user interface (labels, buttons, messages, notifications) must be in " + Lang.EnglishName(Lang.Current) + "."
     };
 
     public static async Task<string> AskAsync(string prompt)

@@ -58,8 +58,28 @@ internal static class YtDlp
         try { if (Directory.Exists(Dir)) Directory.Delete(Dir, true); } catch { }
     }
 
+    // yt-dlp 自己搵 plugin 嘅位置：<exe 資料夾>\yt-dlp-plugins\<名>\yt_dlp_plugins\extractor\*.py
+    private static string PluginFile => Path.Combine(Dir, "yt-dlp-plugins", "multitool", "yt_dlp_plugins", "extractor", "multitool_bili.py");
+
+    /// <summary>放好 MultiTool 嘅 yt-dlp plugin（Bilibili 2026-10 改咗網址，yt-dlp 未修好前用住）。內容唔同先寫。</summary>
+    private static void EnsurePlugins()
+    {
+        try
+        {
+            using var s = typeof(YtDlp).Assembly.GetManifestResourceStream("ytdlp.bili.py");
+            if (s == null) return;
+            using var r = new StreamReader(s, Encoding.UTF8);
+            string code = r.ReadToEnd();
+            if (File.Exists(PluginFile) && File.ReadAllText(PluginFile, Encoding.UTF8) == code) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(PluginFile)!);
+            File.WriteAllText(PluginFile, code, new UTF8Encoding(false));
+        }
+        catch (Exception ex) { AppPaths.LogError("yt-dlp plugin", ex); }
+    }
+
     public static ProcessStartInfo Psi(string args)
     {
+        EnsurePlugins();
         var psi = new ProcessStartInfo(Exe, args)
         {
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,

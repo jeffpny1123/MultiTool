@@ -11,7 +11,7 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v2.5";
+    public const string Version = "v2.5.1";
     public const string Author = "白兔糖v3v";
     /// <summary>程式啟動時間；開頭幾秒當係「啟動緊」，重嘢（例如插件嘅 WebView2）遲啲先做。</summary>
     public static readonly DateTime Started = DateTime.Now;
@@ -150,7 +150,7 @@ internal sealed class MainForm : Form
         try { langMenu.Renderer = DarkTheme.MenuRenderer(); } catch { }
         langMenu.BackColor = Ui.CardHi;
         langMenu.ForeColor = Ui.Text;
-        foreach (Language l in Enum.GetValues(typeof(Language)))
+        foreach (Language l in Lang.All)
         {
             var item = new ToolStripMenuItem(Lang.DisplayName(l)) { Checked = l == Lang.Current, ForeColor = Ui.Text };
             item.Click += (_, _) => SwitchLanguage(l);
