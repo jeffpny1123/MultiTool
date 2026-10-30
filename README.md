@@ -138,6 +138,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **時間軸**設有文字、影片及音訊軌：加入影片、相片及聲音（亦可拖曳加入），拖曳片段兩邊剪頭尾、拖曳移動及排序、於播放頭分割、刪除及復原。專案自動儲存。
 - **Live preview with sound**; scrubbing the timeline shows the frame at that point.
   **即時預覽連聲音**；拖曳時間軸會顯示該位置的畫面。
+- **Preview volume**: the speaker and slider next to the timeline zoom buttons change only how loud the preview plays (click the speaker to mute); the video itself is not changed.
+  **預覽音量**：時間軸放大／縮小按鈕旁的喇叭及音量條只調整預覽播放的音量（按喇叭可靜音），不會改變影片本身。
 - **Text** titles / captions (position, size, colour, dark background, fade), **background music** (volume, fade in / out), **transitions** between clips (fade, dissolve, slide, wipe, circle, pixelate…), **speed** 0.25x – 4x, rotate / flip, fit or fill, brightness / contrast / saturation / black & white.
   **文字**標題／字幕（位置、大小、顏色、黑色底、淡入淡出）、**背景音樂**（音量、淡入／淡出）、片段之間的**轉場**（淡入淡出、溶解、滑動、擦除、圓形、馬賽克等）、**速度** 0.25x – 4x、旋轉／翻轉、完整顯示或填滿、亮度／對比／飽和度／黑白。
 - **Image overlays** (stickers / logos): drop a photo onto the preview or onto Video 2+, drag text and images to position them, drag a corner or scroll to resize; opacity and fade.
@@ -283,6 +285,12 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v2.5.2
+- **New: Video Editor** — preview volume control (speaker and slider next to the timeline zoom buttons); it only affects the preview, not the video.
+  **新增：影片剪輯**——預覽音量控制（時間軸放大／縮小按鈕旁的喇叭及音量條），只影響預覽，不會改變影片。
+- **Changed: Auto update** — updates are now decided by an internal build number, so future version numbers can change format without breaking updates.
+  **變更：自動更新**——改以內部版本編號判斷是否有新版本，日後更改版本號格式亦不影響自動更新。
 
 ### v2.5.1
 - **New: Interface languages** — Japanese, Korean, Russian, Spanish, Portuguese (Brazil), German and French (bottom-left menu).
@@ -611,14 +619,16 @@ The icon is in `assets/` (`icon.png`, `MultiTool.ico`). To change it, edit and r
 
 ## Releasing a new version 發佈新版本
 
-1. Update `Version` in `src/App.cs` (e.g. `v1.4`).
-   更新 `src/App.cs` 中的 `Version`（例如 `v1.4`）。
+1. Update `Version` in `src/App.cs` (e.g. `v1.4`) and **increase `Build`** (an internal number that must go up with every release).
+   更新 `src/App.cs` 中的 `Version`（例如 `v1.4`），並**加大 `Build`**（內部版本編號，每次發佈都必須比上一版大）。
 2. Build `Build/MultiTool.exe`.
    打包產生 `Build/MultiTool.exe`。
 3. Create the Release in the public **[MultiTool-Releases](https://github.com/jeffpny1123/MultiTool-Releases)** repo (this source repo is private; the updater reads releases from there). The **tag must match the version** (`v1.2`); attach `MultiTool.exe` or a zip containing it, and mark it as **latest**.
    於公開的 **MultiTool-Releases** repo 建立 Release（此原始碼 repo 為私人；自動更新從該處讀取）。**標籤須與版本號相同**（`v1.2`），附上 `MultiTool.exe` 或包含該檔案的壓縮檔，並設為 **latest**。
 4. Existing users are updated automatically the next time they launch the app.
    現有用戶下次啟動程式時便會自動更新。
+   The updater compares the `<!-- build: N -->` marker in the release notes (added automatically by `tools/publish_release.py draft`) with `Build`, so the displayed version number can be changed freely (e.g. to `v0.x`). Releases without the marker fall back to comparing version numbers.
+   自動更新會比較 Release 說明中的 `<!-- build: N -->`（由 `tools/publish_release.py draft` 自動加入）與 `Build`，因此顯示的版本號可以自由更改（例如改為 `v0.x`）；沒有此標記的 Release 則照舊比較版本號。
 
 ---
 

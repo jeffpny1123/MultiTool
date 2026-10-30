@@ -2070,5 +2070,6 @@ public static partial class Lang
         ["📌 加到工具欄"] = new[] { "📌 加到工具欄", "📌 加到工具栏", "📌 Add to sidebar" },
         ["重設位置及大細"] = new[] { "重設位置及大小", "重设位置及大小", "Reset position and size" },
         ["拖動"] = new[] { "拖動", "拖动", "Drag" },
+        ["預覽音量（淨係影響預覽，唔會改影片）：撳喇叭靜音，拖或者用滾輪調"] = new[] { "預覽音量（只影響預覽，不會改變影片）：按喇叭靜音，拖曳或用滾輪調整", "预览音量（只影响预览，不会改变视频）：按喇叭静音，拖曳或用滚轮调整", "Preview volume (only affects the preview, not the video): click the speaker to mute, drag or scroll to adjust" },
     };
 }

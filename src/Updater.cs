@@ -41,7 +41,25 @@ internal static class Updater
         return new Version(parts[0], parts[1], parts[2]);
     }
 
-    private sealed record Release(string Tag, string Notes, string Url, string AssetName);
+    private sealed record Release(string Tag, string Notes, string Url, string AssetName)
+    {
+        /// <summary>Release 說明入面嘅內部版本編號（&lt;!-- build: 252 --&gt;）；冇就 -1。</summary>
+        public int Build
+        {
+            get
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(Notes, @"<!--\s*build:\s*(\d+)\s*-->");
+                return m.Success && int.TryParse(m.Groups[1].Value, out var b) ? b : -1;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 最新 Release 新唔新過自己：有內部版本編號就比編號（顯示嘅版本號可以隨便改）；
+    /// 冇（舊式 Release）就照舊比版本號。
+    /// </summary>
+    private static bool IsNewer(Release rel) =>
+        rel.Build >= 0 ? rel.Build > Program.Build : ParseVersion(rel.Tag) > ParseVersion(Program.Version);
 
     private static async Task<Release?> GetLatestAsync()
     {
@@ -93,7 +111,7 @@ internal static class Updater
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            if (rel == null || ParseVersion(rel.Tag) <= ParseVersion(Program.Version))
+            if (rel == null || !IsNewer(rel))
             {
                 if (!silent)
                     MessageBox.Show(owner, Lang.F("已經係最新版本（{0}）。", Program.Version), Program.AppName,

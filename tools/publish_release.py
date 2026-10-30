@@ -1,6 +1,6 @@
 # 發佈 MultiTool 去 MultiTool-Releases（GitHub API）
 # 用法：
-#   python tools/publish_release.py draft  v2.1 notes.md   → 開草稿 Release + 上載 Build\MultiTool-v2.1.zip
+#   python tools/publish_release.py draft  v2.1 notes.md   → 開草稿 Release + 上載 Build\MultiTool-v2.1.zip（說明尾自動加 <!-- build: N -->，N = App.cs 嘅 Program.Build）
 #   python tools/publish_release.py publish v2.1            → 將草稿正式發佈，設做 latest
 #   python tools/publish_release.py readme                  → 用 Build\MultiTool-Releases-README.md 更新 README.md
 # token 讀自 repo 根目錄嘅 .release-token（已喺 .git/info/exclude，唔會 commit）
@@ -47,6 +47,12 @@ def draft(tag, notes_path):
     if not os.path.isfile(zip_path):
         sys.exit("搵唔到 " + zip_path)
     notes = open(notes_path, encoding="utf-8").read()
+    # 內部版本編號（src/App.cs 嘅 Program.Build）寫入說明：自動更新靠佢判斷新舊（網頁上睇唔到）
+    import re
+    m = re.search(r"public const int Build = (\d+);", open(os.path.join(ROOT, "src", "App.cs"), encoding="utf-8").read())
+    if not m:
+        sys.exit("src/App.cs 搵唔到 Build")
+    notes = re.sub(r"\s*<!--\s*build:\s*\d+\s*-->\s*$", "", notes) + f"\n\n<!-- build: {m.group(1)} -->\n"
     rel = find_release(tag)
     if rel and not rel["draft"]:
         sys.exit(f"{tag} 已經發佈咗")

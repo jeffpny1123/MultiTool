@@ -1392,4 +1392,5 @@ E2 += [
 ('📌 加到工具欄', '📌 加到工具欄', '📌 Add to sidebar'),
 ('重設位置及大細', '重設位置及大小', 'Reset position and size'),
 ('拖動', '拖動', 'Drag'),
+('預覽音量（淨係影響預覽，唔會改影片）：撳喇叭靜音，拖或者用滾輪調', '預覽音量（只影響預覽，不會改變影片）：按喇叭靜音，拖曳或用滾輪調整', 'Preview volume (only affects the preview, not the video): click the speaker to mute, drag or scroll to adjust'),
 ]

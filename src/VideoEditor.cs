@@ -749,9 +749,42 @@ internal sealed class WaveOut : IDisposable
 
     private bool IsFree(int i) => !_used[i] || (Marshal.ReadInt32(_hdrs[i], _flagsOff) & Done) != 0;
 
+    /// <summary>預覽音量（0–1，淨係影響預覽播出嚟嘅聲，唔改影片）。</summary>
+    public static volatile float Volume = LoadVolume();
+    public static volatile bool Muted;
+
+    private static string VolFile => Path.Combine(EdStore.Dir, "preview_volume.txt");
+
+    private static float LoadVolume()
+    {
+        try { if (File.Exists(VolFile) && float.TryParse(File.ReadAllText(VolFile).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v)) return Math.Clamp(v, 0, 1); }
+        catch { }
+        return 1;
+    }
+
+    public static void SaveVolume()
+    {
+        try { Directory.CreateDirectory(EdStore.Dir); File.WriteAllText(VolFile, Volume.ToString("0.###", CultureInfo.InvariantCulture)); } catch { }
+    }
+
+    /// <summary>16-bit PCM 乘音量（就地改）。</summary>
+    private static void ApplyVolume(byte[] data, int count)
+    {
+        float v = Muted ? 0 : Volume;
+        if (v >= 0.999f) return;
+        if (v <= 0.001f) { Array.Clear(data, 0, count); return; }
+        for (int i = 0; i + 1 < count; i += 2)
+        {
+            int x = (int)((short)(data[i] | (data[i + 1] << 8)) * v);
+            data[i] = (byte)x;
+            data[i + 1] = (byte)(x >> 8);
+        }
+    }
+
     /// <summary>寫一段聲（最多 BufferBytes）；冇空位就等。</summary>
     public void Write(byte[] data, int count, CancellationToken ct)
     {
+        ApplyVolume(data, count);
         while (true)
         {
             ct.ThrowIfCancellationRequested();

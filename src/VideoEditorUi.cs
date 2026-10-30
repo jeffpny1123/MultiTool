@@ -1382,8 +1382,16 @@ internal sealed class EditorPage : Panel
         zout.Click += (_, _) => _tl.Zoom(1 / 1.4);
         _tip.SetToolTip(zin, Lang.T("放大時間軸（Ctrl + 滾輪）"));
         _tip.SetToolTip(zout, Lang.T("縮細時間軸（Ctrl + 滾輪）"));
-        transport.Controls.AddRange(new Control[] { zin, zout });
-        transport.Resize += (_, _) => { zin.Location = new Point(transport.Width - zin.Width, Ui.S(4)); zout.Location = new Point(zin.Left - zout.Width - Ui.S(6), Ui.S(4)); };
+        // 預覽音量（淨係影響預覽，唔改影片）
+        var vol = new EdVolume();
+        _tip.SetToolTip(vol, Lang.T("預覽音量（淨係影響預覽，唔會改影片）：撳喇叭靜音，拖或者用滾輪調"));
+        transport.Controls.AddRange(new Control[] { zin, zout, vol });
+        transport.Resize += (_, _) =>
+        {
+            zin.Location = new Point(transport.Width - zin.Width, Ui.S(4));
+            zout.Location = new Point(zin.Left - zout.Width - Ui.S(6), Ui.S(4));
+            vol.Location = new Point(zout.Left - vol.Width - Ui.S(16), Ui.S(4));
+        };
         _tl.Dock = DockStyle.Fill;
         _tl.HeightChanged += () => bottom.Height = _tl.WantHeight + Ui.S(46);
         bottom.Controls.Add(_tl);
@@ -1439,8 +1447,8 @@ internal sealed class EditorPage : Panel
     // Windows 內置圖示字型（Win11 = Segoe Fluent Icons，Win10 = Segoe MDL2 Assets）；冇就用普通符號
     private static readonly string? IconFamily = new[] { "Segoe Fluent Icons", "Segoe MDL2 Assets" }
         .FirstOrDefault(n => FontFamily.Families.Any(f => f.Name == n));
-    private static bool HasIcons => IconFamily != null;
-    private static Font IconFont(float size) => IconFamily != null ? new Font(IconFamily, Ui.S(size) * 72f / 96f, GraphicsUnit.Point) : Ui.F(size, FontStyle.Bold);
+    internal static bool HasIcons => IconFamily != null;
+    internal static Font IconFont(float size) => IconFamily != null ? new Font(IconFamily, Ui.S(size) * 72f / 96f, GraphicsUnit.Point) : Ui.F(size, FontStyle.Bold);
     private static string PlayGlyph => HasIcons ? "\uE768" : "▶";
     private static string PauseGlyph => HasIcons ? "\uE769" : "⏸";
 
@@ -2796,5 +2804,89 @@ internal sealed class EdExportForm : Form
             _bar.Value = -1;
             _status.Text = Lang.T("匯出失敗：") + (err.Length > 0 ? err.Split('\n').Last().Trim() : Lang.T("已取消"));
         }
+    }
+}
+
+/// <summary>預覽音量：左邊喇叭撳一下 = 靜音；右邊條拖 / 滾輪 = 音量。淨係影響預覽，唔改影片。</summary>
+internal sealed class EdVolume : Control
+{
+    private bool _drag;
+    public event Action? Changed;
+
+    public EdVolume()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        BackColor = Ui.Bg;
+        Size = new Size(Ui.S(150), Ui.S(30));
+        Cursor = Cursors.Hand;
+    }
+
+    private int IconW => Ui.S(30);
+    private Rectangle Bar => new(IconW + Ui.S(4), Height / 2 - Ui.S(2), Width - IconW - Ui.S(46), Ui.S(4));
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(BackColor);
+        float v = WaveOut.Muted ? 0 : WaveOut.Volume;
+        string glyph = EditorPage.HasIcons
+            ? (v <= 0.001f ? "" : v < 0.34f ? "" : v < 0.67f ? "" : "")
+            : (v <= 0.001f ? "🔇" : "🔊");
+        using var iconFont = EditorPage.IconFont(11f);
+        TextRenderer.DrawText(g, glyph, iconFont, new Rectangle(0, 0, IconW, Height), Ui.Text,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        var bar = Bar;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        using (var bg = new SolidBrush(Ui.Border)) g.FillRectangle(bg, bar);
+        int fill = (int)(bar.Width * v);
+        using (var fb = new SolidBrush(WaveOut.Muted ? Ui.TextDim : Ui.Accent)) g.FillRectangle(fb, bar.X, bar.Y, fill, bar.Height);
+        int r = Ui.S(6);
+        using (var kb = new SolidBrush(Ui.Text)) g.FillEllipse(kb, bar.X + fill - r, bar.Y + bar.Height / 2 - r, r * 2, r * 2);
+        TextRenderer.DrawText(g, $"{(int)Math.Round(v * 100)}%", Ui.F(8.75f), new Rectangle(bar.Right + Ui.S(6), 0, Width - bar.Right - Ui.S(6), Height), Ui.TextDim,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+    }
+
+    private void SetFrom(int x)
+    {
+        var bar = Bar;
+        WaveOut.Volume = (float)Math.Clamp((x - bar.X) / (double)Math.Max(1, bar.Width), 0, 1);
+        WaveOut.Muted = false;
+        Invalidate();
+        Changed?.Invoke();
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (e.Button != MouseButtons.Left) return;
+        if (e.X < IconW) { WaveOut.Muted = !WaveOut.Muted; Invalidate(); Changed?.Invoke(); return; }
+        _drag = true;
+        Capture = true;
+        SetFrom(e.X);
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (_drag) SetFrom(e.X);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        if (!_drag) return;
+        _drag = false;
+        Capture = false;
+        WaveOut.SaveVolume();
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        WaveOut.Volume = Math.Clamp(WaveOut.Volume + (e.Delta > 0 ? 0.05f : -0.05f), 0, 1);
+        WaveOut.Muted = false;
+        Invalidate();
+        WaveOut.SaveVolume();
+        Changed?.Invoke();
     }
 }
