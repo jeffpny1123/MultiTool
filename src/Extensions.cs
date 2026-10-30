@@ -33,6 +33,7 @@ internal static class Extensions
     public const string Editor = "editor";
     public const string Mail = "mail";
     public const string Plugins = "plugins";
+    public const string Repair = "repair";
 
     /// <summary>工具庫分類（一個工具可以屬幾類）。</summary>
     public static readonly string[] Categories = { "game", "media", "work", "system", "net" };
@@ -65,11 +66,12 @@ internal static class Extensions
         Disk => new[] { "system" },
         Mail => new[] { "work", "net" },
         Plugins => new[] { "work" },
+        Repair => new[] { "work", "system", "media" },
         _ => Array.Empty<string>()
     };
 
     /// <summary>用 ffmpeg 嘅工具：最後一個移除先刪 ffmpeg。</summary>
-    private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert, Download, Editor };
+    private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert, Download, Editor, Repair };
 
     private static void RemoveFfmpeg(string id)
     {
@@ -144,13 +146,16 @@ internal static class Extensions
             Lang.T("用 HTML + JavaScript 寫你自己嘅工具：連網上 API、彈通知、儲存資料、叫 AI 幫手。有程式碼編輯器、即時試行，唔識寫 code 可以叫 AI 幫你寫；插件可以匯出俾其他人用。"), false,
             Remove: () => { foreach (var id in MultiTool.Plugins.PluginRuntime.Running.Keys.ToList()) MultiTool.Plugins.PluginRuntime.Stop(id); },
             Since: "v2.5"),
+        new(Repair, Lang.T("檔案修復"),
+            Lang.T("開唔到嘅影片、聲音、相片、ZIP / Word / Excel / PowerPoint、PDF 拖入嚟就自動修復，修好嘅另存一份。部分修復第一次用要下載免費開源工具（ffmpeg、qpdf、untrunc）。"), false,
+            Remove: () => { Tools.RepairTools.Delete(); RemoveFfmpeg(Repair); }, Since: "v0.252"),
         new(Disk, Lang.T("磁碟空間及健康"),
             Lang.T("睇每個磁碟剩幾多位、硬碟健康（溫度、SSD 壽命、讀寫錯誤），掃描邊個資料夾最食位，一撳掉入資源回收筒。"), false),
     };
 
     /// <summary>工具庫 / 首頁排序：新工具最前，跟住常用嘅，我的腳本第一，測試版最後。</summary>
     private static readonly string[] Order =
-        { Scripts, Mail, Plugins, Recorder, Editor, Download, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
+        { Scripts, Repair, Mail, Plugins, Recorder, Editor, Download, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
 
     private static readonly bool Sorted = SortAll();
 
@@ -210,6 +215,7 @@ internal static class Extensions
         Disk => ("◔", Ui.Accent2),
         Mail => ("✉", Ui.Hex(0xEA4335)),
         Plugins => ("◈", Ui.Accent2),
+        Repair => ("✚", Ui.Success),
         Doc => ("▦", Ui.Accent),
         "ai" => ("✦", Ui.Accent2),
         "home" => ("⌂", Ui.Accent),
@@ -453,6 +459,7 @@ internal sealed class ExtensionsPage : Panel
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 nameRight = (int)nr.Left - Ui.S(6);
             }
+            tf = Ui.Fit(_e.Name, new Size(Math.Max(10, nameRight - tx), tf.Height + 2), 11.5f, 9f, FontStyle.Bold, wrap: false);
             TextRenderer.DrawText(g, _e.Name, tf, new Rectangle(tx, p + Ui.S(2), Math.Max(10, nameRight - tx), tf.Height + 2), Ui.Text,
                 TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
             var sf = Ui.F(8.75f);
@@ -462,7 +469,7 @@ internal sealed class ExtensionsPage : Panel
             // 簡介
             int dy = (int)ir.Bottom + Ui.S(12);
             var dr = new Rectangle(p, dy, Width - p * 2, Math.Max(0, _btn.Top - Ui.S(10) - dy));
-            TextRenderer.DrawText(g, _e.Desc, Ui.F(9f), dr, Ui.TextDim,
+            TextRenderer.DrawText(g, _e.Desc, Ui.Fit(_e.Desc, dr.Size, 9f, 7.5f), dr, Ui.TextDim,
                 TextFormatFlags.NoPadding | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.TextBoxControl);
             // 掣隔籬：下載大細 / 進度
             if (_status.Length > 0 && !(on && _cts == null))

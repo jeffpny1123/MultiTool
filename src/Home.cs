@@ -189,7 +189,8 @@ internal sealed class HomePage : Panel
             y += Ui.F(9.5f).Height + Ui.S(10);
             int textW = (Width < Ui.S(620) ? Width : _lib.Left) - p * 2;
             TextRenderer.DrawText(g, Lang.T("自動化腳本、錄影、改鍵、AI 助手…一個程式搞掂。撳下面嘅工具開始，或者去工具庫加更多。"),
-                Ui.F(10f), new Rectangle(p, y, Math.Max(10, textW), Ui.F(10f).Height * 2 + 4), Ui.TextDim,
+                Ui.Fit(Lang.T("自動化腳本、錄影、改鍵、AI 助手…一個程式搞掂。撳下面嘅工具開始，或者去工具庫加更多。"), new Size(Math.Max(10, textW), Ui.F(10f).Height * 2 + 4), 10f, 8.5f),
+                new Rectangle(p, y, Math.Max(10, textW), Ui.F(10f).Height * 2 + 4), Ui.TextDim,
                 TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
         }
     }
@@ -273,6 +274,7 @@ internal sealed class HomePage : Panel
             int tx = (int)ir.Right + Ui.S(12);
             int tw = Width - tx - p;
             var nf = Ui.F(big ? 11f : 10f, FontStyle.Bold);
+            nf = Ui.Fit(_name, new Size(Math.Max(10, tw - (big ? Ui.S(24) : 0)), nf.Height + 2), big ? 11f : 10f, 8.5f, FontStyle.Bold, wrap: false);
             if (big)
             {
                 TextRenderer.DrawText(g, _name, nf, new Rectangle(tx, (int)ir.Y + Ui.S(1), tw, nf.Height + 2), Ui.Text,
@@ -282,7 +284,7 @@ internal sealed class HomePage : Panel
                     _hover ? hue : Ui.TextFaint, TextFormatFlags.NoPadding | TextFormatFlags.Right);
                 int dy = (int)ir.Bottom - Ui.S(18);
                 var dr = new Rectangle(tx, (int)ir.Y + nf.Height + Ui.S(6), tw, (int)(top + r.Height) - p - ((int)ir.Y + nf.Height + Ui.S(6)));
-                TextRenderer.DrawText(g, _desc, Ui.F(9f), dr, Ui.TextDim,
+                TextRenderer.DrawText(g, _desc, Ui.Fit(_desc, dr.Size, 9f, 7.5f), dr, Ui.TextDim,
                     TextFormatFlags.NoPadding | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis | TextFormatFlags.TextBoxControl);
             }
             else

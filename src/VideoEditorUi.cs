@@ -2627,6 +2627,11 @@ internal sealed class EdExportForm : Form
         _gpuBox = new CheckBox { Text = Lang.T("用顯示卡加速（冇就自動用 CPU）"), Checked = true, AutoSize = true, ForeColor = Ui.Text, BackColor = Ui.Card, Location = new Point(x, y) };
         _gpuBox.CheckedChanged += (_, _) => _gpu = _gpuBox.Checked;
         Controls.Add(_gpuBox);
+        y += Ui.S(30);
+        // 匯出完成後開唔開資料夾（記住揀咗乜）
+        var openBox = new CheckBox { Text = Lang.T("匯出完成後打開資料夾"), Checked = OpenAfter, AutoSize = true, ForeColor = Ui.Text, BackColor = Ui.Card, Location = new Point(x, y) };
+        openBox.CheckedChanged += (_, _) => OpenAfter = openBox.Checked;
+        Controls.Add(openBox);
         y += Ui.S(38);
         _bar.SetBounds(x, y, Ui.S(460), Ui.S(8));
         _bar.Value = -1;
@@ -2666,6 +2671,14 @@ internal sealed class EdExportForm : Form
     {
         _gpuBox.Enabled = Fmt.Gpu;
         _gpuBox.ForeColor = Fmt.Gpu ? Ui.Text : Ui.TextFaint;
+    }
+
+    // 匯出完成後開唔開資料夾：data\editor\open_folder.txt（0 = 唔開；冇個檔 = 開）
+    private static string OpenFile => Path.Combine(EdStore.Dir, "open_folder.txt");
+    private static bool OpenAfter
+    {
+        get { try { return !File.Exists(OpenFile) || File.ReadAllText(OpenFile).Trim() != "0"; } catch { return true; } }
+        set { try { Directory.CreateDirectory(EdStore.Dir); File.WriteAllText(OpenFile, value ? "1" : "0"); } catch { } }
     }
 
     // 記住上次匯出嘅資料夾（data\editor\export.txt），下次預設喺同一個位置
@@ -2792,9 +2805,9 @@ internal sealed class EdExportForm : Form
         }
         if (code == 0 && File.Exists(outFile))
         {
-            // 完成：即刻喺檔案總管揀住個檔，閂埋匯出細窗
+            // 完成：剔咗就喺檔案總管揀住個檔，閂埋匯出細窗
             _bar.Value = 1;
-            TUi.Reveal(outFile);
+            if (OpenAfter) TUi.Reveal(outFile);
             Tools.Toast.Show(Lang.T("匯出完成"), Ui.Success, 3000);
             Close();
         }

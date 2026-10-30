@@ -12,12 +12,15 @@ namespace MultiTool.Video;
 
 /// <summary>
 /// 影片剪輯同 Windows 檔案總管整合：
-/// 右鍵影片 / 相片 →「開啟檔案」入面有「影片剪輯」，撳落去會開新剪片專案並加入嗰啲檔案。
+/// 右鍵影片 / 相片 →「開啟檔案」入面有「影片剪輯」，另外右鍵第一層有「使用 MultiTool 編輯」（好似 Clipchamp 咁），
+/// 撳落去會開新剪片專案並加入嗰啲檔案。Windows 11 嘅新式右鍵要撳「顯示更多選項」先見到。
 /// 只寫 HKCU（唔使管理員）；移除影片剪輯就清走。MultiTool 已經開咗就用 named pipe 交俾嗰個。
 /// </summary>
 internal static class EdShell
 {
     private const string ProgId = "MultiTool.VideoEditor";
+    private const string Verb = "MultiTool.Edit";
+    private static string VerbKey(string ext) => $@"Software\Classes\SystemFileAssociations\{ext}\shell\{Verb}";
     /// <summary>第二次開 MultiTool：叫已經開咗嗰個彈出嚟。</summary>
     public const string ShowMsg = "\u0001show";
 
@@ -48,7 +51,7 @@ internal static class EdShell
         string name = Lang.T("影片剪輯") + " (MultiTool)";
         using (var chk = Registry.CurrentUser.OpenSubKey($@"Software\Classes\{ProgId}\shell\open\command"))
         using (var chkName = Registry.CurrentUser.OpenSubKey($@"Software\Classes\{ProgId}\shell\open"))
-            if (chk?.GetValue("") as string == cmd && chkName?.GetValue("FriendlyAppName") as string == name && Exts.All(HasExt)) return; // 已經登記好
+            if (chk?.GetValue("") as string == cmd && chkName?.GetValue("FriendlyAppName") as string == name && Exts.All(HasExt) && Exts.All(e => HasVerb(e, cmd))) return; // 已經登記好
         using (var k = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{ProgId}"))
         {
             k.SetValue("", name);
@@ -65,7 +68,25 @@ internal static class EdShell
         foreach (var ext in Exts)
             using (var k = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{ext}\OpenWithProgids"))
                 k.SetValue(ProgId, Array.Empty<byte>(), RegistryValueKind.None);
+        // 右鍵第一層：「使用 MultiTool 編輯」
+        string verbName = Lang.T("使用 MultiTool 編輯");
+        foreach (var ext in Exts)
+        {
+            using (var k = Registry.CurrentUser.CreateSubKey(VerbKey(ext)))
+            {
+                k.SetValue("MUIVerb", verbName);
+                k.SetValue("Icon", $"\"{exe}\",0");
+            }
+            using (var k = Registry.CurrentUser.CreateSubKey(VerbKey(ext) + @"\command")) k.SetValue("", cmd);
+        }
         SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero); // SHCNE_ASSOCCHANGED
+    }
+
+    private static bool HasVerb(string ext, string cmd)
+    {
+        using var k = Registry.CurrentUser.OpenSubKey(VerbKey(ext));
+        using var c = Registry.CurrentUser.OpenSubKey(VerbKey(ext) + @"\command");
+        return k?.GetValue("MUIVerb") as string == Lang.T("使用 MultiTool 編輯") && c?.GetValue("") as string == cmd;
     }
 
     private static bool HasExt(string ext)
@@ -84,6 +105,10 @@ internal static class EdShell
         {
             using var k = Registry.CurrentUser.OpenSubKey($@"Software\Classes\{ext}\OpenWithProgids", true);
             if (k?.GetValueNames().Contains(ProgId) == true) { k.DeleteValue(ProgId, false); any = true; }
+            using (var v = Registry.CurrentUser.OpenSubKey(VerbKey(ext)))
+                if (v == null) continue;
+            Registry.CurrentUser.DeleteSubKeyTree(VerbKey(ext), false);
+            any = true;
         }
         if (any) SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero);
     }

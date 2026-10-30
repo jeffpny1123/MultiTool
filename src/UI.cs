@@ -123,6 +123,37 @@ namespace UI
         public static Font F(float size, FontStyle style = FontStyle.Regular) => Get(UiFamily, size, style);
         public static Font Mono(float size, FontStyle style = FontStyle.Regular) => Get(MonoFamily, size, style);
 
+        /// <summary>單行文字闊過 width：回傳縮細咗嘅字體（最細 75%，用完要 Dispose）；放得落就 null。</summary>
+        public static Font? Shrink(string text, Font font, int width)
+        {
+            if (string.IsNullOrEmpty(text) || width <= 0) return null;
+            var flags = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
+            if (TextRenderer.MeasureText(text, font, Size.Empty, flags).Width <= width) return null;
+            float min = font.Size * 0.75f;
+            for (float sz = font.Size - 0.5f; sz > min; sz -= 0.5f)
+            {
+                var f = new Font(font.FontFamily, sz, font.Style, font.Unit);
+                if (TextRenderer.MeasureText(text, f, Size.Empty, flags).Width <= width) return f;
+                f.Dispose();
+            }
+            return new Font(font.FontFamily, min, font.Style, font.Unit);
+        }
+
+        /// <summary>
+        /// 由 size 開始逐步縮細字體，直到文字放得落 box（某啲語言句子特別長）；最細到 min。
+        /// </summary>
+        public static Font Fit(string text, Size box, float size, float min, FontStyle style = FontStyle.Regular, bool wrap = true)
+        {
+            var flags = TextFormatFlags.NoPadding | (wrap ? TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl : TextFormatFlags.SingleLine);
+            for (float s = size; s > min; s -= 0.5f)
+            {
+                var f = F(s, style);
+                var m = TextRenderer.MeasureText(text, f, wrap ? new Size(Math.Max(1, box.Width), 0) : Size.Empty, flags);
+                if (m.Width <= box.Width && m.Height <= box.Height) return f;
+            }
+            return F(min, style);
+        }
+
         public static void Smooth(Graphics g)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -222,20 +253,61 @@ namespace UI
             return this;
         }
 
-        private void UpdatePadding()
+        private const TextFormatFlags HintFlags = TextFormatFlags.NoPadding | TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl;
+
+        /// <summary>說明文字嘅高度：太長（例如某啲語言）就自動換行。</summary>
+        private int HintHeight(int width)
+        {
+            if (_hint.Length == 0) return 0;
+            var hf = Ui.F(9f);
+            int w = Math.Max(20, width - Ui.S(36));
+            return Math.Max(hf.Height, TextRenderer.MeasureText(_hint, hf, new Size(w, 0), HintFlags).Height);
+        }
+
+        private Padding PaddingFor(int width)
         {
             int top = Ui.S(16);
             if (_title.Length > 0) top += Ui.F(11f, FontStyle.Bold).Height;
-            if (_hint.Length > 0) top += Ui.S(4) + Ui.F(9f).Height;
+            if (_hint.Length > 0) top += Ui.S(4) + HintHeight(width);
             top += _title.Length > 0 || _hint.Length > 0 ? Ui.S(14) : 0;
-            Padding = new Padding(Ui.S(18), top, Ui.S(18), Ui.S(16));
+            return new Padding(Ui.S(18), top, Ui.S(18), Ui.S(16));
+        }
+
+        private void UpdatePadding()
+        {
+            var p = PaddingFor(Width > 0 ? Width : Ui.S(600));
+            if (Padding != p) Padding = p;
+        }
+
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            UpdatePadding();
+            base.OnSizeChanged(e);
+        }
+
+        /// <summary>
+        /// 自動大細嘅文字 / 剔選框：闊過張卡就自動換行（某啲語言句子特別長）。
+        /// </summary>
+        internal static void FitText(Control root, int maxWidth)
+        {
+            foreach (Control c in root.Controls)
+            {
+                if (c is Label { AutoSize: true } or CheckBox { AutoSize: true } or RadioButton { AutoSize: true })
+                {
+                    int cap = Math.Max(Ui.S(120), maxWidth - Ui.S(8));
+                    if (c.MaximumSize.Width != cap) c.MaximumSize = new Size(cap, 0);
+                }
+                else if (c.HasChildren) FitText(c, maxWidth);
+            }
         }
 
         public virtual int MeasureHeight(int width)
         {
-            int inner = Math.Max(10, width - Padding.Horizontal);
+            var pad = PaddingFor(width);
+            int inner = Math.Max(10, width - pad.Horizontal);
+            if (Content != null) FitText(Content, inner);
             int h = Content?.GetPreferredSize(new Size(inner, 0)).Height ?? 0;
-            return Padding.Vertical + h;
+            return pad.Vertical + h;
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -261,8 +333,7 @@ namespace UI
             if (_hint.Length > 0)
             {
                 var hf = Ui.F(9f);
-                TextRenderer.DrawText(g, _hint, hf, new Rectangle(x, y, Math.Max(0, Width - x * 2), hf.Height + 2), Ui.TextDim,
-                    TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+                TextRenderer.DrawText(g, _hint, hf, new Rectangle(x, y, Math.Max(0, Width - x * 2), HintHeight(Width) + 2), Ui.TextDim, HintFlags);
             }
         }
     }
@@ -548,7 +619,9 @@ namespace UI
             }
             // 灰色底嘅掣用主題文字色（日光主題白字會睇唔到）
             var fore = _kind is BtnKind.Primary or BtnKind.Success or BtnKind.Danger ? ForeColor : Ui.Text;
-            TextRenderer.DrawText(g, Text, Font, Rectangle.Round(r), Enabled ? fore : Ui.TextFaint,
+            // 文字太長（某啲語言）：縮細字體放得落為止
+            using var fit = Ui.Shrink(Text, Font, (int)r.Width - Ui.S(10));
+            TextRenderer.DrawText(g, Text, fit ?? Font, Rectangle.Round(r), Enabled ? fore : Ui.TextFaint,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
     }
@@ -861,7 +934,9 @@ namespace UI
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 tx = (int)(ir.Right + Ui.S(10f));
             }
-            TextRenderer.DrawText(g, Text, _active ? Ui.F(10f, FontStyle.Bold) : Font,
+            var nf = _active ? Ui.F(10f, FontStyle.Bold) : Font;
+            using var fit = Ui.Shrink(Text, nf, (int)r.Right - tx - Ui.S(2));
+            TextRenderer.DrawText(g, Text, fit ?? nf,
                 new Rectangle(tx, (int)r.Y, (int)r.Right - tx, (int)r.Height),
                 _active ? Ui.Text : Ui.TextDim, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
         }

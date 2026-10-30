@@ -11,12 +11,12 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v2.5.2";
+    public const string Version = "v0.252";
     /// <summary>
     /// 內部版本編號：每次發佈都要加大（同顯示嘅版本號無關）。自動更新用佢判斷新舊，
     /// 咁顯示嘅版本號以後點改（例如轉做 0.x）都唔會影響更新。發佈時 publish_release.py 會寫入 Release 說明。
     /// </summary>
-    public const int Build = 252;
+    public const int Build = 253;
     public const string Author = "白兔糖v3v";
     /// <summary>程式啟動時間；開頭幾秒當係「啟動緊」，重嘢（例如插件嘅 WebView2）遲啲先做。</summary>
     public static readonly DateTime Started = DateTime.Now;
@@ -210,6 +210,7 @@ internal sealed class MainForm : Form
         AddPage(Lang.T("遠端桌面（測試）"), Tools.RemotePage.Build, "remote", Extensions.Remote);
         AddPage(Lang.T("效能監控"), Tools.PerfHub.Build, "perf", Extensions.Perf);
         AddPage(Lang.T("磁碟空間及健康"), Tools.DiskPage.Build, "disk", Extensions.Disk);
+        AddPage(Lang.T("檔案修復"), Tools.FileRepairPage.Build, "repair", Extensions.Repair);
         // 加咗去工具欄嘅插件
         foreach (var id in Plugins.PluginStore.Pinned.ToList()) AddPluginPage(id);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");
@@ -305,7 +306,29 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>用影片剪輯開檔案（新專案）。</summary>
+    // 右鍵揀咗幾個檔：Windows 每個檔開一次程式，逐個經 pipe 交過嚟；儲埋一齊先開，費事開咗幾個專案
+    private readonly System.Collections.Generic.List<string> _editBuf = new();
+    private System.Windows.Forms.Timer? _editTimer;
+
     private void OpenInEditor(string[] files)
+    {
+        foreach (var f in files) if (!_editBuf.Contains(f, StringComparer.OrdinalIgnoreCase)) _editBuf.Add(f);
+        if (_editTimer == null)
+        {
+            _editTimer = new System.Windows.Forms.Timer { Interval = 700 };
+            _editTimer.Tick += (_, _) =>
+            {
+                _editTimer!.Stop();
+                var all = _editBuf.ToArray();
+                _editBuf.Clear();
+                if (all.Length > 0) OpenInEditorNow(all);
+            };
+        }
+        _editTimer.Stop();
+        _editTimer.Start();
+    }
+
+    private void OpenInEditorNow(string[] files)
     {
         RestoreFromTray();
         if (!Extensions.IsInstalled(Extensions.Editor))

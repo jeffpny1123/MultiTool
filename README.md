@@ -150,6 +150,10 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **每種軌都可以加多條**——按軌名旁的「+」新增文字、影片或音軌（拖曳軌名可調整次序），不同軌可以重疊（例如背景音樂＋音效），上下拖曳可換軌；**影片 2 軌以上＝疊加（子母畫面／圖片）**。拖曳時會吸附其他片段頭尾；Shift + 左鍵可多選，**合併**可把相連片段合成一段。可把影片的聲音**分離音軌**到音訊軌。時間旁亦顯示目前幀數／總幀數。
 - **Open with**: right-click a video or photo in File Explorer → Open with → Video Editor (MultiTool) opens it in a new project (registered for the current user only, removed when the tool is uninstalled).
   **開啟檔案**：在檔案總管右鍵影片或相片 →「開啟檔案」→「影片剪輯 (MultiTool)」，會開新專案並加入檔案（只登記目前使用者，移除工具時會清除）。
+- **Edit with MultiTool**: right-click a video or photo → **Edit with MultiTool** (on Windows 11, under "Show more options"); several selected files go into one project.
+  **使用 MultiTool 編輯**：右鍵影片或相片 →「使用 MultiTool 編輯」（Windows 11 位於「顯示更多選項」），多選的檔案會放入同一個專案。
+- **Export**: choose whether the folder opens after the export finishes (remembered).
+  **匯出**：可選擇匯出完成後是否打開資料夾（會被記住）。
 - **Fade in / out with a colour** at the start and end of each clip, for smooth joins between clips.
   每段片段開頭／結尾可**由顏色淡入、淡出至顏色**（可自選顏色），方便銜接影片。
 - **Aspect ratio** 16:9, 9:16 (Shorts / Reels / TikTok), 1:1, 4:3, 3:4, 4:5, 5:4, 3:2, 2:3, 21:9, 2:1 or a **custom size**; 720p – 4K; 24 / 30 / 60 fps. **Export** MP4, MOV, MKV, AVI, WebM or WMV (H.264 formats can use GPU acceleration), or **audio only** as MP3, WAV, M4A or FLAC. Settings are grouped in collapsible sections.
@@ -204,6 +208,21 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **Ping 監看**：每秒 ping 最多 8 個目標（例如 1.1.1.1、路由器或遊戲伺服器），以走勢圖顯示延遲、封包遺失及抖動；遊戲疊加亦可顯示 Ping。
 - **Game Mode**: one click (or a hotkey) closes the apps you list and switches to the High performance power plan; click again to restore the power plan and reopen the closed apps.
   **遊戲模式**：一鍵（或快捷鍵）關閉你指定的程式並切換至高效能電源計劃；再按一下即還原電源計劃及重新開啟已關閉的程式。
+
+**File Repair 檔案修復** — install it from the Tool library / 於工具庫安裝
+
+- Drop in files that won't open and they're checked and repaired automatically; the repaired copy is saved next to the original (or a chosen folder) with "(已修復)" added to the name — the original is never changed.
+  將無法開啟的檔案拖入即自動檢查及修復；修復後另存一份於原檔旁（或指定資料夾），檔名加上「(已修復)」，不會更改原檔。
+- **Video / audio** (FFmpeg): rebuild the index and timestamps without re-encoding, fix a wrong extension, re-encode damaged files to H.264 / AAC (or always, for players that can't play HEVC / AV1). MP4 / MOV recordings cut off by a crash or power loss (no `moov` index) are rebuilt with **untrunc** from a working reference video recorded on the same device.
+  **影片／聲音**（FFmpeg）：不重新壓縮下重建索引及時間戳、修正副檔名、損壞的檔案重新壓縮為 H.264／AAC（亦可一律轉換，供不支援 HEVC／AV1 的播放器使用）。錄影途中當機或斷電而遺失 `moov` 索引的 MP4／MOV，可選擇同一部裝置錄製的正常影片作參考，以 **untrunc** 重建。
+- **Photos**: JPEG with junk before the header or a missing end, PNG with CRC errors or cut off (the missing rows are filled with grey), wrong extensions; HEIC / WEBP are converted to PNG.
+  **相片**：JPEG 檔頭前有多餘資料或結尾遺失、PNG 校驗碼錯誤或不完整（遺失的行以灰色填補）、副檔名錯誤；HEIC／WEBP 轉為 PNG。
+- **ZIP / Word / Excel / PowerPoint / EPUB**: rebuilt from the surviving local file headers when the central directory is damaged or the file is cut off; incomplete entries are listed.
+  **ZIP／Word／Excel／PowerPoint／EPUB**：中央目錄損壞或檔案不完整時，從殘餘的檔頭重建，並列出不完整的項目。
+- **PDF** (qpdf): rebuild a damaged cross-reference table, strip junk before the header and add a missing end.
+  **PDF**（qpdf）：重建損壞的交叉參照表、移除檔頭前的多餘資料及補回結尾。
+- FFmpeg, qpdf and untrunc are downloaded only when a file needs them, after asking.
+  FFmpeg、qpdf 及 untrunc 只會在需要時經詢問後下載。
 
 **Disk Space & Health 磁碟空間及健康**
 
@@ -285,6 +304,18 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v0.252
+- **Changed: Version numbers** — the version number now uses the 0.xxx format (this release follows v2.5.2); auto update is not affected.
+  **變更：版本號**——版本號改為 0.xxx 格式（此版本接續 v2.5.2），不影響自動更新。
+- **New: File Repair** (Tool library) — drop in videos, audio, photos, Office / ZIP files or PDFs that won't open and a repaired copy is saved next to them.
+  **新增：檔案修復**（工具庫）——將無法開啟的影片、聲音、相片、Office／ZIP 檔或 PDF 拖入，即自動修復並另存一份於原檔旁。
+- **New: Video Editor** — "Edit with MultiTool" in the File Explorer right-click menu (Windows 11: under "Show more options").
+  **新增：影片剪輯**——檔案總管右鍵選單新增「使用 MultiTool 編輯」（Windows 11 位於「顯示更多選項」）。
+- **New: Video Editor** — a checkbox in the export window chooses whether the folder opens after exporting.
+  **新增：影片剪輯**——匯出視窗新增選項，決定匯出完成後是否打開資料夾。
+- **Fixed: Interface** — long text in some languages was cut off; it now wraps or shrinks to fit.
+  **修正：介面**——部分語言的文字過長而顯示不全，現會自動換行或縮小字體。
 
 ### v2.5.2
 - **New: Video Editor** — preview volume control (speaker and slider next to the timeline zoom buttons); it only affects the preview, not the video.
@@ -577,7 +608,7 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 螢幕錄影；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Manager, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗管理、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs`, `PerfExtra.cs` Performance Monitor, Ping, Game Mode 效能監控、Ping 監看、遊戲模式；`ScriptsExtra.cs` script variables, text recognition, notifications, schedule 腳本變數、文字辨識、通知、定時；`Backup.cs` backup & restore 備份及還原；`VideoEditor.cs`, `VideoEditorUi.cs` Video Editor 影片剪輯；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔；`Mail.cs`, `MailUi.cs`, `MailWeb.cs` Email 電子郵件；`Plugins.cs`, `PluginsUi.cs` Workshop 工作坊 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 螢幕錄影；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Manager, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗管理、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs`, `PerfExtra.cs` Performance Monitor, Ping, Game Mode 效能監控、Ping 監看、遊戲模式；`ScriptsExtra.cs` script variables, text recognition, notifications, schedule 腳本變數、文字辨識、通知、定時；`Backup.cs` backup & restore 備份及還原；`VideoEditor.cs`, `VideoEditorUi.cs` Video Editor 影片剪輯；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔；`FileRepair.cs`, `FileRepairUi.cs` File Repair 檔案修復；`Mail.cs`, `MailUi.cs`, `MailWeb.cs` Email 電子郵件；`Plugins.cs`, `PluginsUi.cs` Workshop 工作坊 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
 | `lib/` | Files embedded into `MultiTool.dll` as resources 嵌入 `MultiTool.dll` 的檔案：`webview2/` (Microsoft Edge WebView2 SDK), `codemirror/` (CodeMirror 5) |
 | `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
@@ -643,8 +674,10 @@ Downloaded by the user on demand, not bundled in the executable / 由用戶按�
 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and [OpenAI Whisper](https://github.com/openai/whisper) models — MIT License
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) — MIT License
-- [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the recorder, Instant Replay, Video Editor, Converter and Video Downloader as a separate program / GPL 授權，螢幕錄影、精彩重播、影片剪輯、格式轉換及影片下載以獨立程式方式調用
+- [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the recorder, Instant Replay, Video Editor, Converter, Video Downloader and File Repair as a separate program / GPL 授權，螢幕錄影、精彩重播、影片剪輯、格式轉換、影片下載及檔案修復以獨立程式方式調用
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) — Unlicense, downloaded by Video Downloader / 由影片下載工具下載
+- [qpdf](https://github.com/qpdf/qpdf) — Apache License 2.0, downloaded by File Repair for PDFs / 由檔案修復下載，用於 PDF
+- [untrunc](https://github.com/anthwlock/untrunc) — GPL-2.0, downloaded by File Repair for MP4 / MOV without an index, run as a separate program / 由檔案修復下載，用於遺失索引的 MP4／MOV，以獨立程式方式調用
 - [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD) — Valve's command-line Steam client, downloaded by Game Servers; dedicated servers are downloaded from Steam under each game's own terms / Valve 官方命令列 Steam 用戶端，由遊戲伺服器下載；各專用伺服器從 Steam 下載，受各遊戲條款約束
 - [Qwen3.5](https://huggingface.co/Qwen) models (GGUF by [unsloth](https://huggingface.co/unsloth)) — see each model's license / 請參閱各模型的授權
 
