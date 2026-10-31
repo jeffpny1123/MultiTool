@@ -11,12 +11,12 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v0.252";
+    public const string Version = "v0.2.6";
     /// <summary>
     /// 內部版本編號：每次發佈都要加大（同顯示嘅版本號無關）。自動更新用佢判斷新舊，
     /// 咁顯示嘅版本號以後點改（例如轉做 0.x）都唔會影響更新。發佈時 publish_release.py 會寫入 Release 說明。
     /// </summary>
-    public const int Build = 253;
+    public const int Build = 254;
     public const string Author = "白兔糖v3v";
     /// <summary>程式啟動時間；開頭幾秒當係「啟動緊」，重嘢（例如插件嘅 WebView2）遲啲先做。</summary>
     public static readonly DateTime Started = DateTime.Now;
@@ -40,6 +40,8 @@ internal static class Program
             if (e.ExceptionObject is Exception ex) AppPaths.LogError("Fatal", ex);
         };
         var argv = Environment.GetCommandLineArgs();
+        // 自動更新：新版自己換走舊 exe 再重開（唔開介面、唔理單一實例）
+        if (Updater.TryApply(argv)) return;
         // 右鍵影片 / 相片 →「開啟檔案」→ 影片剪輯：--edit 檔案
         var edit = Video.EdShell.EditArgs(argv);
         // 只准開一個：已經開咗就叫嗰個彈出嚟（或者交檔案俾佢開），自己即刻走
@@ -51,6 +53,7 @@ internal static class Program
             return;
         }
         PendingEdit = edit;
+        Updater.CleanupLeftover();
         bool startup = argv.Any(a => a == "--startup");
         Application.Run(new MainForm(startup && edit == null));
     }
@@ -89,8 +92,37 @@ internal sealed class MainForm : Form
     private NotifyIcon? _tray;
     private bool _exiting;
 
+    // ---- 俾插件（PluginMods.cs）用：搵頁、而家喺邊頁 ----
+    internal static MainForm? Instance { get; private set; }
+    internal static event Action<string>? PageShown;
+    internal Control Sidebar => _sidebar;
+    internal Control? TitleBarCtl => _titleBar;
+    private TitleBar? _titleBar;
+    internal Control Content => _content;
+    internal string? CurrentKey => _current >= 0 ? _pageKeys[_current].Key : null;
+    /// <summary>某頁嘅根控件（未整就 null）。</summary>
+    internal Control? PageRoot(string key)
+    {
+        int i = _pageKeys.FindIndex(k => k.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+        return i >= 0 ? _pages[i].Page : null;
+    }
+    /// <summary>呢個控件係咪某頁嘅根；係就回傳 key。</summary>
+    internal string? PageKeyOf(Control c)
+    {
+        for (int i = 0; i < _pages.Count; i++) if (ReferenceEquals(_pages[i].Page, c)) return _pageKeys[i].Key;
+        return null;
+    }
+    /// <summary>全部頁：(key, 名, 用緊)。</summary>
+    internal System.Collections.Generic.List<(string Key, string Name, bool Shown)> PageList()
+    {
+        var l = new System.Collections.Generic.List<(string, string, bool)>();
+        for (int i = 0; i < _pages.Count; i++) l.Add((_pageKeys[i].Key, _pages[i].Nav.Text, PageVisible(i)));
+        return l;
+    }
+
     public MainForm(bool startup = false)
     {
+        Instance = this;
         _startup = startup;
         Text = Program.AppName;
         AutoScaleMode = AutoScaleMode.None;
@@ -119,6 +151,8 @@ internal sealed class MainForm : Form
                 else OpenInEditor(files);
             }));
             if (Program.PendingEdit is { } pe) { Program.PendingEdit = null; BeginInvoke(() => OpenInEditor(pe)); }
+            // 啟用咗嘅插件（改介面）：等程式開好先行
+            _ = StartModsAsync();
         };
         FormClosed += (_, _) => Scripts.ShareService.Stop();
         ResizeEnd += (_, _) =>
@@ -141,6 +175,10 @@ internal sealed class MainForm : Form
         ver.Location = new Point(Ui.S(22), Ui.S(34));
         _sidebar.Controls.Add(title);
         _sidebar.Controls.Add(ver);
+        // 程式名同版本號：插件唔准改
+        Plugins.ModEngine.Protect(title);
+        Plugins.ModEngine.Protect(ver);
+        Plugins.ModEngine.Protect(this, "Text");
 
         // 左下角：開發者
         var by = Ui.Text_(Lang.T("開發者：") + Program.Author, Ui.TextFaint, Ui.F(9f), new Padding(0));
@@ -166,12 +204,30 @@ internal sealed class MainForm : Form
         lang.MouseLeave += (_, _) => lang.ForeColor = Ui.TextDim;
         _sidebar.Controls.Add(lang);
         // 左下角：日光 / 夜間主題（喺語言上面）
+        // 左下角：主題下拉選單（日光 / 夜間 / 插件加嘅主題）
         var theme = new Label
         {
-            Text = Ui.Light ? Lang.T("🌙 夜間主題") : Lang.T("☀ 日光主題"), AutoSize = true, ForeColor = Ui.TextDim, Font = Ui.F(9f),
-            Cursor = Cursors.Hand, BackColor = Ui.Panel
+            Text = Lang.T("主題：") + ThemeStore.NameOf(ThemeStore.Active?.Id ?? (Ui.Light ? "light" : "dark")) + " ▾", AutoSize = true, ForeColor = Ui.TextDim, Font = Ui.F(9f),
+            Cursor = Cursors.Hand, BackColor = Ui.Panel, Name = "themeMenu"
         };
-        theme.Click += (_, _) => SwitchTheme(!Ui.Light);
+        theme.Click += (_, _) =>
+        {
+            var tm = new ContextMenuStrip();
+            try { tm.Renderer = DarkTheme.MenuRenderer(); } catch { }
+            tm.BackColor = Ui.CardHi;
+            tm.ForeColor = Ui.Text;
+            string cur = ThemeStore.Active?.Id ?? (Ui.Light ? "light" : "dark");
+            foreach (var (id, name) in ThemeStore.All())
+            {
+                if (id.StartsWith("mod:") && tm.Items.Count == 2) tm.Items.Add(new ToolStripSeparator());
+                string tid = id;
+                var it = new ToolStripMenuItem(name) { Checked = id == cur, ForeColor = Ui.Text };
+                it.Click += (_, _) => { if (tid != cur) SwitchTheme(tid); };
+                tm.Items.Add(it);
+            }
+            tm.Closed += (_, _) => BeginInvoke(() => tm.Dispose());
+            tm.Show(theme, new Point(0, -tm.PreferredSize.Height));
+        };
         theme.MouseEnter += (_, _) => theme.ForeColor = Ui.Text;
         theme.MouseLeave += (_, _) => theme.ForeColor = Ui.TextDim;
         _sidebar.Controls.Add(theme);
@@ -235,9 +291,11 @@ internal sealed class MainForm : Form
 
         Controls.Add(_content);
         Controls.Add(_sidebar);
-        Controls.Add(new TitleBar(this, _sidebar.Width)); // 自己畫嘅標題列（最後加 = 最先 dock，橫跨成個頂）
+        Controls.Add(_titleBar = new TitleBar(this, _sidebar.Width)); // 自己畫嘅標題列（最後加 = 最先 dock，橫跨成個頂）
         // 開頭就整晒所有（已安裝嘅）頁（咁各頁嘅快捷鍵唔使打開過都用得）
         for (int i = _pages.Count - 1; i >= 0; i--) if (PageVisible(i)) Show(i);
+        // 插件主題有背景圖：鋪喺成個視窗底
+        try { Wallpaper.Attach(this, _sidebar); } catch (Exception ex) { AppPaths.LogError("主題背景圖", ex); }
     }
 
     // ---------- 系統匣 ----------
@@ -306,6 +364,13 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>用影片剪輯開檔案（新專案）。</summary>
+    private async System.Threading.Tasks.Task StartModsAsync()
+    {
+        await System.Threading.Tasks.Task.Delay(1500);
+        try { if (Extensions.IsInstalled(Extensions.Plugins)) Plugins.ModHost.StartEnabled(); }
+        catch (Exception ex) { AppPaths.LogError("開插件", ex); }
+    }
+
     // 右鍵揀咗幾個檔：Windows 每個檔開一次程式，逐個經 pipe 交過嚟；儲埋一齊先開，費事開咗幾個專案
     private readonly System.Collections.Generic.List<string> _editBuf = new();
     private System.Windows.Forms.Timer? _editTimer;
@@ -441,12 +506,12 @@ internal sealed class MainForm : Form
     }
 
 
-    /// <summary>換主題：記低，再重新啟動程式。</summary>
-    private void SwitchTheme(bool light)
+    /// <summary>換主題（light / dark / mod:插件/主題）：記低，再重新啟動程式。</summary>
+    internal void SwitchTheme(string id)
     {
         if (MessageBox.Show(this, Lang.T("切換主題需要重新啟動程式，運行中嘅腳本會停止。而家重新啟動？"), Program.AppName,
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        Ui.SaveTheme(light);
+        ThemeStore.SetCurrent(id);
         try
         {
             string exe = Environment.ProcessPath ?? Application.ExecutablePath;
@@ -778,8 +843,8 @@ internal sealed class MainForm : Form
             }
             page.Dock = DockStyle.Fill;
             page.Visible = false;
+            _pages[index] = (p.Nav, p.Build, page); // 先記低再加入：插件喺 ControlAdded 已經認得 @key
             _content.Controls.Add(page);
-            _pages[index] = (p.Nav, p.Build, page);
             p = _pages[index];
         }
         for (int i = 0; i < _pages.Count; i++)
@@ -788,6 +853,7 @@ internal sealed class MainForm : Form
             if (_pages[i].Page != null) _pages[i].Page!.Visible = i == index;
         }
         _current = index;
+        try { PageShown?.Invoke(_pageKeys[index].Key); } catch (Exception ex) { AppPaths.LogError("插件 page 事件", ex); }
     }
 
     /// <summary>首頁：簡單介紹各個功能，撳「前往」直接跳去。</summary>
@@ -896,6 +962,7 @@ internal sealed class MainForm : Form
 
 
         var card = new CardPanel { Title = Program.AppName + " " + Program.Version, Hint = Lang.T("開發者：") + Program.Author + Lang.T("。設定同圖片全部存喺 exe 隔籬嘅 data 資料夾。") };
+        Plugins.ModEngine.Protect(card); // 程式名同版本號：插件唔准改
         var row = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, WrapContents = false };
         var update = new FancyButton { Text = Lang.T("檢查更新"), Kind = BtnKind.Primary };
         update.Size = update.GetPreferredSize(Size.Empty);
@@ -1077,7 +1144,7 @@ internal sealed class TitleBar : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Ui.Bg);
+        Ui.Clear(g, this, Ui.Bg);
         using (var side = new SolidBrush(Ui.Panel)) g.FillRectangle(side, 0, 0, _sidebarW, Height);
 
         for (int i = 0; i < 3; i++)
@@ -1192,7 +1259,7 @@ internal sealed class NavHost : Panel
 
     protected override void OnPaint(PaintEventArgs e)
     {
-        e.Graphics.Clear(BackColor);
+        Ui.Clear(e.Graphics, this, BackColor);
         if (_offset < 0 || _total <= _view || _view <= 0) return;
         Ui.Smooth(e.Graphics);
         float h = Math.Max(Ui.S(24f), Height * (float)_view / _total);

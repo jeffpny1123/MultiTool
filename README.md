@@ -114,6 +114,12 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   安全：插件只可連接 manifest 內列明的網站，運行前會列出權限並須同意，亦無法存取其他檔案或執行程式。
 - **Add to sidebar**: a plugin gets its own sidebar item and runs whenever MultiTool is open. Plugins follow the light / dark theme and can be exported / imported as `.mtplugin` files.
   **加到工具欄**：插件在左側工具欄有自己的一格，開啟 MultiTool 時便會運行。插件會跟隨日光／深色主題，並可匯出／匯入為 `.mtplugin` 檔。
+- **New ▾** offers **New tool** (a page of its own, as above), **New plugin** and **Import**.
+  **新增 ▾** 可選擇**新工具**（有自己的介面，即上述的工具）、**新插件**及**匯入**。
+- **Plugins** (`"type": "mod"`) have no page of their own: `mod.js` runs in the background and changes how MultiTool itself looks — **themes** with `mt.app.addTheme` (all colours, a background image across the whole window, a font file, card transparency; e.g. an anime theme), plus the sidebar, title bar, home page and settings page with `mt.ui.*` (override text, colours, fonts, sizes or images, hide elements, add buttons / pictures / HTML panels, listen for clicks or page changes). Elements are picked with CSS-like selectors (`@sidebar Label[key="多功能工具"]`); **🔍 Pick element** copies the selector of whatever you Ctrl + click. Existing tools' pages and windows can't be changed — write a new tool for new features.
+  **插件**（`"type": "mod"`）沒有自己的介面：`mod.js` 在背景運行，修改 MultiTool 本身的外觀——以 `mt.app.addTheme` 加入**主題**（全部顏色、鋪滿整個視窗的背景圖、字型檔、卡片透明度，例如動漫主題），以及用 `mt.ui.*` 修改側欄、標題列、首頁及設定頁（override 文字、顏色、字型、大小或圖片、隱藏元件、加入按鈕／圖片／HTML 面板，以及監聽點擊或切換頁面）。元件以類似 CSS 的 selector 選擇（`@sidebar Label[key="多功能工具"]`）；**🔍 選擇元件**會複製你 Ctrl + 按下的元件的 selector。現有工具的頁面及視窗不可修改——如需新功能，請編寫新工具。
+- Plugin themes appear in the **Theme** menu at the bottom left of the sidebar (Light / Dark / plugin themes); choosing one restarts MultiTool. `mt.ui` changes are restored as soon as a plugin is turned off or reloaded, and also apply to elements created later. When several plugins change the same thing, the later one in the Workshop order wins (↑ / ↓ to reorder). Plugins must be turned on (**⏻ Turn on**) and need the "change MultiTool's look" permission; password boxes can't be read or changed.
+  插件主題會出現在左側欄底部的**主題**選單（日光／夜間／插件主題），選擇後會重新啟動。`mt.ui` 的修改在插件停用或重新載入時會即時還原，之後才建立的元件亦會自動套用。多個插件修改同一樣東西時，按工作坊的次序，排後面的會蓋過前面的（可按 ↑／↓ 調整）。插件須**⏻ 啟用**並同意「修改 MultiTool 的外觀」權限；密碼欄不能讀取或修改。
 
 **Screen Recorder 螢幕錄影** — install it from the Tool library / 於工具庫安裝
 
@@ -291,6 +297,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **網上搜尋**：Claude、ChatGPT 及 Gemini 可上網搜尋新聞、天氣、價格等最新資料。
 - **Folder per chat**: connect a folder to a chat and the AI can write, run and debug code, and create / edit / delete files inside that folder. Without a folder the AI can only chat and cannot run commands or modify your files.
   **每個對話可連接資料夾**：連接後，AI 可於該資料夾內編寫、執行及除錯程式，並建立／修改／刪除檔案。未連接資料夾時，AI 只可對話，不能執行指令或修改你的檔案。
+- **Attachments**: send images and documents (PDF, Word, Excel, PowerPoint, text and code files) together with your message — click 📎, drag files in, or paste a screenshot with Ctrl+V (up to 10 files, 30 MB each). Also works in the script, game server and Workshop AI helpers. Word / Excel / PowerPoint text is extracted so every AI can read it; the local AI can read text files but not images.
+  **附件**：可連同訊息一併傳送圖片及文件（PDF、Word、Excel、PowerPoint、文字及程式碼檔）——按 📎、把檔案拖入，或按 Ctrl+V 貼上截圖（最多 10 個，每個 30 MB）。腳本、遊戲伺服器及工作坊的 AI 助手亦適用。Word／Excel／PowerPoint 會另外抽出文字，令每個 AI 都讀得到；本地 AI 可讀文字檔，但無法查看圖片。
 
 **Voice chat 語音對話** — set up under **AI Assistant → Voice settings** / 於「AI 助手 → 語音設定」設定
 
@@ -304,6 +312,18 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v0.2.6
+- **New: Workshop plugins** — "+ New ▾" now offers New tool / New plugin / Import. Plugins change how MultiTool itself looks: themes (all colours, a background image across the window, a font, card transparency), plus the sidebar, title bar, home and settings pages. Existing tools can't be changed; the app name and version number are protected.
+  **新增：工作坊插件**——「+ 新增 ▾」可選新工具／新插件／匯入。插件可修改 MultiTool 本身的外觀：主題（全部顏色、鋪滿視窗的背景圖、字型、卡片透明度），以及側欄、標題列、首頁及設定頁。現有工具不可修改，程式名稱及版本號亦受保護。
+- **New: Theme menu** — the bottom-left theme switch is now a menu with Light, Dark and themes added by plugins.
+  **新增：主題選單**——左下角改為主題選單，可選日光、夜間及插件加入的主題。
+- **New: AI attachments** — send images and documents (PDF, Word, Excel, PowerPoint, text) together with your message in AI Assistant and the AI helpers (📎, drag and drop, or Ctrl+V).
+  **新增：AI 附件**——AI 助手及各 AI 幫手可連同訊息傳送圖片及文件（PDF、Word、Excel、PowerPoint、文字檔）（📎、拖放或 Ctrl+V）。
+- **New: Video Editor** — the timeline zooms out much further, with 1 / 2 / 5 / 10-minute marks.
+  **新增：影片剪輯**——時間軸可縮得更小，刻度可達 1／2／5／10 分鐘。
+- **Changed: Auto update** — the new version now replaces the old one by itself instead of through PowerShell, which should cause fewer antivirus false alarms.
+  **變更：自動更新**——改由新版自行替換舊版，不再經 PowerShell，減少被防毒軟件誤報。
 
 ### v0.252
 - **Changed: Version numbers** — the version number now uses the 0.xxx format (this release follows v2.5.2); auto update is not affected.
@@ -608,7 +628,7 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 螢幕錄影；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Manager, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗管理、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs`, `PerfExtra.cs` Performance Monitor, Ping, Game Mode 效能監控、Ping 監看、遊戲模式；`ScriptsExtra.cs` script variables, text recognition, notifications, schedule 腳本變數、文字辨識、通知、定時；`Backup.cs` backup & restore 備份及還原；`VideoEditor.cs`, `VideoEditorUi.cs` Video Editor 影片剪輯；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔；`FileRepair.cs`, `FileRepairUi.cs` File Repair 檔案修復；`Mail.cs`, `MailUi.cs`, `MailWeb.cs` Email 電子郵件；`Plugins.cs`, `PluginsUi.cs` Workshop 工作坊 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiFiles.cs` chat attachments 對話附件；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 螢幕錄影；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Manager, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗管理、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Downloader.cs` Video Downloader 影片下載；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs`, `PerfExtra.cs` Performance Monitor, Ping, Game Mode 效能監控、Ping 監看、遊戲模式；`ScriptsExtra.cs` script variables, text recognition, notifications, schedule 腳本變數、文字辨識、通知、定時；`Backup.cs` backup & restore 備份及還原；`VideoEditor.cs`, `VideoEditorUi.cs` Video Editor 影片剪輯；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔；`FileRepair.cs`, `FileRepairUi.cs` File Repair 檔案修復；`Mail.cs`, `MailUi.cs`, `MailWeb.cs` Email 電子郵件；`Plugins.cs`, `PluginsUi.cs`, `PluginMods.cs` Workshop and plugins 工作坊及插件；`Themes.cs` themes and background image 主題及背景圖 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
 | `lib/` | Files embedded into `MultiTool.dll` as resources 嵌入 `MultiTool.dll` 的檔案：`webview2/` (Microsoft Edge WebView2 SDK), `codemirror/` (CodeMirror 5) |
 | `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
@@ -658,8 +678,13 @@ The icon is in `assets/` (`icon.png`, `MultiTool.ico`). To change it, edit and r
    於公開的 **MultiTool-Releases** repo 建立 Release（此原始碼 repo 為私人；自動更新從該處讀取）。**標籤須與版本號相同**（`v1.2`），附上 `MultiTool.exe` 或包含該檔案的壓縮檔，並設為 **latest**。
 4. Existing users are updated automatically the next time they launch the app.
    現有用戶下次啟動程式時便會自動更新。
+   The new version replaces the old exe itself (`MultiTool.update.exe --apply-update`): it waits for the old one to close, copies itself over `MultiTool.exe` and starts it again — no PowerShell or cmd involved.
+   新版會自行替換舊 exe（`MultiTool.update.exe --apply-update`）：等舊版關閉後，將自己複製為 `MultiTool.exe` 再重新開啟，不經 PowerShell 或 cmd。
    The updater compares the `<!-- build: N -->` marker in the release notes (added automatically by `tools/publish_release.py draft`) with `Build`, so the displayed version number can be changed freely (e.g. to `v0.x`). Releases without the marker fall back to comparing version numbers.
    自動更新會比較 Release 說明中的 `<!-- build: N -->`（由 `tools/publish_release.py draft` 自動加入）與 `Build`，因此顯示的版本號可以自由更改（例如改為 `v0.x`）；沒有此標記的 Release 則照舊比較版本號。
+
+5. Submit the new zip to Microsoft as a possible false positive (free): [Microsoft Security Intelligence – Submit a file](https://www.microsoft.com/en-us/wdsi/filesubmission) → *Software developer* → *Incorrectly detected*. Each release has a new file hash, so submit every release.
+   將新版 zip 提交給 Microsoft 檢查誤報（免費）：於上述網站選擇 *Software developer* → *Incorrectly detected*。每個版本的檔案雜湊都不同，所以每次發佈都要提交。
 
 ---
 

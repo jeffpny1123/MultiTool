@@ -23,6 +23,8 @@ namespace MultiTool.Plugins;
 //  • 喺 WebView2 入面行（https://<id>.plugin.mt/），淨係可以經 mt.* API 做嘢
 //  • 權限喺 manifest 寫明，第一次行（或者權限改咗）要用家同意
 //  • 網絡：只准連 manifest "net" 入面嘅網站；其他一律擋
+//  • 兩種：「工具」（type: tool，有自己介面，可以加到左側工具欄）
+//         「插件」（type: mod，冇自己介面，喺背景行 mod.js，用 mt.ui.* 以 override 方式改 MultiTool 原有介面，見 PluginMods.cs）
 // =====================================================================
 
 /// <summary>manifest.json</summary>
@@ -31,7 +33,20 @@ internal sealed class PluginManifest
     public string Id = "", Name = "", Version = "1.0.0", Author = "", Description = "", Icon = "🧩", Entry = "ui.html";
     public bool Background;
     public List<string> Net = new();
-    public bool Notify, Clipboard, Secrets, Ai, Scripts;
+    public bool Notify, Clipboard, Secrets, Ai, Scripts, Ui;
+    /// <summary>"tool" = 工具（有自己介面）；"mod" = 插件（改原有介面）。</summary>
+    public string Type = "tool";
+    /// <summary>插件主要改邊個工具（頁 key，例如 "editor"；"" = 成個程式），淨係顯示 / 俾 AI 參考用。</summary>
+    public string Target = "";
+    public bool IsMod => Type == "mod";
+
+    /// <summary>同一個插件、另一個入口頁（插件加落介面嘅 HTML 面板用）。</summary>
+    public PluginManifest WithEntry(string entry)
+    {
+        var c = (PluginManifest)MemberwiseClone();
+        c.Entry = entry;
+        return c;
+    }
 
     public static PluginManifest Parse(string id, string json)
     {
@@ -44,16 +59,19 @@ internal sealed class PluginManifest
         m.Author = S("author", "");
         m.Description = S("description", "");
         m.Icon = S("icon", "🧩");
-        m.Entry = S("entry", "ui.html");
+        m.Type = S("type", "tool").Trim().ToLowerInvariant() == "mod" ? "mod" : "tool";
+        m.Target = S("target", "").Trim();
+        m.Entry = S("entry", m.IsMod ? "mod.js" : "ui.html");
         m.Background = o["background"] is JsonValue bv && bv.TryGetValue<bool>(out var b) && b;
         if (o["permissions"] is JsonObject p)
         {
             bool B(string k) => p[k] is JsonValue x && x.TryGetValue<bool>(out var y) && y;
-            m.Notify = B("notify"); m.Clipboard = B("clipboard"); m.Secrets = B("secrets"); m.Ai = B("ai"); m.Scripts = B("scripts");
+            m.Notify = B("notify"); m.Clipboard = B("clipboard"); m.Secrets = B("secrets"); m.Ai = B("ai"); m.Scripts = B("scripts"); m.Ui = B("ui");
             if (p["net"] is JsonArray arr)
                 foreach (var n in arr) if (n is JsonValue nv && nv.TryGetValue<string>(out var h) && h.Trim().Length > 0) m.Net.Add(h.Trim().ToLowerInvariant());
         }
-        if (m.Entry.Contains("..") || Path.IsPathRooted(m.Entry)) m.Entry = "ui.html";
+        if (m.Entry.Contains("..") || Path.IsPathRooted(m.Entry)) m.Entry = m.IsMod ? "mod.js" : "ui.html";
+        if (!m.IsMod) m.Ui = false; // 改介面淨係插件先用得
         return m;
     }
 
@@ -69,12 +87,13 @@ internal sealed class PluginManifest
         if (Secrets) l.Add((Lang.T("加密儲存密碼 / API key"), false));
         if (Ai) l.Add((Lang.T("用你嘅 AI（Claude / ChatGPT / Gemini）"), false));
         if (Scripts) l.Add((Lang.T("睇同埋開始「我的腳本」（腳本會控制滑鼠鍵盤）"), true));
+        if (Ui) l.Add((Lang.T("改 MultiTool 嘅外觀（主題、背景、側欄、首頁、設定；讀到呢啲位置嘅文字、可以撳掣）"), true));
         return l;
     }
 
     /// <summary>權限指紋：改咗就要重新同意。</summary>
     public string PermKey() =>
-        string.Join("|", Net.OrderBy(x => x)) + $";{Background};{Notify};{Clipboard};{Secrets};{Ai};{Scripts}";
+        string.Join("|", Net.OrderBy(x => x)) + $";{Background};{Notify};{Clipboard};{Secrets};{Ai};{Scripts}" + (Ui ? ";ui" : "");
 }
 
 internal static class PluginStore
@@ -159,9 +178,24 @@ internal static class PluginStore
         return id;
     }
 
+    /// <summary>新插件（改原有介面）：manifest + mod.js。</summary>
+    public static string CreateMod(string name, string target)
+    {
+        string id = MakeId(name);
+        string dir = PathOf(id);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "manifest.json"), PluginTemplates.ModManifest(name, target));
+        File.WriteAllText(Path.Combine(dir, "mod.js"), PluginTemplates.ModJs);
+        Notify();
+        return id;
+    }
+
     public static void Delete(string id)
     {
         PluginRuntime.Stop(id);
+        ModHost.Stop(id);
+        ModStore.Remove(id);
+        UI.ThemeStore.RemoveMod(id);
         try { Directory.Delete(PathOf(id), true); } catch (Exception ex) { AppPaths.LogError("刪插件", ex); }
         try { Directory.Delete(DataDir(id), true); } catch { }
         Notify();
@@ -275,7 +309,11 @@ internal sealed class PluginWeb
         wv.NavigationStarting += (_, e) =>
         {
             string u = e.Uri ?? "";
-            if (u.StartsWith(w._origin, StringComparison.OrdinalIgnoreCase) || u.StartsWith("about:", StringComparison.OrdinalIgnoreCase)) return;
+            if (u.StartsWith(w._origin, StringComparison.OrdinalIgnoreCase) || u.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
+            {
+                if (u.StartsWith(w._origin, StringComparison.OrdinalIgnoreCase)) w.Navigating?.Invoke(); // 重新載入：清走舊 override
+                return;
+            }
             e.Cancel = true;
             OpenExternal(u);
         };
@@ -293,6 +331,13 @@ internal sealed class PluginWeb
                     string rel = Uri.UnescapeDataString(new Uri(u).AbsolutePath.TrimStart('/'));
                     string root = Path.GetFullPath(PluginStore.PathOf(w._m.Id)) + Path.DirectorySeparatorChar;
                     string p = Path.GetFullPath(Path.Combine(root, rel.Length == 0 ? w._m.Entry : rel));
+                    // 插件（mod）：冇自己介面，自動整一頁空白 HTML 載入 mod.js
+                    if (rel == "__mod__.html")
+                    {
+                        string html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body><script src=\"" + Uri.EscapeDataString(w._m.Entry).Replace("%2F", "/") + "\"></script></body></html>";
+                        e.Response = env.CreateWebResourceResponse(new MemoryStream(Encoding.UTF8.GetBytes(html)), 200, "OK", "Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store");
+                        return;
+                    }
                     if (p.StartsWith(root, StringComparison.OrdinalIgnoreCase) && File.Exists(p))
                     {
                         var bytes = File.ReadAllBytes(p);
@@ -318,17 +363,34 @@ internal sealed class PluginWeb
             string json;
             try { json = e.WebMessageAsJson; } catch { return; }
             if (!e.Source.StartsWith(w._origin, StringComparison.OrdinalIgnoreCase)) return;
-            var reply = await PluginBridge.HandleAsync(w._m, json, host, (lvl, t) => w.Log?.Invoke(lvl, t));
+            var reply = await PluginBridge.HandleAsync(w._m, json, host, (lvl, t) => w.Log?.Invoke(lvl, t), w.Post);
             if (reply != null) try { wv.PostWebMessageAsJson(reply); } catch { }
         };
-        wv.Navigate(w._origin + m.Entry);
+        wv.Navigate(w._origin + w.Page);
         return w;
+    }
+
+    /// <summary>重新載入 / 轉頁之前（插件要清走舊嘅 override）。</summary>
+    public Action? Navigating;
+
+    /// <summary>入口頁：插件（mod）用自動整嘅空白頁載入 mod.js。</summary>
+    private string Page => _m.IsMod && _m.Entry.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ? "__mod__.html" : _m.Entry;
+
+    /// <summary>主動傳嘢俾頁面（mt.ui 事件）。</summary>
+    public void Post(string json)
+    {
+        try
+        {
+            if (_host.InvokeRequired) _host.BeginInvoke(() => Post(json));
+            else _ctl.CoreWebView2.PostWebMessageAsJson(json);
+        }
+        catch { }
     }
 
     public void Reload(PluginManifest m)
     {
         _m = m;
-        try { _ctl.CoreWebView2.Navigate(_origin + m.Entry + "?t=" + DateTime.Now.Ticks); } catch { }
+        try { _ctl.CoreWebView2.Navigate(_origin + Page + "?t=" + DateTime.Now.Ticks); } catch { }
     }
 
     public void OpenDevTools() { try { _ctl.CoreWebView2.OpenDevToolsWindow(); } catch { } }
@@ -367,7 +429,7 @@ internal static class PluginBridge
         return false;
     }
 
-    public static async Task<string?> HandleAsync(PluginManifest m, string json, Control ui, Action<string, string> log)
+    public static async Task<string?> HandleAsync(PluginManifest m, string json, Control ui, Action<string, string> log, Action<string>? post = null)
     {
         JsonObject msg;
         try { msg = JsonNode.Parse(json) as JsonObject ?? new JsonObject(); } catch { return null; }
@@ -383,7 +445,9 @@ internal static class PluginBridge
         string Arg(int i) => i < args.Count && args[i] is JsonValue v ? (v.TryGetValue<string>(out var s) ? s : v.ToJsonString()) : "";
         try
         {
-            JsonNode? result = await CallAsync(m, method, args, Arg, ui);
+            JsonNode? result = method.StartsWith("ui.") || method.StartsWith("app.")
+                ? OnUi(ui, () => { Need(m.IsMod && m.Ui, "ui"); return ModEngine.Call(m, method, args, post); })
+                : await CallAsync(m, method, args, Arg, ui);
             return new JsonObject { ["__mt"] = 1, ["id"] = id, ["ok"] = true, ["result"] = result }.ToJsonString();
         }
         catch (Exception ex)
@@ -670,7 +734,12 @@ internal static class PluginBridgeJs
   w.addEventListener('message', e => {
     const m = e.data;
     if (m && m.__mt) { const p = pend[m.id]; if (!p) return; delete pend[m.id]; m.ok ? p.res(m.result) : p.rej(new Error(m.error)); }
+    else if (m && m.__mtev) { const f = cbs[m.cb]; if (f) { try { f(m.data); } catch (err) { console.error(err); } } }
   });
+  // mt.ui 事件 callback
+  let cbSeq = 0; const cbs = {};
+  const cb = f => { if (typeof f !== 'function') return 0; const id = ++cbSeq; cbs[id] = f; return id; };
+  const spec = o => { const r = {}; for (const k in (o || {})) { const v = o[k]; if (typeof v === 'function') r['__cb_' + k] = cb(v); else r[k] = v; } return r; };
   const call = (method, args) => new Promise((res, rej) => { const id = ++seq; pend[id] = { res, rej }; w.postMessage({ __mt: 1, id, method, args: args || [] }); });
   const fmt = a => a.map(x => typeof x === 'string' ? x : (x instanceof Error ? (x.stack || x.message) : (() => { try { return JSON.stringify(x); } catch { return String(x); } })())).join(' ');
   const send = (lvl, a) => { try { w.postMessage({ __mtlog: 1, lvl, text: fmt(a) }); } catch {} };
@@ -694,14 +763,31 @@ internal static class PluginBridgeJs
     },
     open: url => call('open', [url]),
     ai: { ask: p => call('ai.ask', [p]) },
-    scripts: { list: () => call('scripts.list'), run: n => call('scripts.run', [n]) }
+    scripts: { list: () => call('scripts.list'), run: n => call('scripts.run', [n]) },
+    ui: {
+      override: (sel, props) => call('ui.override', [sel, props || {}]),
+      hide: sel => call('ui.override', [sel, { visible: false }]),
+      add: o => call('ui.add', [spec(o)]),
+      on: (event, sel, f) => { if (typeof sel === 'function') { f = sel; sel = ''; } return call('ui.on', [event, sel || '', cb(f)]); },
+      remove: id => call('ui.remove', [id]),
+      reset: () => call('ui.reset'),
+      query: sel => call('ui.query', [sel]),
+      tree: (sel, depth) => call('ui.tree', [sel || '@main', depth || 6]),
+      click: sel => call('ui.click', [sel]),
+      setValue: (sel, v) => call('ui.setValue', [sel, v])
+    },
+    app: {
+      page: () => call('app.page'), pages: () => call('app.pages'), open: key => call('app.open', [key]),
+      addTheme: t => call('app.addTheme', [t || {}]), removeTheme: id => call('app.removeTheme', [id]),
+      themes: () => call('app.themes'), useTheme: id => call('app.useTheme', [id])
+    }
   };
 })();
 """;
 }
 
 /// <summary>新插件範本 + 俾 AI 睇嘅 API 說明。</summary>
-internal static class PluginTemplates
+internal static partial class PluginTemplates
 {
     public static string Manifest(string name) => "{\n" +
         "  \"name\": " + JsonSerializer.Serialize(name) + ",\n" +
@@ -1064,7 +1150,19 @@ internal sealed class PluginView : Panel
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private async Task<object> Create() => await PluginWeb.CreateAsync(this, Manifest, Dev, (l, t) => BeginInvokeLog(l, t));
+    private async Task<object> Create()
+    {
+        var w = await PluginWeb.CreateAsync(this, Manifest, Dev, (l, t) => BeginInvokeLog(l, t));
+        w.Navigating = () => Navigating?.Invoke();
+        return w;
+    }
+
+    /// <summary>頁面重新載入（插件：清走佢舊嘅 override）。</summary>
+    public event Action? Navigating;
+
+    /// <summary>傳 JSON 俾頁面（mt.ui 事件）。</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public void Post(string json) { if (_web is PluginWeb w) w.Post(json); }
 
     private void BeginInvokeLog(string l, string t)
     {

@@ -202,7 +202,7 @@ internal sealed class Toast : Form
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Ui.Panel);
+        Ui.Clear(g, this, Ui.Panel);
         using (var pen = new Pen(Ui.Border)) g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
         using (var b = new SolidBrush(_color)) g.FillRectangle(b, 0, 0, Ui.S(4), Height);
         TextRenderer.DrawText(g, _text, Ui.F(10.5f, FontStyle.Bold), new Rectangle(Ui.S(16), 0, Width - Ui.S(24), Height), Ui.Text,
@@ -309,7 +309,7 @@ internal sealed class KeyCaptureBox : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Field.BackFor(this));
+        Ui.Clear(g, this, Field.BackFor(this));
         Ui.Smooth(g);
         var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
         using (var path = Ui.Round(r, Ui.S(7f)))
@@ -1050,7 +1050,7 @@ internal sealed class ClipPopup : Form
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Ui.Panel);
+        Ui.Clear(g, this, Ui.Panel);
         using (var pen = new Pen(Ui.Border)) g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
         TextRenderer.DrawText(g, Lang.T("剪貼簿紀錄（撳 1-9 貼上，Esc 關閉）"), Ui.F(9f), new Rectangle(Ui.S(12), 0, Width, Ui.S(30)), Ui.TextDim,
             TextFormatFlags.VerticalCenter);

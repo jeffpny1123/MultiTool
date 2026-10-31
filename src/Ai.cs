@@ -147,7 +147,8 @@ internal abstract class AiProvider
     public abstract Task<Auth> AuthAsync(string exe);
     public abstract Task<bool> LogoutAsync(string exe);
     /// <param name="quick">語音對話：用快啲嘅設定、唔留對話紀錄。</param>
-    public abstract Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null);
+    /// <param name="files">附件（已經用 AiFiles.Prepare 複製好）。</param>
+    public abstract Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null, IReadOnlyList<string>? files = null);
     protected abstract string LoginArgs { get; }
 
     /// <summary>開一個終端機視窗做登入，等用戶自己喺瀏覽器登入。</summary>
@@ -214,16 +215,26 @@ internal sealed class ClaudeProvider : AiProvider
 
     public override async Task<bool> LogoutAsync(string exe) => (await RunAsync(exe, "auth logout")).Code == 0;
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null, IReadOnlyList<string>? files = null)
     {
         // 冇連接資料夾：唔俾佢改檔案 / 行指令。
         // 連接咗：讀邊度都得（私人位置除外），但淨係寫得入嗰個資料夾（工作目錄）。
         // • 寫：只批准 Edit(./**)（= 工作目錄入面，Write / MultiEdit 都跟呢條規則）；外面嘅修改冇人批准，-p 模式會直接拒絕
         // • 一律唔俾行指令（Bash 可以繞過以上限制）；唔俾讀網頁（防止被網頁 / 檔案入面嘅指示呃咗，將資料傳出去）
+        bool att = files is { Count: > 0 };
         string tools = folder != null
             ? " --permission-mode default --allowedTools Read Glob Grep TodoWrite WebSearch \"Edit(./**)\"" +
               " --disallowedTools Bash WebFetch NotebookEdit " + string.Join(" ", PrivatePaths.Select(p => $"\"Read({p})\" \"Edit({p})\""))
-            : " --disallowedTools Bash Edit Write MultiEdit NotebookEdit --allowedTools WebSearch WebFetch";
+            : att
+                // 有附件：准讀檔（私人位置除外），但唔准讀網頁（費事附件入面嘅指示將資料傳出去）
+                ? " --disallowedTools Bash Edit Write MultiEdit NotebookEdit WebFetch " + string.Join(" ", PrivatePaths.Select(p => $"\"Read({p})\"")) +
+                  " --allowedTools WebSearch Read"
+                : " --disallowedTools Bash Edit Write MultiEdit NotebookEdit --allowedTools WebSearch WebFetch";
+        if (att)
+        {
+            tools += string.Concat(AiFiles.Dirs(files!).Select(d => $" --add-dir \"{d}\""));
+            prompt += AiFiles.Note(files!, "用 Read 工具讀取；圖片、PDF、文字檔都讀得");
+        }
         string args = "-p --output-format json" +
                       (sessionId != null ? $" --resume {sessionId}" : "") +
                       (quick ? " --model haiku --no-session-persistence" : "") + tools;
@@ -293,7 +304,7 @@ internal sealed class CodexProvider : AiProvider
 
     public override async Task<bool> LogoutAsync(string exe) => (await RunAsync(exe, "logout")).Code == 0;
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null, IReadOnlyList<string>? files = null)
     {
         string outFile = Path.Combine(WorkDir, "codex_" + Guid.NewGuid().ToString("N")[..8] + ".txt");
         // 唯讀 sandbox：唔俾佢改檔案
@@ -303,7 +314,15 @@ internal sealed class CodexProvider : AiProvider
         if (folder != null) mode += " -c sandbox_workspace_write.network_access=false -c approval_policy=never";
         string common = $"--json --skip-git-repo-check -c sandbox_mode={mode} -o \"{outFile}\"" + (quick ? " --ephemeral" : "");
         // --search：俾佢上網搵資料（唔使逐次批准）
-        string args = sessionId != null ? $"--search exec resume {common} {sessionId} -" : $"--search exec {common} -";
+        // 附件：新對話嘅圖片用 -i 直接俾佢睇；其他（同接續對話）講明路徑，佢自己用唯讀 shell 讀
+        string imgs = "";
+        if (files is { Count: > 0 })
+        {
+            var pics = files.Where(AiFiles.IsImage).ToList();
+            if (sessionId == null && pics.Count > 0) imgs = string.Concat(pics.Select(f => $"-i \"{f}\" "));
+            prompt += AiFiles.Note(files, sessionId == null && pics.Count > 0 ? "圖片已經附上；其他檔案用唯讀指令讀取" : "用唯讀指令讀取；圖片可以用睇圖工具睇");
+        }
+        string args = sessionId != null ? $"--search exec resume {common} {sessionId} -" : $"--search exec {imgs}{common} -";
         try
         {
             var (code, output, err) = await RunPromptAsync(exe, args, prompt, started, folder);
@@ -364,12 +383,18 @@ internal sealed class GeminiProvider : AiProvider
         catch { return Task.FromResult(false); }
     }
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null, IReadOnlyList<string>? files = null)
     {
         // 新對話自己定 session id，之後用佢接返上文
         string sid = sessionId ?? Guid.NewGuid().ToString();
         string args = "--output-format json --skip-trust " + (sessionId != null ? $"--resume {sid}" : $"--session-id {sid}") +
                       (folder != null ? " --approval-mode auto_edit" : "");
+        // 附件：@路徑 = 將檔案內容（圖片、PDF、文字）附入問題
+        if (files is { Count: > 0 })
+        {
+            args += " --include-directories " + string.Join(",", AiFiles.Dirs(files).Select(d => $"\"{d}\""));
+            prompt += AiFiles.Note(files, "內容已經用 @ 附上") + "\n" + string.Join("\n", files.Select(f => "@" + f.Replace('\\', '/')));
+        }
         // 連接咗資料夾：只自動批准改檔（Gemini 只准改工作區 = 嗰個資料夾入面）；行指令要批准，冇人批准就唔會行
         var (code, output, err) = await RunPromptAsync(exe, args, prompt, started, folder);
         // {"session_id":"...","response":"...","stats":{...}}；出錯時 {"error":{"message":"..."}} 會喺 stderr
@@ -397,7 +422,8 @@ internal sealed class GeminiProvider : AiProvider
 internal sealed class AiPage : Panel
 {
     private readonly Label _status;
-    private readonly FancyButton _detect, _login, _newChat, _send, _settings;
+    private readonly FancyButton _detect, _login, _newChat, _send, _settings, _attachBtn;
+    private readonly AttachBar _attach = new();
     private readonly System.Windows.Forms.Timer _voiceKey = new() { Interval = 30 };
     private bool _voiceWasDown;
     private readonly RichTextBox _log;
@@ -410,6 +436,7 @@ internal sealed class AiPage : Panel
     private string? _pendingFolder; // 新對話未傳嘢之前揀咗嘅資料夾
     private FancyButton _folderBtn = null!;
     private string? Folder => _current != null ? _current.Folder : _pendingFolder;
+    private readonly ToolTip _tipAttach = new();
     private Process? _running;
     private bool _stopped;
     private System.Windows.Forms.Timer? _poll;
@@ -491,14 +518,31 @@ internal sealed class AiPage : Panel
         _input.Dock = DockStyle.Fill;
         _send = Btn(Lang.T("傳送"), BtnKind.Primary, async () => await SendAsync());
         _send.Size = new Size(Ui.S(96), Ui.S(80));
+        // 附件：📎 揀檔案；亦可以拖檔案入嚟或者 Ctrl+V 貼圖
+        _attachBtn = Btn("📎", BtnKind.Ghost, () => _attach.Pick(FindForm()));
+        _attachBtn.Size = new Size(Ui.S(44), Ui.S(80));
+        _tipAttach.SetToolTip(_attachBtn, Lang.T("附加圖片或文件（亦可以拖入嚟，或者 Ctrl+V 貼上截圖）"));
+        _bottom.Controls.Add(_attach);
         _bottom.Controls.Add(inputHost);
+        _bottom.Controls.Add(_attachBtn);
         _bottom.Controls.Add(_send);
         _bottom.Layout += (_, _) =>
         {
-            int h = _bottom.ClientSize.Height - _bottom.Padding.Top;
-            _send.SetBounds(_bottom.ClientSize.Width - _send.Width, _bottom.Padding.Top, _send.Width, h);
-            inputHost.SetBounds(0, _bottom.Padding.Top, _bottom.ClientSize.Width - _send.Width - Ui.S(10), h);
+            int top = _bottom.Padding.Top;
+            int w = _bottom.ClientSize.Width - _send.Width - _attachBtn.Width - Ui.S(20);
+            if (_attach.Visible) { _attach.SetBounds(0, top, w, _attach.Height); top += _attach.Height; }
+            int h = _bottom.ClientSize.Height - top;
+            _send.SetBounds(_bottom.ClientSize.Width - _send.Width, top, _send.Width, h);
+            _attachBtn.SetBounds(_send.Left - Ui.S(10) - _attachBtn.Width, top, _attachBtn.Width, h);
+            inputHost.SetBounds(0, top, w, h);
         };
+        _attach.Changed += () =>
+        {
+            _attach.Width = Math.Max(Ui.S(100), _bottom.ClientSize.Width - _send.Width - _attachBtn.Width - Ui.S(20));
+            _bottom.Height = Ui.S(92) + (_attach.Visible ? _attach.Height : 0);
+            _bottom.PerformLayout();
+        };
+        _attach.Wire(_input, _log, _logHost);
         _input.KeyDown += async (_, e) =>
         {
             // Enter 傳送；Shift + Enter 換行
@@ -536,6 +580,7 @@ internal sealed class AiPage : Panel
 
         Intro();
         HandleCreated += async (_, _) => await RefreshStatusAsync();
+        _ = Task.Run(AiFiles.Cleanup); // 清走 30 日前嘅附件
 
         // 語音對話快捷鍵（喺邊度都用得）
         _voiceKey.Tick += (_, _) =>
@@ -792,7 +837,7 @@ internal sealed class AiPage : Panel
     {
         switch (m.Role)
         {
-            case "user": AppendMessage(Lang.T("你"), m.Text, Ui.Accent); break;
+            case "user": AppendMessage(Lang.T("你"), m.Text + (m.Files is { Count: > 0 } ? "\n" + AttachBar.Label(m.Files) : ""), Ui.Accent); break;
             case "error": AppendMessage(Lang.T("錯誤"), m.Text, Ui.Danger); break;
             default: AppendMessage(p.Name, m.Text, Ui.Success); break;
         }
@@ -808,6 +853,7 @@ internal sealed class AiPage : Panel
         _detect.Enabled = !busy;
         _login.Enabled = !busy;
         _input.ReadOnly = busy;
+        _attachBtn.Enabled = !busy;
         _send.Invalidate();
         _top.PerformLayout();
     }
@@ -851,8 +897,13 @@ internal sealed class AiPage : Panel
             return;
         }
         string q = _input.Text.Trim();
-        if (q.Length == 0) return;
+        bool hasFiles = _attach.Files.Count > 0;
+        if (q.Length == 0 && !hasFiles) return;
+        if (hasFiles && prov.Key == "local" && _attach.Files.Any(AiFiles.IsImage))
+            AppendSystem(Lang.T("本地 AI 睇唔到圖片；想 AI 睇圖請用 Claude / ChatGPT / Gemini。"));
+        if (q.Length == 0) q = Lang.T("請睇吓附件。");
         _input.Clear();
+        var files = _attach.Take();
         _stopped = false;
         if (_current == null)
         {
@@ -862,20 +913,20 @@ internal sealed class AiPage : Panel
             _list.Add(_current);
         }
         var chat = _current;
-        chat.Messages.Add(new ChatMsg { Role = "user", Text = q });
+        chat.Messages.Add(new ChatMsg { Role = "user", Text = q, Files = files.Count > 0 ? files : null });
         chat.Updated = DateTime.Now;
         ChatStore.Save(chat);
         _list.Touch(chat);
-        AppendMessage(Lang.T("你"), q, Ui.Accent);
+        AppendMessage(Lang.T("你"), q + (files.Count > 0 ? "\n" + AttachBar.Label(files) : ""), Ui.Accent);
 
-        // 問時間：程式直接答
-        if (PcActions.TryTime(q, out var timeReply))
+        // 問時間：程式直接答（有附件就一定問 AI）
+        if (files.Count == 0 && PcActions.TryTime(q, out var timeReply))
         {
             FinishLocal(chat, prov, timeReply, new List<string>());
             return;
         }
         // 「開 X」：打字冇錯字，直接掃程式 / 問 AI 網址（網址靠 AI 記得）
-        if (PcActions.OpenTarget(q) is { } openTarget)
+        if (files.Count == 0 && PcActions.OpenTarget(q) is { } openTarget)
         {
             var r = await PcActions.OpenAsync(openTarget, p => AskOnceAsync(prov, exe, p), PcActions.WantsSite(q));
             _running = null;
@@ -898,13 +949,13 @@ internal sealed class AiPage : Panel
             string Wrap(bool first) => (first ? PcActions.Rules + "\n\n" : "") + tag + "\n" + PcActions.NowTag + "\n" + q;
             string prompt = await Task.Run(() => Wrap(_session == null));
             var folder = chat.Folder != null && Directory.Exists(chat.Folder) ? chat.Folder : null;
-            ans = await prov.AskAsync(exe, prompt, _session, p => { _running = p; BeginInvoke(UpdateButtons); }, folder: folder);
+            ans = await prov.AskAsync(exe, prompt, _session, p => { _running = p; BeginInvoke(UpdateButtons); }, folder: folder, files: files);
             // 舊對話喺工具嗰邊已經清咗，就當新對話再問一次
             if (ans.IsError && !_stopped && _session != null && AiProvider.IsSessionGone(ans.Text))
             {
                 _session = null;
                 string prompt2 = await Task.Run(() => Wrap(true));
-                ans = await prov.AskAsync(exe, prompt2, null, p => { _running = p; BeginInvoke(UpdateButtons); }, folder: folder);
+                ans = await prov.AskAsync(exe, prompt2, null, p => { _running = p; BeginInvoke(UpdateButtons); }, folder: folder, files: files);
                 if (!ans.IsError) ans = ans with { Text = Lang.T("（舊對話嘅上文已過期，呢個回答唔記得之前講過乜）\n\n") + ans.Text };
             }
         }
@@ -1166,6 +1217,8 @@ internal sealed class ChatMsg
 {
     public string Role { get; set; } = "user";
     public string Text { get; set; } = "";
+    /// <summary>附件（data\ai\attach 入面嘅副本）；冇就 null。</summary>
+    public List<string>? Files { get; set; }
 }
 
 /// <summary>一個對話：存喺 data\\ai\\chats\\&lt;Id&gt;.json。</summary>

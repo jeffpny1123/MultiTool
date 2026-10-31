@@ -238,8 +238,9 @@ internal sealed class PluginCard : Control
         BackColor = Ui.Bg;
     }
 
-    private bool Pinned => PluginStore.IsPinned(M.Id);
-    private string BtnText => Pinned ? Lang.T("✓ 已加到工具欄") : Lang.T("📌 加到工具欄");
+    // 工具：加到工具欄；插件：啟用 / 停用
+    private bool Pinned => M.IsMod ? ModStore.IsOn(M.Id) : PluginStore.IsPinned(M.Id);
+    private string BtnText => M.IsMod ? (Pinned ? Lang.T("✓ 已啟用") : Lang.T("⏻ 啟用")) : Pinned ? Lang.T("✓ 已加到工具欄") : Lang.T("📌 加到工具欄");
 
     private Rectangle BtnRect()
     {
@@ -268,7 +269,7 @@ internal sealed class PluginCard : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(BackColor);
+        Ui.Clear(g, this, BackColor);
         Ui.Smooth(g);
         var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
         using (var path = Ui.Round(r, Ui.S(12f)))
@@ -285,6 +286,7 @@ internal sealed class PluginCard : Control
         int x = p + Ui.S(50);
         TextRenderer.DrawText(g, M.Name, Ui.F(10.5f, FontStyle.Bold), new Rectangle(x, p, Width - x - p, Ui.S(22)), Ui.Text, tf);
         string sub = "v" + M.Version + (M.Author.Length > 0 ? " · " + M.Author : "");
+        if (M.IsMod) sub = PluginsPage.TargetText(M) + " · " + sub;
         TextRenderer.DrawText(g, sub, Ui.F(8.5f), new Rectangle(x, p + Ui.S(22), Width - x - p, Ui.S(18)), Ui.TextFaint, tf);
         var br = BtnRect();
         string desc = M.Description.Length > 0 ? M.Description : Lang.T("（冇介紹）");
@@ -325,6 +327,8 @@ internal sealed class PluginsPage : Panel
     private readonly FancyButton _pinBtn;
     private readonly Panel _dPreview = new() { Dock = DockStyle.Fill, BackColor = Ui.Bg };
     private PluginView? _preview;
+    private Label _dPrevHead = null!;
+    private Control? _modPanel;      // 編寫插件（mod）時右邊嘅控制區
 
     // 編寫
     private readonly Panel _edit = new() { Dock = DockStyle.Fill, BackColor = Ui.Bg, Visible = false };
@@ -367,11 +371,19 @@ internal sealed class PluginsPage : Panel
         var lBar = Bar();
         var lTitle = Title(lBar);
         lTitle.Text = Lang.T("工作坊");
-        Btn(lBar, Lang.T("+ 新插件"), NewPlugin, null, BtnKind.Primary);
-        Btn(lBar, Lang.T("📥 匯入插件…"), ImportPlugin, Lang.T("匯入其他人整嘅 .mtplugin 檔"));
-        var lHint = Ui.Text_(Lang.T("撳一個插件睇介紹同預覽；想常用就「加到左側工具欄」。"), Ui.TextFaint, Ui.F(9f), new Padding(0));
+        FancyButton? addBtn = null;
+        addBtn = Btn(lBar, Lang.T("+ 新增 ▾"), () =>
+        {
+            var menu = TUi.Menu(this);
+            menu.Items.Add(Lang.T("🧩 新工具（有自己介面，可以加到左側工具欄）"), null, (_, _) => NewTool());
+            menu.Items.Add(Lang.T("🎨 新插件（改 MultiTool 嘅外觀：主題、背景、側欄、首頁、設定）"), null, (_, _) => NewMod());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(Lang.T("📥 匯入…"), null, (_, _) => ImportPlugin());
+            menu.Show(addBtn!, new Point(0, addBtn!.Height));
+        }, null, BtnKind.Primary);
+        var lHint = Ui.Text_(Lang.T("撳一個工具或者插件睇介紹；工具想常用就「加到左側工具欄」，插件要「啟用」先會生效。"), Ui.TextFaint, Ui.F(9f), new Padding(0));
         lHint.AutoSize = false; lHint.Dock = DockStyle.Top; lHint.Height = Ui.S(30);
-        _empty = Ui.Text_(Lang.T("撳上面「+ 新插件」開始寫你自己嘅工具。\n\n插件用 HTML + JavaScript 寫，可以連網上 API、彈通知、儲存資料、叫 AI 幫手…\n唔識寫 code？入去編寫之後撳「✦ AI 幫我寫」同 AI 傾就得。"),
+        _empty = Ui.Text_(Lang.T("撳上面「+ 新增」開始寫你自己嘅工具或者插件。\n\n工具：用 HTML + JavaScript 寫，可以連網上 API、彈通知、儲存資料、叫 AI 幫手…\n插件：冇自己介面，用 JavaScript 改 MultiTool 原有嘅介面（例如換背景、改顏色、加掣）。\n唔識寫 code？入去編寫之後撳「✦ AI 幫我寫」同 AI 傾就得。"),
             Ui.TextDim, Ui.F(10.5f), new Padding(0));
         _empty.AutoSize = false; _empty.Dock = DockStyle.Fill; _empty.TextAlign = ContentAlignment.MiddleCenter; _empty.Visible = false;
         _lobby.Controls.Add(_grid);
@@ -390,7 +402,7 @@ internal sealed class PluginsPage : Panel
         _dInfo = Ui.Text_("", Ui.TextDim, Ui.F(9.5f), new Padding(0));
         _dInfo.AutoSize = false; _dInfo.Dock = DockStyle.Left; _dInfo.Width = Ui.S(300); _dInfo.UseMnemonic = false;
         _dInfo.Padding = new Padding(0, Ui.S(8), Ui.S(16), 0);
-        var dPrevHead = Ui.Text_(Lang.T("預覽"), Ui.TextFaint, Ui.F(9f, FontStyle.Bold), new Padding(0));
+        var dPrevHead = _dPrevHead = Ui.Text_(Lang.T("預覽"), Ui.TextFaint, Ui.F(9f, FontStyle.Bold), new Padding(0));
         dPrevHead.AutoSize = false; dPrevHead.Dock = DockStyle.Top; dPrevHead.Height = Ui.S(26); dPrevHead.TextAlign = ContentAlignment.BottomLeft;
         var dPrevWrap = new Panel { Dock = DockStyle.Fill, BackColor = Ui.Border, Padding = new Padding(1) };
         dPrevWrap.Controls.Add(_dPreview);
@@ -409,7 +421,7 @@ internal sealed class PluginsPage : Panel
         Btn(eBar, Lang.T("▶ 試行"), () => _ = RunDevAsync(), Lang.T("儲存並重新載入右邊嘅試行畫面（F5）"), BtnKind.Success);
         Btn(eBar, Lang.T("✦ AI 幫我寫"), () => _assist!.Open(), Lang.T("同 AI 傾偈：講低想要咩功能，佢會問清楚再幫你寫（或者改）成個插件"), BtnKind.Default);
         Btn(eBar, Lang.T("📖 API 說明"), ShowApi);
-        Btn(eBar, "F12", () => _dev?.DevTools(), Lang.T("開發者工具（睇 HTML、除錯）"));
+        Btn(eBar, "F12", () => { if (_cur?.IsMod == true) ModHost.DevTools(_cur.Id); else _dev?.DevTools(); }, Lang.T("開發者工具（睇 HTML、除錯）"));
         Btn(eBar, Lang.T("📂 資料夾"), () => { if (_cur != null) TUi.Open(PluginStore.PathOf(_cur.Id), folder: true); }, Lang.T("用檔案總管開呢個插件嘅資料夾"));
         _tabs = new FlowLayoutPanel { Dock = DockStyle.Top, Height = Ui.S(40), BackColor = Ui.Bg, WrapContents = false };
         var codeHost = new Panel { Dock = DockStyle.Fill, BackColor = EditorWeb.Back, Padding = new Padding(1) };
@@ -447,11 +459,24 @@ internal sealed class PluginsPage : Panel
         Controls.Add(_lobby);
 
         PluginStore.Changed += OnStoreChanged;
-        Disposed += (_, _) => PluginStore.Changed -= OnStoreChanged;
+        ModHost.Log += OnModLog;
+        Disposed += (_, _) => { PluginStore.Changed -= OnStoreChanged; ModHost.Log -= OnModLog; };
+        _grid.Resize += (_, _) => FitHeaders();
         BuildGrid();
     }
 
     private void OnStoreChanged() { if (!IsDisposed && IsHandleCreated) BeginInvoke(BuildGrid); }
+
+    /// <summary>插件（mod）嘅記錄：而家編寫緊佢就顯示。</summary>
+    private void OnModLog(string id, string level, string text)
+    {
+        if (IsDisposed) return;
+        void Do() { if (_view == View.Edit && _cur?.Id == id) Log(level, text); }
+        if (InvokeRequired) BeginInvoke(Do); else Do();
+    }
+
+    /// <summary>插件改邊度：「插件：影片剪輯」/「插件：整個程式」。</summary>
+    internal static string TargetText(PluginManifest m) => Lang.T("🎨 插件");
 
     private void SetView(View v)
     {
@@ -469,13 +494,45 @@ internal sealed class PluginsPage : Panel
     {
         _grid.SuspendLayout();
         foreach (Control c in _grid.Controls.Cast<Control>().ToList()) { _grid.Controls.Remove(c); c.Dispose(); }
-        var list = PluginStore.List();
-        foreach (var m in list)
+        var all = PluginStore.List();
+        var tools = all.Where(m => !m.IsMod).ToList();
+        var mods = all.Where(m => m.IsMod).OrderBy(m => ModStore.Order(m.Id)).ToList();
+        var list = new List<PluginManifest>();
+        bool heads = mods.Count > 0;
+        void Head(string t)
+        {
+            if (_grid.Controls.Count > 0) _grid.SetFlowBreak(_grid.Controls[^1], true);
+            var h = Ui.Text_(t, Ui.TextDim, Ui.F(10.5f, FontStyle.Bold), new Padding(0, Ui.S(4), 0, Ui.S(8)));
+            h.AutoSize = false; h.Height = Ui.S(30); h.Tag = "head"; h.TextAlign = ContentAlignment.BottomLeft;
+            _grid.Controls.Add(h);
+            _grid.SetFlowBreak(h, true);
+        }
+        if (heads && tools.Count > 0) Head(Lang.T("工具"));
+        list.AddRange(tools);
+        foreach (var m in tools) AddCard(m);
+        if (heads) Head(Lang.T("插件（排後面嘅會蓋過前面）"));
+        list.AddRange(mods);
+        foreach (var m in mods) AddCard(m);
+        _grid.ResumeLayout(true);
+        FitHeaders();
+        _empty.Visible = list.Count == 0;
+        if (list.Count == 0) _empty.BringToFront();
+    }
+
+    private void FitHeaders()
+    {
+        foreach (Control c in _grid.Controls)
+            if (c.Tag as string == "head") c.Width = Math.Max(Ui.S(200), _grid.ClientSize.Width - Ui.S(24));
+    }
+
+    private void AddCard(PluginManifest m)
+    {
         {
             var card = new PluginCard(m);
             card.Open += () => GoDetail(m.Id);
             card.PinToggle += () =>
             {
+                if (m.IsMod) { ToggleMod(m.Id); card.Invalidate(); return; }
                 if (PluginStore.IsPinned(m.Id)) PluginStore.SetPinned(m.Id, false);
                 else
                 {
@@ -490,9 +547,25 @@ internal sealed class PluginsPage : Panel
             _tip.SetToolTip(card, m.Description.Length > 0 ? m.Description : m.Name);
             _grid.Controls.Add(card);
         }
-        _grid.ResumeLayout(true);
-        _empty.Visible = list.Count == 0;
-        if (list.Count == 0) _empty.BringToFront();
+    }
+
+    /// <summary>插件啟用 / 停用（啟用前問權限）。</summary>
+    private bool ToggleMod(string id)
+    {
+        if (ModStore.IsOn(id))
+        {
+            ModStore.SetOn(id, false);
+            ModHost.Stop(id);
+            Toast.Show(Lang.T("已停用，介面已還原"), Ui.Success, 1500);
+            return false;
+        }
+        PluginManifest mm;
+        try { mm = PluginStore.Load(id); } catch (Exception ex) { MessageBox.Show(FindForm(), ex.Message, Program.AppName); return false; }
+        if (!PluginStore.AskApprove(FindForm(), mm)) return false;
+        ModStore.SetOn(id, true);
+        ModHost.Start(id);
+        Toast.Show(Lang.T("已啟用"), Ui.Success, 1500);
+        return true;
     }
 
     private void GoLobby()
@@ -528,18 +601,21 @@ internal sealed class PluginsPage : Panel
         sb.AppendLine(Lang.T("權限："));
         if (perms.Count == 0) sb.AppendLine("  " + Lang.T("（冇特別權限）"));
         foreach (var p in perms) sb.AppendLine((p.Danger ? "  ⚠ " : "  • ") + p.Text);
+        if (m.IsMod) sb.AppendLine().AppendLine(TargetText(m));
         _dInfo.Text = sb.ToString();
         UpdatePinBtn();
         SetView(View.Detail);
-        StartPreview(m);
+        _dPrevHead.Text = m.IsMod ? Lang.T("狀態") : Lang.T("預覽");
+        if (m.IsMod) ShowModInfo(m); else StartPreview(m);
     }
 
     private void UpdatePinBtn()
     {
         if (_cur == null) return;
-        bool pinned = PluginStore.IsPinned(_cur.Id);
-        _pinBtn.Text = pinned ? Lang.T("📌 從工具欄移除") : Lang.T("📌 加到左側工具欄");
+        bool pinned = _cur.IsMod ? ModStore.IsOn(_cur.Id) : PluginStore.IsPinned(_cur.Id);
+        _pinBtn.Text = _cur.IsMod ? (pinned ? Lang.T("⏻ 停用") : Lang.T("⏻ 啟用")) : pinned ? Lang.T("📌 從工具欄移除") : Lang.T("📌 加到左側工具欄");
         _pinBtn.Kind = pinned ? BtnKind.Ghost : BtnKind.Primary;
+        _tip.SetToolTip(_pinBtn, _cur.IsMod ? Lang.T("啟用之後一開 MultiTool 就會運行，修改佢負責嘅介面；停用即刻還原") : Lang.T("加咗之後喺左邊工具欄有自己一格，一開 MultiTool 就會運行"));
         _pinBtn.Width = _pinBtn.GetPreferredSize(Size.Empty).Width + Ui.S(10);
         _pinBtn.Invalidate();
     }
@@ -574,9 +650,37 @@ internal sealed class PluginsPage : Panel
         _permBox = null;
     }
 
+    /// <summary>插件詳情右邊：狀態 + 次序。</summary>
+    private void ShowModInfo(PluginManifest m)
+    {
+        ClosePreview();
+        var box = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = Ui.Bg, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(Ui.S(20)), AutoScroll = true };
+        bool on = ModStore.IsOn(m.Id);
+        var state = Ui.Text_(on ? (ModHost.IsRunning(m.Id) ? Lang.T("● 已啟用，運行中") : Lang.T("● 已啟用")) : Lang.T("○ 未啟用"), on ? Ui.Success : Ui.TextDim, Ui.F(10.5f, FontStyle.Bold), new Padding(0, 0, 0, Ui.S(10)));
+        box.Controls.Add(state);
+        var about = Ui.Text_(Lang.T("插件冇自己嘅介面：啟用之後喺背景運行，直接改 MultiTool 嘅介面；停用就即刻還原。"), Ui.TextDim, Ui.F(9.5f), new Padding(0, 0, 0, Ui.S(16)));
+        about.MaximumSize = new Size(Ui.S(420), 0);
+        box.Controls.Add(about);
+        var order = ModStore.List;
+        int idx = order.FindIndex(x => x.Id == m.Id);
+        box.Controls.Add(Ui.Text_(Lang.F("次序：第 {0} 個，共 {1} 個（排後面嘅會蓋過前面）", idx + 1, order.Count), Ui.Text, Ui.F(9.5f), new Padding(0, 0, 0, Ui.S(8))));
+        var row = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Bg, WrapContents = false, Margin = new Padding(0) };
+        var up = TUi.Btn(Lang.T("↑ 移前"), () => { ModStore.Move(m.Id, -1); ShowModInfo(m); }, 0);
+        var down = TUi.Btn(Lang.T("↓ 移後"), () => { ModStore.Move(m.Id, 1); ShowModInfo(m); }, 0);
+        up.Enabled = idx > 0;
+        down.Enabled = idx >= 0 && idx < order.Count - 1;
+        up.Margin = new Padding(0, 0, Ui.S(8), 0);
+        row.Controls.Add(up);
+        row.Controls.Add(down);
+        box.Controls.Add(row);
+        _dPreview.Controls.Add(box);
+        _permBox = box;
+    }
+
     private void TogglePin()
     {
         if (_cur == null) return;
+        if (_cur.IsMod) { ToggleMod(_cur.Id); UpdatePinBtn(); ShowModInfo(_cur); return; }
         if (PluginStore.IsPinned(_cur.Id)) PluginStore.SetPinned(_cur.Id, false);
         else
         {
@@ -598,6 +702,7 @@ internal sealed class PluginsPage : Panel
         _file = File.Exists(Path.Combine(PluginStore.PathOf(_cur.Id), _cur.Entry)) ? _cur.Entry : "manifest.json";
         _dev?.Close();
         _dev = null;
+        SetModPanel(_cur.IsMod);
         SetView(View.Edit);
         MarkDirty();
         _assist.Refresh();
@@ -619,6 +724,11 @@ internal sealed class PluginsPage : Panel
         }
         _dev?.Close();
         _dev = null;
+        // 插件：未啟用就停（還原介面）；啟用咗就用正式模式重新開
+        if (_cur?.IsMod == true)
+        {
+            if (ModStore.IsOn(_cur.Id)) ModHost.Start(_cur.Id); else ModHost.Stop(_cur.Id);
+        }
         if (_cur != null) GoDetail(_cur.Id); else GoLobby();
     }
 
@@ -776,11 +886,60 @@ internal sealed class PluginsPage : Panel
         if (!PluginStore.AskApprove(FindForm(), m)) { Log("warn", Lang.T("未同意權限，冇試行。")); return; }
         _console.Clear();
         Log("info", Lang.F("▶ 試行 {0} v{1}", m.Name, m.Version));
+        if (m.IsMod)
+        {
+            SetModPanel(true);
+            ModHost.Start(m.Id, dev: true);
+            Log("info", ModStore.IsOn(m.Id) ? Lang.T("已套用到 MultiTool 介面。") : Lang.T("已套用到 MultiTool 介面（未啟用：離開編寫就會還原；想一直生效請撳「⏻ 啟用」）。"));
+            return;
+        }
         if (_dev != null && !_dev.IsDisposed) { _dev.Reload(m); return; }
         _dev = new PluginView(m, true);
         _dev.Log += Log;
         _devHost.Controls.Add(_dev);
         await _dev.StartAsync();
+    }
+
+    /// <summary>編寫插件（mod）時右邊唔使預覽，換做「選擇元件」等掣。</summary>
+    private void SetModPanel(bool mod)
+    {
+        if (!mod) { _modPanel?.Dispose(); _modPanel = null; return; }
+        if (_modPanel != null && !_modPanel.IsDisposed) return;
+        var box = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = Ui.Bg, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(Ui.S(16)), AutoScroll = true };
+        var t = Ui.Text_(Lang.T("插件喺背景運行，改動會直接出現喺 MultiTool 嘅介面，去其他工具頁就睇到效果。撳「▶ 試行」（F5）重新載入。"), Ui.TextDim, Ui.F(9.5f), new Padding(0, 0, 0, Ui.S(14)));
+        t.MaximumSize = new Size(Ui.S(400), 0);
+        box.Controls.Add(t);
+        var pick = TUi.Btn(Lang.T("🔍 揀元件"), StartPick, 0, BtnKind.Primary);
+        pick.Margin = new Padding(0, 0, 0, Ui.S(6));
+        _tip.SetToolTip(pick, Lang.T("去想改嘅位置，Ctrl + 撳一下，就會複製嗰個元件嘅 selector"));
+        box.Controls.Add(pick);
+        var ph = Ui.Text_(Lang.T("撳完之後可以照常轉頁；Ctrl + 撳 = 揀，Esc = 取消。"), Ui.TextFaint, Ui.F(8.75f), new Padding(0, 0, 0, Ui.S(14)));
+        ph.MaximumSize = new Size(Ui.S(400), 0);
+        box.Controls.Add(ph);
+        var stop = TUi.Btn(Lang.T("⏹ 停止並還原"), () => { if (_cur != null) { ModHost.Stop(_cur.Id); Log("info", Lang.T("已停止，介面已還原。")); } }, 0);
+        box.Controls.Add(stop);
+        _modPanel = box;
+        _devHost.Controls.Add(box);
+        box.BringToFront();
+    }
+
+    /// <summary>揀元件：Ctrl + 撳 → 複製 selector，寫入記錄。</summary>
+    private void StartPick()
+    {
+        Toast.Show(Lang.T("去想改嘅位置，Ctrl + 撳元件（Esc 取消）"), Ui.Accent, 3000);
+        ModInspector.Start(c =>
+        {
+            if (c == null || IsDisposed) return;
+            if (!ModEngine.Allowed(c)) { Log("warn", Lang.T("呢個係工具頁嘅元件：插件唔可以改現有工具（可以改側欄、標題列、首頁、設定同主題；想要新功能可以寫新工具）。")); MainForm.Instance?.ShowKey("plugins"); return; }
+            string sel = ModEngine.Best(c);
+            try { Clipboard.SetText(sel); } catch { }
+            var info = ModEngine.Info(c);
+            info.Remove("selector");
+            Log("info", Lang.T("已複製 selector：") + sel);
+            Log("info", "  " + info.ToJsonString(new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+            Toast.Show(Lang.T("已複製 selector"), Ui.Success, 1500);
+            MainForm.Instance?.ShowKey("plugins");
+        });
     }
 
     private void Log(string level, string text)
@@ -801,7 +960,8 @@ internal sealed class PluginsPage : Panel
         var tb = new TextBox
         {
             Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None,
-            BackColor = Ui.Card, ForeColor = Ui.Text, Font = new Font("Consolas", 10f), Text = PluginTemplates.ApiDoc.Replace("\n", "\r\n")
+            BackColor = Ui.Card, ForeColor = Ui.Text, Font = new Font("Consolas", 10f),
+            Text = (PluginTemplates.ApiDoc + (_cur?.IsMod == true ? PluginTemplates.ModDoc : "")).Replace("\n", "\r\n")
         };
         f.Controls.Add(tb);
         f.ShowDialog(FindForm());
@@ -809,11 +969,20 @@ internal sealed class PluginsPage : Panel
 
     // ================= 新增 / 匯入 / 匯出 / 刪除 =================
 
-    private void NewPlugin()
+    private void NewTool()
     {
-        var name = Mail.AskText.Show(FindForm(), Lang.T("新插件"), Lang.T("插件名稱："), Lang.T("我的工具"));
+        var name = Mail.AskText.Show(FindForm(), Lang.T("新工具"), Lang.T("工具名稱："), Lang.T("我的工具"));
         if (string.IsNullOrWhiteSpace(name)) return;
         string id = PluginStore.Create(name.Trim());
+        _cur = PluginStore.Load(id);
+        GoEdit();
+    }
+
+    private void NewMod()
+    {
+        var name = Mail.AskText.Show(FindForm(), Lang.T("新插件"), Lang.T("插件名稱（插件可以改 MultiTool 嘅主題、背景、字型、側欄、首頁同設定）："), Lang.T("我的插件"));
+        if (string.IsNullOrWhiteSpace(name)) return;
+        string id = PluginStore.CreateMod(name.Trim(), "");
         _cur = PluginStore.Load(id);
         GoEdit();
     }
@@ -848,6 +1017,7 @@ internal sealed class PluginsPage : Panel
         ClosePreview();
         string id = _cur.Id;
         PluginStore.SetPinned(id, false);
+        if (_cur.IsMod) ModStore.SetOn(id, false);
         PluginStore.Delete(id);
         GoLobby();
     }
@@ -1056,11 +1226,27 @@ internal sealed class PluginAssist
         var sb = new StringBuilder();
         if (first)
         {
-            sb.AppendLine("你係「多功能工具」MultiTool 入面嘅插件開發助手，同用戶一問一答，幫佢寫 / 改佢而家編輯緊嘅插件（HTML + JavaScript 小工具）。");
+            sb.AppendLine(m.IsMod
+                ? "你係「多功能工具」MultiTool 入面嘅插件開發助手，同用戶一問一答，幫佢寫 / 改佢而家編輯緊嘅「插件」（type: mod：冇自己介面，喺 mod.js 用 mt.ui.* 以 override 方式改 MultiTool 原有介面）。"
+                : "你係「多功能工具」MultiTool 入面嘅插件開發助手，同用戶一問一答，幫佢寫 / 改佢而家編輯緊嘅工具（HTML + JavaScript 小工具）。");
             sb.AppendLine(Mail.MailAi.ReplyRule + "唔好用任何工具，唔好讀寫檔案，直接答。");
             sb.AppendLine("如果用戶嘅要求唔夠清楚（例如要用邊個網站 / API、幾耐檢查一次、要唔要通知、介面要顯示咩），先簡短問 1 至 3 條問題，等佢答咗先寫。");
             sb.AppendLine();
             sb.AppendLine(PluginTemplates.ApiDoc);
+            if (m.IsMod)
+            {
+                sb.AppendLine(PluginTemplates.ModDoc);
+                string tree = ModEngine.TreeText("", 8000), home = ModEngine.TreeText("home", 5000), settings = ModEngine.TreeText("settings", 5000);
+                if (tree.Length > 0)
+                {
+                    sb.AppendLine("而家主視窗嘅元件樹（JSON：type、key = 原文、text、children；locked = 工具頁，唔准改；用嚟寫 selector；未必齊，可以叫用戶用「選擇元件」揀）：");
+                    sb.AppendLine(tree);
+                    if (home.Length > 0) { sb.AppendLine("首頁（@home）嘅元件樹："); sb.AppendLine(home); }
+                    if (settings.Length > 0) { sb.AppendLine("設定頁（@settings）嘅元件樹："); sb.AppendLine(settings); }
+                }
+                sb.AppendLine("- 插件唔可以改現有工具（工具頁、工具嘅視窗）；首頁同設定頁唔算工具，改得。程式名同版本號唔准改、隱藏或者遮住。如果用戶想改某個工具，話佢知做唔到，建議佢寫一個新工具代替。換顏色 / 背景圖 / 字型一律用 mt.app.addTheme，唔好逐個元件改色。");
+                sb.AppendLine("- 插件嘅顏色用 \"theme:accent\" 之類主題色或者半透明顏色，令日光 / 深色主題都睇得清；selector 盡量用 [key=\"原文\"]。");
+            }
             sb.AppendLine("規則：");
             sb.AppendLine("- 要建立或者修改檔案，就喺回答最後，每個檔案用以下格式俾出「完整內容」（唔係淨係改咗嘅部分），唔好用 Markdown code block 包住：");
             sb.AppendLine("=== FILE: 檔名 ===");
@@ -1098,20 +1284,21 @@ internal sealed class PluginAssist
         string? exe = _prov.Find();
         if (exe == null) { _panel.System(Lang.F("搵唔到 {0}。", _prov.ToolName)); return; }
         await _page.FlushForAi();
+        var att = _panel.TakeFiles();
 
         _stopped = false;
-        s.Chat.Msgs.Add(("user", q));
+        s.Chat.Msgs.Add(("user", q + (att.Count > 0 ? "\n" + Ai.AttachBar.Label(att) : "")));
         ShowActions(s);
         _panel.Thinking(Lang.F("{0} 諗緊…", _prov.Name));
         _panel.SetBusy(true);
         Ai.AiProvider.Answer ans;
         try
         {
-            ans = await _prov.AskAsync(exe, BuildPrompt(m, q, s.Chat.Session == null), s.Chat.Session, p => _running = p);
+            ans = await _prov.AskAsync(exe, BuildPrompt(m, q, s.Chat.Session == null), s.Chat.Session, p => _running = p, files: att);
             if (ans.IsError && !_stopped && s.Chat.Session != null && Ai.AiProvider.IsSessionGone(ans.Text))
             {
                 s.Chat.Session = null;
-                ans = await _prov.AskAsync(exe, BuildPrompt(m, q, true), null, p => _running = p);
+                ans = await _prov.AskAsync(exe, BuildPrompt(m, q, true), null, p => _running = p, files: att);
             }
         }
         catch (Exception ex) { ans = new Ai.AiProvider.Answer(Lang.T("出錯：") + ex.Message, null, true); }

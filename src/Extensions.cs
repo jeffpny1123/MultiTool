@@ -143,8 +143,12 @@ internal static class Extensions
             Lang.T("好似 Gmail 咁收信、睇信、搜尋、寫信、回覆、轉寄同附件，支援 Gmail 同 Outlook / Hotmail 多個帳戶，有新郵件通知，仲可以叫 AI 摘要、整理收件匣同草擬回覆。"), false,
             Remove: () => MultiTool.Mail.MailWatch.Stop(), Since: "v2.5"),
         new(Plugins, Lang.T("工作坊"),
-            Lang.T("用 HTML + JavaScript 寫你自己嘅工具：連網上 API、彈通知、儲存資料、叫 AI 幫手。有程式碼編輯器、即時試行，唔識寫 code 可以叫 AI 幫你寫；插件可以匯出俾其他人用。"), false,
-            Remove: () => { foreach (var id in MultiTool.Plugins.PluginRuntime.Running.Keys.ToList()) MultiTool.Plugins.PluginRuntime.Stop(id); },
+            Lang.T("用 HTML + JavaScript 寫你自己嘅工具：連網上 API、彈通知、儲存資料、叫 AI 幫手；亦可以寫插件改 MultiTool 原有嘅介面（例如換背景、改顏色、加掣）。有程式碼編輯器、即時試行，唔識寫 code 可以叫 AI 幫你寫；工具同插件都可以匯出俾其他人用。"), false,
+            Remove: () =>
+            {
+                foreach (var id in MultiTool.Plugins.PluginRuntime.Running.Keys.ToList()) MultiTool.Plugins.PluginRuntime.Stop(id);
+                MultiTool.Plugins.ModHost.StopAll(); // 插件改咗嘅介面即刻還原
+            },
             Since: "v2.5"),
         new(Repair, Lang.T("檔案修復"),
             Lang.T("開唔到嘅影片、聲音、相片、ZIP / Word / Excel / PowerPoint、PDF 拖入嚟就自動修復，修好嘅另存一份。部分修復第一次用要下載免費開源工具（ffmpeg、qpdf、untrunc）。"), false,
@@ -420,7 +424,7 @@ internal sealed class ExtensionsPage : Panel
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Parent?.BackColor ?? Ui.Bg);
+            Ui.Clear(g, this, Parent?.BackColor ?? Ui.Bg);
             Ui.Smooth(g);
             var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             bool on = Installed;
@@ -567,7 +571,7 @@ internal sealed class ChipRow : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Parent?.BackColor ?? Ui.Bg);
+        Ui.Clear(g, this, Parent?.BackColor ?? Ui.Bg);
         Ui.Smooth(g);
         for (int i = 0; i < _items.Length; i++)
         {

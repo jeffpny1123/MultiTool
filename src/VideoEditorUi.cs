@@ -259,7 +259,7 @@ internal sealed class EdTimeline : Control
     {
         if (anchorX < 0) anchorX = (int)Math.Clamp(X(Playhead), HeadW, Width);
         double t = T(anchorX);
-        Pps = Math.Clamp(Pps * factor, 4, 400);
+        Pps = Math.Clamp(Pps * factor, 0.15, 400); // 最細大約一格 5 至 10 分鐘，長片都睇得晒
         _scroll = Math.Max(0, (int)(t * Pps - (anchorX - HeadW)));
         Refresh2();
     }
@@ -353,7 +353,10 @@ internal sealed class EdTimeline : Control
         var clip = new Rectangle(HeadW, 0, w - HeadW, Height);
         g.SetClip(clip);
         // 尺
-        double step = Pps >= 120 ? 1 : Pps >= 40 ? 2 : Pps >= 15 ? 5 : Pps >= 6 ? 15 : 30;
+        // 刻度：揀最細而又唔會擠埋一齊嘅間距（1 秒 … 10 分鐘）
+        double step = 600;
+        foreach (double st in new double[] { 1, 2, 5, 15, 30, 60, 120, 300, 600 })
+            if (st * Pps >= Ui.S(64)) { step = st; break; }
         double t0 = Math.Floor(T(HeadW) / step) * step;
         using (var pen = new Pen(Ui.Border))
             for (double t = t0; X(t) < w; t += step)

@@ -240,7 +240,7 @@ internal sealed class LocalProvider : AiProvider
 
     public override Task<bool> LogoutAsync(string exe) => Task.FromResult(true);
 
-    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null)
+    public override async Task<Answer> AskAsync(string exe, string prompt, string? sessionId, Action<Process> started, bool quick = false, string? folder = null, IReadOnlyList<string>? files = null)
     {
         if (!await LocalAi.Server.EnsureAsync())
             return new Answer(Lang.T("本地 AI 開唔到，請喺「帳號 → 本地 AI」重新下載。"), sessionId, true);
@@ -254,6 +254,7 @@ internal sealed class LocalProvider : AiProvider
                     (VoiceSettings.Speech == SpeechLang.Cantonese && quick ? "The user speaks Cantonese; reply in colloquial Hong Kong Cantonese. " : "") +
                     "Do not show your reasoning." }
             };
+        if (files is { Count: > 0 }) prompt += AiFiles.Inline(files); // 本地 AI 睇唔到圖：文字檔直接貼入
         msgs.Add(new { role = "user", content = prompt });
         var body = new Dictionary<string, object>
         {

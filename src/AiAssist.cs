@@ -810,9 +810,10 @@ internal sealed class ScriptAssist
         if (q.Length == 0) return;
         string? exe = _prov.Find();
         if (exe == null) { _panel.System(Lang.F("搵唔到 {0}。", _prov.ToolName)); return; }
+        var files = _panel.TakeFiles();
 
         _stopped = false;
-        _st.Msgs.Add(("user", q));
+        _st.Msgs.Add(("user", q + (files.Count > 0 ? "\n" + AttachBar.Label(files) : "")));
         _panel.Render(_st, _prov.Name);
         _panel.Thinking(Lang.F("{0} 諗緊…", _prov.Name));
         _panel.SetBusy(true);
@@ -820,11 +821,11 @@ internal sealed class ScriptAssist
         AiProvider.Answer ans;
         try
         {
-            ans = await _prov.AskAsync(exe, BuildPrompt(q, _st.Session == null), _st.Session, p => _running = p);
+            ans = await _prov.AskAsync(exe, BuildPrompt(q, _st.Session == null), _st.Session, p => _running = p, files: files);
             if (ans.IsError && !_stopped && _st.Session != null && AiProvider.IsSessionGone(ans.Text))
             {
                 _st.Session = null;
-                ans = await _prov.AskAsync(exe, BuildPrompt(q, true), null, p => _running = p);
+                ans = await _prov.AskAsync(exe, BuildPrompt(q, true), null, p => _running = p, files: files);
             }
         }
         catch (Exception ex) { ans = new AiProvider.Answer(Lang.T("出錯：") + ex.Message, null, true); }
@@ -950,8 +951,9 @@ internal sealed class AssistPanel : Panel
     private readonly Label _title;
     private readonly RichTextBox _log;
     private readonly TextBox _input;
-    private readonly FancyButton _send, _apply, _undo, _clear;
+    private readonly FancyButton _send, _apply, _undo, _clear, _clip;
     private readonly Panel _actions;
+    private readonly AttachBar _attach = new() { Dock = DockStyle.Top };
 
     public AssistPanel()
     {
@@ -991,9 +993,23 @@ internal sealed class AssistPanel : Panel
         _send = new FancyButton { Text = Lang.T("傳送"), Kind = BtnKind.Primary, Font = Ui.F(9.5f), Size = new Size(Ui.S(64), Ui.S(66)), Dock = DockStyle.Right };
         _send.Click += (_, _) => SendRequested?.Invoke();
         var gap = new Panel { Dock = DockStyle.Right, Width = Ui.S(8), BackColor = Ui.Card };
+        // 附件：📎 揀圖片 / 文件；亦可以拖入嚟或者 Ctrl+V 貼截圖
+        _clip = new FancyButton { Text = "📎", Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Size = new Size(Ui.S(36), Ui.S(66)), Dock = DockStyle.Right };
+        _clip.Click += (_, _) => _attach.Pick(FindForm());
+        new ToolTip().SetToolTip(_clip, Lang.T("附加圖片或文件（亦可以拖入嚟，或者 Ctrl+V 貼上截圖）"));
+        var gap2 = new Panel { Dock = DockStyle.Right, Width = Ui.S(6), BackColor = Ui.Card };
         bottom.Controls.Add(inputHost);
+        bottom.Controls.Add(gap2);
+        bottom.Controls.Add(_clip);
         bottom.Controls.Add(gap);
         bottom.Controls.Add(_send);
+        bottom.Controls.Add(_attach);
+        _attach.Changed += () =>
+        {
+            _attach.Width = Math.Max(Ui.S(100), bottom.ClientSize.Width);
+            bottom.Height = Ui.S(74) + (_attach.Visible ? _attach.Height : 0);
+        };
+        _attach.Wire(_input, _log);
         _input.KeyDown += (_, e) =>
         {
             if (e.KeyCode == Keys.Enter && !e.Shift) { e.SuppressKeyPress = true; SendRequested?.Invoke(); }
@@ -1025,14 +1041,19 @@ internal sealed class AssistPanel : Panel
     {
         string t = _input.Text.Trim();
         if (t.Length > 0) _input.Clear();
+        if (t.Length == 0 && _attach.Files.Count > 0) t = Lang.T("請睇吓附件。"); // 淨係傳附件
         return t;
     }
+
+    /// <summary>傳送時攞走附件（已複製去 AI 資料夾）；冇就空。</summary>
+    public List<string> TakeFiles() => _attach.Take();
 
     public void SetBusy(bool busy)
     {
         _send.Text = busy ? Lang.T("停止") : Lang.T("傳送");
         _send.Kind = busy ? BtnKind.Danger : BtnKind.Primary;
         _input.ReadOnly = busy;
+        _clip.Enabled = !busy;
         _apply.Enabled = _undo.Enabled = _clear.Enabled = !busy;
         _send.Invalidate();
     }

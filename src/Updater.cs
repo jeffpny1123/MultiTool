@@ -183,21 +183,13 @@ internal static class Updater
         }
         progress.Close();
 
-        // 用 PowerShell 等呢個程式閂咗，再換 exe、重開（EncodedCommand 費事中文路徑 / 引號出事）
-        static string Q(string s) => "'" + s.Replace("'", "''") + "'";
-        string ps =
-            $"$p={Environment.ProcessId}; try {{ Wait-Process -Id $p -Timeout 30 -ErrorAction SilentlyContinue }} catch {{}}; " +
-            $"Start-Sleep -Milliseconds 300; " +
-            $"for($i=0;$i -lt 20;$i++){{ try {{ Move-Item -LiteralPath {Q(newExe)} -Destination {Q(exe)} -Force -ErrorAction Stop; break }} catch {{ Start-Sleep -Milliseconds 500 }} }}; " +
-            $"Start-Process -FilePath {Q(exe)} -WorkingDirectory {Q(dir)}";
-        string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(ps));
+        // 叫新版自己換檔：新版等呢個程式閂咗，將自己複製去 MultiTool.exe 再重開（唔經 PowerShell / cmd）
         try
         {
-            Process.Start(new ProcessStartInfo("powershell.exe",
-                $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {encoded}")
+            Process.Start(new ProcessStartInfo(newExe, $"--apply-update \"{exe}\" {Environment.ProcessId}")
             {
-                CreateNoWindow = true,
-                UseShellExecute = false
+                UseShellExecute = false,
+                WorkingDirectory = dir
             });
         }
         catch (Exception ex)
@@ -209,6 +201,64 @@ internal static class Updater
         }
         Application.Exit();
         return true;
+    }
+
+    /// <summary>
+    /// 新版以 --apply-update 舊exe路徑 舊PID 開：等舊版閂咗，複製自己去舊 exe，再開返佢。
+    /// 係呢個模式就回傳 true（Main 唔使再開介面）。
+    /// </summary>
+    public static bool TryApply(string[] argv)
+    {
+        int i = Array.IndexOf(argv, "--apply-update");
+        if (i < 0) return false;
+        string self = Environment.ProcessPath ?? "";
+        try
+        {
+            if (i + 2 >= argv.Length) return true;
+            string target = Path.GetFullPath(argv[i + 1]);
+            int.TryParse(argv[i + 2], out int pid);
+            // 安全：淨係准換同一個資料夾入面嘅 exe
+            if (self.Length == 0 || !target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(Path.GetDirectoryName(target), Path.GetDirectoryName(Path.GetFullPath(self)), StringComparison.OrdinalIgnoreCase))
+                return true;
+            // 等舊版閂咗
+            if (pid > 0)
+                try { using var p = Process.GetProcessById(pid); p.WaitForExit(30000); } catch { }
+            System.Threading.Thread.Sleep(300);
+            Exception? last = null;
+            bool ok = false;
+            for (int k = 0; k < 40 && !ok; k++)
+            {
+                try { File.Copy(self, target, true); ok = true; }
+                catch (Exception ex) { last = ex; System.Threading.Thread.Sleep(500); }
+            }
+            if (!ok)
+            {
+                AppPaths.LogError("自動更新換檔", last ?? new IOException("copy failed"));
+                MessageBox.Show(Lang.F("自動換檔失敗，請手動將\n{0}\n改名做 MultiTool.exe。", self), Program.AppName,
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return true;
+            }
+            Process.Start(new ProcessStartInfo(target, "--restart") { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(target)! });
+        }
+        catch (Exception ex) { AppPaths.LogError("自動更新換檔", ex); }
+        return true;
+    }
+
+    /// <summary>正常開程式：刪走上次更新留低嘅 MultiTool.update.exe（換檔嗰個可能未閂，等一陣再試）。</summary>
+    public static void CleanupLeftover()
+    {
+        string? dir = Path.GetDirectoryName(Environment.ProcessPath ?? "");
+        if (string.IsNullOrEmpty(dir)) return;
+        string f = Path.Combine(dir, "MultiTool.update.exe");
+        if (!File.Exists(f) || string.Equals(Path.GetFullPath(f), Path.GetFullPath(Environment.ProcessPath!), StringComparison.OrdinalIgnoreCase)) return;
+        Task.Run(async () =>
+        {
+            for (int k = 0; k < 15 && File.Exists(f); k++)
+            {
+                try { File.Delete(f); } catch { await Task.Delay(1000); }
+            }
+        });
     }
 
     /// <summary>下載進度細視窗。</summary>

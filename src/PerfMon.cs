@@ -291,7 +291,7 @@ internal sealed class MetricTile : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Parent?.BackColor ?? Ui.Card);
+        Ui.Clear(g, this, Parent?.BackColor ?? Ui.Card);
         Ui.Smooth(g);
         var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
         using (var p = Ui.Round(r, Ui.S(10f)))

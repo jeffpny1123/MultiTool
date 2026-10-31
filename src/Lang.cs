@@ -134,6 +134,22 @@ public static partial class Lang
         return key;
     }
 
+    /// <summary>介面上見到嘅字 → 原本嘅 key（插件用 [key="…"] 揀元件，唔理介面係咩語言）；唔係翻譯出嚟嘅就 null。</summary>
+    public static string? KeyOf(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        if (_rev == null)
+        {
+            var d = new Dictionary<string, string>();
+            foreach (var k in Table.Keys) d.TryAdd(T(k), k);
+            foreach (var k in Extra.Keys) d.TryAdd(T(k), k);
+            _rev = d;
+        }
+        if (_rev.TryGetValue(text, out var key)) return key;
+        return Table.ContainsKey(text) ? text : null;
+    }
+    private static Dictionary<string, string>? _rev;
+
     // ---- 其他語言：lang.<code>.json（resource），再用 data\lang\<code>.json 覆蓋（用家自己改譯本）----
     private static Dictionary<string, string>? _extra;
     private static Dictionary<string, string> Extra => _extra ??= LoadExtra();

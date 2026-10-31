@@ -310,7 +310,7 @@ internal sealed class MonitorTile : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Parent?.BackColor ?? Ui.Bg);
+        Ui.Clear(g, this, Parent?.BackColor ?? Ui.Bg);
         Ui.Smooth(g);
         bool running = ScriptRunner.IsRunning(Script);
         var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);

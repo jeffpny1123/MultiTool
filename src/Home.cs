@@ -30,6 +30,7 @@ internal sealed class HomePage : Panel
         Dock = DockStyle.Fill;
         AutoScroll = true;
         _banner = new Banner(go);
+        Plugins.ModEngine.Protect(_banner); // 有程式名同版本號：插件唔准改
         _mineTitle = Section(Lang.T("你的工具"));
         _tipsTitle = Section(Lang.T("小貼士"));
         _tips = new TipsBox();
@@ -159,7 +160,7 @@ internal sealed class HomePage : Panel
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Parent?.BackColor ?? Ui.Bg);
+            Ui.Clear(g, this, Parent?.BackColor ?? Ui.Bg);
             Ui.Smooth(g);
             var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             using (var path = Ui.Round(r, Ui.S(16f)))
@@ -226,7 +227,7 @@ internal sealed class HomePage : Panel
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Parent?.BackColor ?? Ui.Bg);
+            Ui.Clear(g, this, Parent?.BackColor ?? Ui.Bg);
             Ui.Smooth(g);
             float lift = _hover && !_down ? Ui.S(2f) : 0f;
             var r = new RectangleF(0.5f, 0.5f + (Ui.S(2f) - lift), Width - 1.5f, Height - 1.5f - Ui.S(2f));
@@ -344,7 +345,7 @@ internal sealed class HomePage : Panel
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Parent?.BackColor ?? Ui.Bg);
+            Ui.Clear(g, this, Parent?.BackColor ?? Ui.Bg);
             Ui.Smooth(g);
             var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             using (var path = Ui.Round(r, Ui.S(12f)))

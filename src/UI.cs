@@ -40,6 +40,7 @@ namespace UI
         {
             try
             {
+                if (ThemeStore.Active is { } t) return t.Light; // 插件主題：跟佢嘅基底
                 var f = Path.Combine(AppContext.BaseDirectory, "data", "theme.txt");
                 return File.Exists(f) && File.ReadAllText(f).Trim() == "light";
             }
@@ -73,10 +74,33 @@ namespace UI
         public static readonly Color Success = T(0x2BB673, 0x1B9C5F);
         public static readonly Color Danger = T(0xE5484D, 0xD8383E);
 
+        /// <summary>插件主題：用佢定嘅顏色 / 字型蓋過基底（開程式時一次）。</summary>
+        static Ui()
+        {
+            var t = ThemeStore.Active;
+            if (t == null) return;
+            Color C(string k, Color d) => t.Colors.TryGetValue(k, out var c) ? c : d;
+            Bg = C("bg", Bg); Panel = C("panel", Panel); Card = C("card", Card); CardHi = C("cardHi", CardHi); Input = C("input", Input);
+            Border = C("border", Border); BorderHi = C("borderHi", BorderHi); Text = C("text", Text); TextDim = C("dim", TextDim);
+            TextFaint = C("faint", TextFaint); Accent = C("accent", Accent); Accent2 = C("accent2", Accent2); Success = C("success", Success); Danger = C("danger", Danger);
+            if (t.FontFile != null && ThemeStore.LoadFont(t.FontFile) is { } fam) { _themeFamily = fam; _themeFont = fam.Name; }
+            else if (!string.IsNullOrWhiteSpace(t.Font)) _themeFont = t.Font.Trim();
+        }
+
+        private static readonly FontFamily? _themeFamily;
+        private static readonly string? _themeFont;
+
+        /// <summary>自己畫嘅控件塗底色：有主題背景圖而後面透明就唔塗（等背景圖露出嚟）。</summary>
+        public static void Clear(Graphics g, Control c, Color col)
+        {
+            if (col.A < 255 || SeeThrough(c)) return;
+            g.Clear(col);
+        }
+
         /// <summary>淺色底上嘅色字：深色主題調光，日光主題調深。</summary>
         public static Color OnTint(Color hue) => Light ? Mix(hue, Color.Black, 0.3f) : Mix(hue, Color.White, 0.45f);
 
-        public static string UiFamily => Lang.Current switch
+        public static string UiFamily => _themeFont ?? Lang.Current switch
         {
             Language.ZhHant => "Microsoft JhengHei UI",
             Language.ZhHans => "Microsoft YaHei UI",
@@ -100,6 +124,17 @@ namespace UI
             catch { return 1f; }
         }
 
+        /// <summary>後面有插件加嘅背景圖（或者 parent 透明）：自己畫嘅控件唔好用底色塗走成格。</summary>
+        public static bool SeeThrough(Control c)
+        {
+            for (var p = c.Parent; p != null; p = p.Parent)
+            {
+                if (p.BackgroundImage != null) return true;
+                if (p.BackColor.A == 255) return false;
+            }
+            return false;
+        }
+
         public static Color Hex(int rgb) => Color.FromArgb(255, (rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
         public static Color Alpha(Color c, int a) => Color.FromArgb(a, c);
 
@@ -109,12 +144,15 @@ namespace UI
 
         public static int S(int v) => (int)Math.Round(v * Scale);
         public static float S(float v) => v * Scale;
+        public static int S(double v) => (int)Math.Round(v * Scale);
+        /// <summary>實際 px → 100% 縮放嘅 px（插件用）。</summary>
+        public static int Unscale(int v) => (int)Math.Round(v / Scale);
 
         private static Font Get(string family, float size, FontStyle style)
         {
             var key = (family, size, style);
             if (Fonts.TryGetValue(key, out var f)) return f;
-            try { f = new Font(family, size, style, GraphicsUnit.Point); }
+            try { f = _themeFamily != null && family == _themeFont ? new Font(_themeFamily, size, style, GraphicsUnit.Point) : new Font(family, size, style, GraphicsUnit.Point); }
             catch { f = new Font(FontFamily.GenericSansSerif, size, style, GraphicsUnit.Point); }
             Fonts[key] = f;
             return f;
@@ -233,11 +271,27 @@ namespace UI
     {
         private string _title = "", _hint = "";
 
+        /// <summary>插件改嘅卡底色（半透明就見到後面嘅背景圖）/ 標題字色；null = 預設。</summary>
+        public Color? Fill
+        {
+            get => _fill;
+            set
+            {
+                _fill = value;
+                if (value is { A: < 255 }) { SetStyle(ControlStyles.SupportsTransparentBackColor, true); BackColor = Color.Transparent; }
+                else if (BackColor.A < 255) BackColor = Ui.Card;
+                Invalidate();
+            }
+        }
+        public Color? TextColor { get => _textColor; set { _textColor = value; Invalidate(); } }
+        private Color? _fill, _textColor;
+
         public CardPanel()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint |
                      ControlStyles.ResizeRedraw, true);
             BackColor = Ui.Card;
+            if (Wallpaper.CardFill is { } cf) Fill = cf; // 主題有背景圖：卡片半透明
             UpdatePadding();
         }
 
@@ -313,12 +367,12 @@ namespace UI
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Parent?.BackColor ?? Ui.Bg);
+            if (BackColor.A == 255 && !Ui.SeeThrough(this)) g.Clear(Parent?.BackColor ?? Ui.Bg);
             Ui.Smooth(g);
             var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             using (var path = Ui.Round(r, Ui.S(10f)))
             {
-                using var b = new SolidBrush(Ui.Card);
+                using var b = new SolidBrush(_fill ?? Ui.Card);
                 g.FillPath(b, path);
                 using var pen = new Pen(Ui.Border, 1f);
                 g.DrawPath(pen, path);
@@ -327,7 +381,7 @@ namespace UI
             if (_title.Length > 0)
             {
                 var tf = Ui.F(11f, FontStyle.Bold);
-                TextRenderer.DrawText(g, _title, tf, new Point(x, y), Ui.Text, TextFormatFlags.NoPadding);
+                TextRenderer.DrawText(g, _title, tf, new Point(x, y), _textColor ?? Ui.Text, TextFormatFlags.NoPadding);
                 y += tf.Height + Ui.S(4);
             }
             if (_hint.Length > 0)
@@ -504,7 +558,7 @@ namespace UI
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Field.BackFor(this));
+            Ui.Clear(g, this, Field.BackFor(this));
             Ui.Smooth(g);
             var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             using var path = Ui.Round(r, Ui.S(7f));
@@ -562,6 +616,11 @@ namespace UI
 
         public BtnKind Kind { get => _kind; set { _kind = value; Invalidate(); } }
 
+        /// <summary>插件改嘅底色 / 字色（null = 跟 Kind）。</summary>
+        public Color? Fill { get => _fill; set { _fill = value; Invalidate(); } }
+        public Color? TextColor { get => _textColor; set { _textColor = value; Invalidate(); } }
+        private Color? _fill, _textColor;
+
         /// <summary>Ghost 款用虛線邊（同「+」加圖片格一致）。</summary>
         public bool Dashed { get; set; }
 
@@ -583,9 +642,9 @@ namespace UI
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Field.BackFor(this));
+            if (!Ui.SeeThrough(this)) g.Clear(Field.BackFor(this)); // 後面有插件加嘅背景圖：唔好塗走
             Ui.Smooth(g);
-            if (_kind == BtnKind.Ghost)
+            if (_kind == BtnKind.Ghost && _fill == null)
             {
                 var gr = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
                 using var gp = Ui.Round(gr, Ui.S(7f));
@@ -606,6 +665,7 @@ namespace UI
                 BtnKind.Danger => Ui.Danger,
                 _ => Ui.CardHi
             };
+            if (_fill is { } fc) baseCol = fc;
             if (!Enabled) baseCol = Ui.CardHi;
             else if (_down) baseCol = ControlPaint.Dark(baseCol, 0.1f);
             else if (_hover) baseCol = ControlPaint.Light(baseCol, 0.25f);
@@ -618,7 +678,7 @@ namespace UI
                 g.DrawPath(pen, path);
             }
             // 灰色底嘅掣用主題文字色（日光主題白字會睇唔到）
-            var fore = _kind is BtnKind.Primary or BtnKind.Success or BtnKind.Danger ? ForeColor : Ui.Text;
+            var fore = _textColor ?? (_kind is BtnKind.Primary or BtnKind.Success or BtnKind.Danger ? ForeColor : Ui.Text);
             // 文字太長（某啲語言）：縮細字體放得落為止
             using var fit = Ui.Shrink(Text, Font, (int)r.Width - Ui.S(10));
             TextRenderer.DrawText(g, Text, fit ?? Font, Rectangle.Round(r), Enabled ? fore : Ui.TextFaint,
@@ -664,7 +724,7 @@ namespace UI
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Field.BackFor(this));
+            Ui.Clear(g, this, Field.BackFor(this));
             Ui.Smooth(g);
             var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
             using var path = Ui.Round(r, Ui.S(9f));
@@ -905,7 +965,7 @@ namespace UI
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(Ui.Panel);
+            Ui.Clear(g, this, Ui.Panel);
             Ui.Smooth(g);
             var r = new RectangleF(Ui.S(10f), Ui.S(3f), Width - Ui.S(20f), Height - Ui.S(6f));
             if (_active || _hover)

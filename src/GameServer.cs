@@ -1226,7 +1226,7 @@ internal sealed class TabStrip : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Parent?.BackColor ?? Ui.Bg);
+        Ui.Clear(g, this, Parent?.BackColor ?? Ui.Bg);
         using (var line = new Pen(Ui.Border)) g.DrawLine(line, 0, Height - 1, Width, Height - 1);
         for (int i = 0; i < _tabs.Length; i++)
         {
@@ -1259,7 +1259,7 @@ internal sealed class ThinBar : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(Parent?.BackColor ?? Ui.Bg);
+        Ui.Clear(g, this, Parent?.BackColor ?? Ui.Bg);
         if (_v < 0) return;
         Ui.Smooth(g);
         var r = new RectangleF(0, 0, Width - 1, Height - 1);
@@ -1957,14 +1957,15 @@ internal sealed class ServerAssist
         if (_prov == null) return;
         string q = _panel.TakeInput();
         if (q.Length == 0) return;
-        await AskAsync(q);
+        await AskAsync(q, _panel.TakeFiles());
     }
 
     public bool Available => _prov != null;
 
     /// <summary>打開對話框並問一條問題（例如「伺服器出咗問題」掣）。</summary>
-    public async Task AskAsync(string q)
+    public async Task AskAsync(string q, List<string>? files = null)
     {
+        files ??= new List<string>();
         if (_prov == null || _running != null) return;
         _st.Open = true;
         Layout();
@@ -1973,7 +1974,7 @@ internal sealed class ServerAssist
         Directory.CreateDirectory(_s.Dir);
 
         _stopped = false;
-        _st.Msgs.Add(("user", q));
+        _st.Msgs.Add(("user", q + (files.Count > 0 ? "\n" + Ai.AttachBar.Label(files) : "")));
         _panel.Render(_st, _prov.Name);
         _panel.Thinking(Lang.F("{0} 諗緊…", _prov.Name));
         _panel.SetBusy(true);
@@ -1981,11 +1982,11 @@ internal sealed class ServerAssist
         Ai.AiProvider.Answer ans;
         try
         {
-            ans = await _prov.AskAsync(exe, BuildPrompt(q, _st.Session == null), _st.Session, p => _running = p, folder: _s.Dir);
+            ans = await _prov.AskAsync(exe, BuildPrompt(q, _st.Session == null), _st.Session, p => _running = p, folder: _s.Dir, files: files);
             if (ans.IsError && !_stopped && _st.Session != null && Ai.AiProvider.IsSessionGone(ans.Text))
             {
                 _st.Session = null;
-                ans = await _prov.AskAsync(exe, BuildPrompt(q, true), null, p => _running = p, folder: _s.Dir);
+                ans = await _prov.AskAsync(exe, BuildPrompt(q, true), null, p => _running = p, folder: _s.Dir, files: files);
             }
         }
         catch (Exception ex) { ans = new Ai.AiProvider.Answer(Lang.T("出錯：") + ex.Message, null, true); }
