@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 13.5px "Segoe UI", "Microsoft JhengHei UI", sans-serif; background: var(--mt-bg); color: var(--mt-text); overflow: hidden; user-select: none; }
+  button { background: var(--mt-card-hi); color: var(--mt-text); border: 1px solid var(--mt-border); border-radius: 7px; padding: 5px 10px; font: inherit; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--mt-border-hi, var(--mt-accent)); }
+  button.on { background: var(--mt-accent); border-color: var(--mt-accent); color: #fff; }
+  button.primary { background: var(--mt-accent); border-color: var(--mt-accent); color: #fff; }
+  button.ghost { background: transparent; border-color: transparent; }
+  button.ghost:hover { background: var(--mt-card-hi); }
+  input, select { background: var(--mt-input); color: var(--mt-text); border: 1px solid var(--mt-border); border-radius: 7px; padding: 6px 9px; font: inherit; user-select: text; }
+  input:focus, select:focus { outline: none; border-color: var(--mt-accent); }
+  .dim { color: var(--mt-text-dim); } .faint { color: var(--mt-text-faint, var(--mt-text-dim)); }
+  .up { color: var(--up); } .down { color: var(--down); }
+
+  #app { display: flex; height: 100vh; }
+  /* 左邊：自選股（固定闊度） */
+  #side { width: 310px; flex: none; display: flex; flex-direction: column; border-right: 1px solid var(--mt-border); background: var(--mt-card); }
+  #side .top { padding: 10px; display: flex; gap: 6px; position: relative; }
+  #q { flex: 1; min-width: 0; }
+  #tools { padding: 0 10px 8px; display: flex; gap: 6px; align-items: center; }
+  #total { padding: 0 12px 8px; font-size: 12.5px; }
+  #list { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+  .grp { display: flex; align-items: center; gap: 6px; padding: 7px 12px; color: var(--mt-text-dim); font-size: 12px; cursor: pointer; border-top: 1px solid var(--mt-border); }
+  .grp:hover { color: var(--mt-text); }
+  .grp .arw { width: 12px; display: inline-block; }
+  .row { display: flex; align-items: center; gap: 4px; padding: 6px 10px 6px 4px; cursor: pointer; }
+  .row:hover { background: var(--mt-card-hi); }
+  .row.sel { background: var(--mt-card-hi); box-shadow: inset 3px 0 0 var(--mt-accent); }
+  .row.dragover { box-shadow: inset 0 2px 0 var(--mt-accent); }
+  .row .star { width: 24px; text-align: center; font-size: 14px; color: var(--mt-text-faint, var(--mt-text-dim)); flex: none; }
+  .row .star.on { color: #f5b701; }
+  .row .nm { flex: 1; min-width: 0; }
+  .row .sym { font-weight: 600; display: flex; gap: 5px; align-items: center; }
+  .row .sym .bell { font-size: 11px; }
+  .row .full { color: var(--mt-text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .px { text-align: right; flex: none; }
+  .row .px b { font-weight: 600; display: block; }
+  .row .px span { font-size: 12px; }
+  .row .pl { font-size: 11.5px; display: block; }
+  .row spark { display: none; }
+  .empty { padding: 18px 14px; color: var(--mt-text-dim); line-height: 1.6; }
+  #foot { padding: 6px 12px; font-size: 11.5px; color: var(--mt-text-dim); border-top: 1px solid var(--mt-border); display: flex; gap: 6px; align-items: center; }
+  #foot .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mt-text-dim); flex: none; }
+  #foot .dot.live { background: var(--mt-success); }
+
+  /* 右邊：走勢圖 */
+  #main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 12px 16px 8px; }
+  #head { display: flex; align-items: flex-start; gap: 12px; }
+  #head .info { flex: 1; min-width: 0; }
+  #hName { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #hName small { font-weight: 400; color: var(--mt-text-dim); margin-left: 6px; }
+  #hPrice { font-size: 26px; font-weight: 600; margin-top: 2px; }
+  #hPrice span { font-size: 15px; font-weight: 500; margin-left: 8px; }
+  #hMine { font-size: 13px; margin-top: 2px; min-height: 18px; }
+  #bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0 6px; }
+  #bar .sep { width: 1px; height: 20px; background: var(--mt-border); margin: 0 4px; }
+  #bar .sp { flex: 1; }
+  #wrap { flex: 1; min-height: 160px; position: relative; }
+  #cv { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+  #cv.grab { cursor: grabbing; }
+  #msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--mt-text-dim); pointer-events: none; text-align: center; padding: 20px; }
+  #tip { position: absolute; display: none; pointer-events: none; background: var(--mt-card); border: 1px solid var(--mt-border); border-radius: 8px; padding: 7px 10px; font-size: 12px; line-height: 1.6; box-shadow: 0 4px 14px rgba(0,0,0,.25); white-space: nowrap; z-index: 5; }
+  #tip b { font-weight: 600; }
+  #tip td { padding: 0 4px; } #tip td:last-child { text-align: right; }
+  #note { font-size: 11.5px; color: var(--mt-text-dim); margin: 6px 0 0; line-height: 1.5; }
+
+  /* 彈出選單 / 視窗 */
+  .pop { position: fixed; z-index: 20; background: var(--mt-card); border: 1px solid var(--mt-border); border-radius: 9px; box-shadow: 0 8px 24px rgba(0,0,0,.3); padding: 4px; min-width: 200px; max-height: 70vh; overflow-y: auto; display: none; }
+  .pop .it { padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+  .pop .it:hover { background: var(--mt-card-hi); }
+  .pop .it .r { margin-left: auto; color: var(--mt-text-dim); font-size: 12px; }
+  .pop .it.off { color: var(--mt-text-dim); cursor: default; }
+  .pop .it.off:hover { background: none; }
+  .pop .hd { padding: 8px 10px 4px; font-size: 12px; color: var(--mt-text-dim); display: flex; align-items: center; }
+  .pop .hd a { margin-left: auto; color: var(--mt-accent); cursor: pointer; }
+  .pop .hr { height: 1px; background: var(--mt-border); margin: 4px 2px; }
+  #mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 30; display: none; align-items: center; justify-content: center; }
+  .dlg { background: var(--mt-card); border: 1px solid var(--mt-border); border-radius: 12px; padding: 18px 20px; width: 400px; max-width: calc(100vw - 32px); box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+  .dlg h3 { margin: 0 0 6px; font-size: 15px; }
+  .dlg p { margin: 0 0 12px; color: var(--mt-text-dim); font-size: 12.5px; line-height: 1.5; }
+  .dlg label { display: block; margin: 10px 0 4px; color: var(--mt-text-dim); font-size: 12.5px; }
+  .dlg input[type=text], .dlg select { width: 100%; }
+  .dlg .chk { display: flex; gap: 8px; align-items: center; color: var(--mt-text); font-size: 13.5px; margin: 10px 0 0; cursor: pointer; }
+  .dlg .chk input { margin: 0; }
+  .dlg .sub { margin: 2px 0 0 22px; color: var(--mt-text-dim); font-size: 12px; line-height: 1.5; }
+  .dlg .err { color: var(--mt-danger); font-size: 12.5px; min-height: 18px; margin-top: 8px; }
+  .dlg .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  .dlg .btns .l { margin-right: auto; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="top">
+      <input id="q" autocomplete="off" spellcheck="false">
+      <button id="hot"></button>
+    </div>
+    <div id="tools">
+      <button id="starOnly" class="ghost"></button>
+    </div>
+    <div id="total"></div>
+    <div id="list"></div>
+    <div id="foot"><span class="dot" id="dot"></span><span id="upd"></span></div>
+  </aside>
+  <section id="main">
+    <div id="head">
+      <div class="info">
+        <div id="hName"></div>
+        <div id="hPrice"></div>
+        <div id="hMine"></div>
+      </div>
+      <button id="gear" class="ghost" title=""></button>
+    </div>
+    <div id="bar"></div>
+    <div id="wrap">
+      <canvas id="cv"></canvas>
+      <div id="msg"></div>
+      <div id="tip"></div>
+    </div>
+    <p id="note"></p>
+  </section>
+</div>
+<div class="pop" id="pop"></div>
+<div id="mask"><div class="dlg" id="dlg"></div></div>
+<script src="chart.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

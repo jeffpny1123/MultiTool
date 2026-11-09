@@ -194,7 +194,7 @@ internal static class Whisper
     private static HttpClient NewClient()
     {
         var c = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
-        c.DefaultRequestHeaders.UserAgent.ParseAdd("MultiTool");
+        c.DefaultRequestHeaders.UserAgent.ParseAdd(Program.FileName);
         return c;
     }
 

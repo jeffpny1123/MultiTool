@@ -40,7 +40,7 @@ internal static class SteamCmd
         string zip = Path.Combine(Dir, "steamcmd.zip");
         using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) })
         {
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("MultiTool");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd(Program.FileName);
             using var resp = await http.GetAsync(Url, HttpCompletionOption.ResponseHeadersRead, ct);
             resp.EnsureSuccessStatusCode();
             long total = resp.Content.Headers.ContentLength ?? -1, done = 0;
@@ -319,10 +319,12 @@ internal static class GameDefs
 /// <summary>一個伺服器（設定 + 執行狀態）。存喺 &lt;根目錄&gt;\&lt;id&gt;\server.txt。</summary>
 internal sealed class GameSrv
 {
+    public const string DefaultName = "Rabi Toolkit Server";
+
     public enum State { Stopped, Installing, Starting, Running, Stopping }
 
     public readonly GameDef Def;
-    public string Name = "MultiTool Server", Password = "", Admin = "", ExtraArgs = "";
+    public string Name = DefaultName, Password = "", Admin = "", ExtraArgs = "";
     public int Port, Players;
     public bool AutoStart, AutoRestart = true, Upnp;
     public int BackupMinutes = 30, BackupKeep = 10;
@@ -359,7 +361,7 @@ internal sealed class GameSrv
 
     /// <summary>顯示用名稱（自訂伺服器用佢自己個名）。</summary>
     public string DisplayName => !IsCustom ? Def.Name
-        : (Name.Trim().Length > 0 && Name != "MultiTool Server" ? Name.Trim() : Lang.T("自訂伺服器")) + (CustomAppId > 0 ? $" (App {CustomAppId})" : "");
+        : (Name.Trim().Length > 0 && Name != DefaultName && Name != "MultiTool Server" ? Name.Trim() : Lang.T("自訂伺服器")) + (CustomAppId > 0 ? $" (App {CustomAppId})" : "");
     public string GameDir => Path.Combine(Dir, "game");
     public string SaveRoot => Path.Combine(Dir, "save");
     public string BackupDir => Path.Combine(Dir, "backups");
@@ -731,7 +733,7 @@ internal sealed class GameSrv
         bool all = true;
         foreach (var (proto, port) in PortList())
         {
-            bool ok = await Scripts.Upnp.MapAsync(port, proto, "MultiTool " + DisplayName, CancellationToken.None, LeaseSec);
+            bool ok = await Scripts.Upnp.MapAsync(port, proto, Program.FileName + " " + DisplayName, CancellationToken.None, LeaseSec);
             Log(ok ? Lang.F("UPnP：已開 {0} {1}", proto, port) : Lang.F("UPnP：開唔到 {0} {1}", proto, port));
             all &= ok;
         }
@@ -754,7 +756,7 @@ internal sealed class GameSrv
                 try { await Task.Delay(TimeSpan.FromMinutes(50), cts.Token); } catch { return; }
                 if (!Running || !Upnp) return;
                 foreach (var (proto, port) in PortList())
-                    await Scripts.Upnp.MapAsync(port, proto, "MultiTool " + DisplayName, CancellationToken.None, LeaseSec);
+                    await Scripts.Upnp.MapAsync(port, proto, Program.FileName + " " + DisplayName, CancellationToken.None, LeaseSec);
             }
         });
     }
@@ -955,7 +957,7 @@ internal static class GameServers
                    Directory.Exists(Path.Combine(Root, $"custom-{n}"))) n++;
             key = $"custom-{n}";
         }
-        var s = new GameSrv(d, key) { Name = d.Id == "custom" ? Lang.F("自訂伺服器 {0}", key[7..]) : "MultiTool Server" };
+        var s = new GameSrv(d, key) { Name = d.Id == "custom" ? Lang.F("自訂伺服器 {0}", key[7..]) : GameSrv.DefaultName };
         s.Save();
         List.Add(s);
         RaiseChanged();
@@ -1011,7 +1013,7 @@ internal static class GameServers
     public static bool AddFirewall(GameSrv s)
     {
         var cmds = s.PortList().Select(p =>
-            $"netsh advfirewall firewall add rule name=\"MultiTool {s.DisplayName.Replace("\"", "")} {p.Proto} {p.Port}\" dir=in action=allow protocol={p.Proto} localport={p.Port}");
+            $"netsh advfirewall firewall add rule name=\"{Program.FileName} {s.DisplayName.Replace("\"", "")} {p.Proto} {p.Port}\" dir=in action=allow protocol={p.Proto} localport={p.Port}");
         try
         {
             var psi = new ProcessStartInfo("cmd.exe", "/c " + string.Join(" & ", cmds))
@@ -1903,7 +1905,7 @@ internal sealed class ServerAssist
             sb.AppendLine("你可以讀同改呢個資料夾入面嘅設定檔幫用戶調設定（例如經驗倍率、難度、PvP），改之前簡單講你會改咩，改完講清楚改咗邊個檔、邊幾項。");
             sb.AppendLine("規則：");
             sb.AppendLine("- 唔好刪除或者改動存檔同備份，除非用戶明確要求。唔好喺呢個資料夾以外做嘢。唔好執行伺服器程式或者 SteamCMD（開關伺服器由用戶喺 MultiTool 撳掣）。");
-            sb.AppendLine("- 伺服器名、密碼、管理員密碼、人數、端口、額外啟動參數係 MultiTool 自己管理嘅設定（每次開伺服器時寫入遊戲設定檔），唔好直接改設定檔入面呢幾項。");
+            sb.AppendLine("- 伺服器名、密碼、管理員密碼、人數、端口、額外啟動參數係拉比工具箱（Rabi Toolkit）自己管理嘅設定（每次開伺服器時寫入遊戲設定檔），唔好直接改設定檔入面呢幾項。");
             sb.AppendLine("  要改呢啲（或者用戶叫你幫手填設定），就喺回答最後俾一個 ```json code block，只放要改嘅欄位：");
             sb.AppendLine("  {\"name\":\"伺服器名\",\"password\":\"密碼\",\"admin\":\"管理員密碼\",\"players\":8,\"port\":2456,\"extraArgs\":\"額外啟動參數\"}");
             if (_s.IsCustom)
@@ -1922,7 +1924,7 @@ internal sealed class ServerAssist
         cur.Add("port=" + _s.Port);
         cur.Add($"extraArgs=\"{_s.ExtraArgs}\"");
         if (_s.IsCustom) { cur.Add("appid=" + _s.CustomAppId); cur.Add($"exe=\"{_s.CustomExe}\""); cur.Add($"args=\"{_s.CustomArgs}\""); }
-        sb.AppendLine("MultiTool 而家嘅設定：" + string.Join("，", cur));
+        sb.AppendLine("拉比工具箱而家嘅設定：" + string.Join("，", cur));
         if (_s.Def.Note.Length > 0) sb.AppendLine("注意：" + _s.Def.Note);
         if (_s.IsCustom && Directory.Exists(_s.GameDir))
         {

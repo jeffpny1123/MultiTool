@@ -362,7 +362,7 @@ internal static class RemoteHost
 
     private static async Task AnnounceLoop(CancellationToken ct)
     {
-        _mapped = await Scripts.Upnp.MapAsync(RemoteSettings.Port, "TCP", "MultiTool Remote", ct);
+        _mapped = await Scripts.Upnp.MapAsync(RemoteSettings.Port, "TCP", Program.FileName + " Remote", ct);
         while (!ct.IsCancellationRequested)
         {
             try

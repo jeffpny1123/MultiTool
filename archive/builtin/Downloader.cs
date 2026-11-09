@@ -32,7 +32,7 @@ internal static class YtDlp
         string tmp = Exe + ".part";
         using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) })
         {
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("MultiTool");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd(Program.FileName);
             using var resp = await http.GetAsync(Url, HttpCompletionOption.ResponseHeadersRead, ct);
             resp.EnsureSuccessStatusCode();
             long total = resp.Content.Headers.ContentLength ?? -1, done = 0;
@@ -117,7 +117,7 @@ internal sealed class DownloadPage : ToolPage
     private readonly System.Windows.Forms.Timer _ui = new() { Interval = 400 };
     private bool _audio = true;
     private string _aq = "0", _vq = "1080";
-    private string _folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "MultiTool");
+    private string _folder = Program.BrandFolder(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));
     private CancellationTokenSource? _cts;
     private Process? _proc;
     private bool _busy;

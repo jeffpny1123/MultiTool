@@ -14,7 +14,7 @@ using MultiTool.UI;
 namespace MultiTool;
 
 /// <summary>
-/// 自動更新：問 GitHub 最新 Release，新過自己就下載 MultiTool.exe（或者 zip 入面嘅 MultiTool.exe），
+/// 自動更新：問 GitHub 最新 Release，新過自己就下載 RabiToolkit.exe（或者 zip 入面嘅 exe；舊版叫 MultiTool.exe），
 /// 閂咗自己之後換走舊 exe 再重開。data 資料夾唔會郁。
 /// </summary>
 internal static class Updater
@@ -27,7 +27,7 @@ internal static class Updater
     private static HttpClient NewClient()
     {
         var c = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-        c.DefaultRequestHeaders.UserAgent.ParseAdd("MultiTool-Updater");
+        c.DefaultRequestHeaders.UserAgent.ParseAdd(Program.FileName + "-Updater");
         c.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         return c;
     }
@@ -74,10 +74,10 @@ internal static class Updater
         string notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
         if (!root.TryGetProperty("assets", out var assets)) return null;
         string? url = null, name = null;
-        // 優先：MultiTool.exe；其次：任何 .exe；再其次：.zip
+        // 優先：RabiToolkit.exe / MultiTool.exe；其次：任何 .exe；再其次：.zip
         foreach (var pick in new Func<string, bool>[]
                  {
-                     n => n.Equals("MultiTool.exe", StringComparison.OrdinalIgnoreCase),
+                     n => n.Equals(Program.FileName + ".exe", StringComparison.OrdinalIgnoreCase) || n.Equals("MultiTool.exe", StringComparison.OrdinalIgnoreCase),
                      n => n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase),
                      n => n.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
                  })
@@ -132,10 +132,10 @@ internal static class Updater
     /// <summary>下載新版、換 exe、重開。成功（程式即將關閉）回傳 true。</summary>
     private static async Task<bool> DownloadAndRestartAsync(Form owner, Release rel)
     {
-        string exe = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "MultiTool.exe");
+        string exe = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, Program.FileName + ".exe");
         string dir = Path.GetDirectoryName(exe)!;
-        string newExe = Path.Combine(dir, "MultiTool.update.exe");
-        string tmp = Path.Combine(Path.GetTempPath(), "MultiTool_" + Guid.NewGuid().ToString("N")[..8] + Path.GetExtension(rel.AssetName));
+        string newExe = Path.Combine(dir, Path.GetFileNameWithoutExtension(exe) + ".update.exe"); // 舊用家個檔名照舊（捷徑唔會斷）
+        string tmp = Path.Combine(Path.GetTempPath(), Program.FileName + "_" + Guid.NewGuid().ToString("N")[..8] + Path.GetExtension(rel.AssetName));
 
         using var progress = new ProgressForm(Lang.F("下載緊 {0}…", rel.Tag));
         progress.Show(owner);
@@ -159,11 +159,12 @@ internal static class Updater
                 }
             }
 
-            // zip 就攞入面嘅 MultiTool.exe
+            // zip 就攞入面嘅 RabiToolkit.exe（舊版 zip 係 MultiTool.exe）
             if (tmp.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
                 using var zip = ZipFile.OpenRead(tmp);
-                var entry = zip.Entries.FirstOrDefault(e => e.Name.Equals("MultiTool.exe", StringComparison.OrdinalIgnoreCase))
+                var entry = zip.Entries.FirstOrDefault(e => e.Name.Equals(Program.FileName + ".exe", StringComparison.OrdinalIgnoreCase))
+                            ?? zip.Entries.FirstOrDefault(e => e.Name.Equals("MultiTool.exe", StringComparison.OrdinalIgnoreCase))
                             ?? zip.Entries.FirstOrDefault(e => e.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
                 if (entry == null) throw new InvalidOperationException(Lang.T("zip 入面搵唔到 exe"));
                 entry.ExtractToFile(newExe, true);
@@ -183,7 +184,7 @@ internal static class Updater
         }
         progress.Close();
 
-        // 叫新版自己換檔：新版等呢個程式閂咗，將自己複製去 MultiTool.exe 再重開（唔經 PowerShell / cmd）
+        // 叫新版自己換檔：新版等呢個程式閂咗，將自己複製去而家個 exe 再重開（唔經 PowerShell / cmd）
         try
         {
             Process.Start(new ProcessStartInfo(newExe, $"--apply-update \"{exe}\" {Environment.ProcessId}")
@@ -195,7 +196,7 @@ internal static class Updater
         catch (Exception ex)
         {
             AppPaths.LogError("啟動更新", ex);
-            MessageBox.Show(owner, Lang.F("自動換檔失敗，請手動將\n{0}\n改名做 MultiTool.exe。", newExe), Program.AppName);
+            MessageBox.Show(owner, Lang.F("自動換檔失敗，請手動將\n{0}\n改名做 {1}。", newExe, Path.GetFileName(exe)), Program.AppName);
             Application.Exit();
             return true;
         }
@@ -235,7 +236,7 @@ internal static class Updater
             if (!ok)
             {
                 AppPaths.LogError("自動更新換檔", last ?? new IOException("copy failed"));
-                MessageBox.Show(Lang.F("自動換檔失敗，請手動將\n{0}\n改名做 MultiTool.exe。", self), Program.AppName,
+                MessageBox.Show(Lang.F("自動換檔失敗，請手動將\n{0}\n改名做 {1}。", self, Path.GetFileName(argv[i + 1])), Program.AppName,
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return true;
             }
@@ -245,18 +246,22 @@ internal static class Updater
         return true;
     }
 
-    /// <summary>正常開程式：刪走上次更新留低嘅 MultiTool.update.exe（換檔嗰個可能未閂，等一陣再試）。</summary>
+    /// <summary>正常開程式：刪走上次更新留低嘅 xxx.update.exe（換檔嗰個可能未閂，等一陣再試）。</summary>
     public static void CleanupLeftover()
     {
         string? dir = Path.GetDirectoryName(Environment.ProcessPath ?? "");
         if (string.IsNullOrEmpty(dir)) return;
-        string f = Path.Combine(dir, "MultiTool.update.exe");
-        if (!File.Exists(f) || string.Equals(Path.GetFullPath(f), Path.GetFullPath(Environment.ProcessPath!), StringComparison.OrdinalIgnoreCase)) return;
+        string me = Path.GetFullPath(Environment.ProcessPath!);
+        var files = new[] { Path.GetFileNameWithoutExtension(me) + ".update.exe", "MultiTool.update.exe", Program.FileName + ".update.exe" }
+            .Select(n => Path.Combine(dir, n)).Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(f => File.Exists(f) && !string.Equals(Path.GetFullPath(f), me, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (files.Count == 0) return;
         Task.Run(async () =>
         {
-            for (int k = 0; k < 15 && File.Exists(f); k++)
+            for (int k = 0; k < 15 && files.Any(File.Exists); k++)
             {
-                try { File.Delete(f); } catch { await Task.Delay(1000); }
+                foreach (var f in files) try { if (File.Exists(f)) File.Delete(f); } catch { }
+                if (files.Any(File.Exists)) await Task.Delay(1000);
             }
         });
     }

@@ -33,12 +33,33 @@ internal sealed class PluginManifest
     public string Id = "", Name = "", Version = "1.0.0", Author = "", Description = "", Icon = "🧩", Entry = "ui.html";
     public bool Background;
     public List<string> Net = new();
-    public bool Notify, Clipboard, Secrets, Ai, Scripts, Ui;
+    public bool Notify, Clipboard, Secrets, Ai, Scripts, Ui, Exec;
     /// <summary>"tool" = 工具（有自己介面）；"mod" = 插件（改原有介面）。</summary>
     public string Type = "tool";
     /// <summary>插件主要改邊個工具（頁 key，例如 "editor"；"" = 成個程式），淨係顯示 / 俾 AI 參考用。</summary>
     public string Target = "";
     public bool IsMod => Type == "mod";
+    /// <summary>整 id 用嘅名（多語言就優先用英文）。</summary>
+    public string IdName = "";
+
+    /// <summary>字串，或者 {語言代碼: 字串}：揀而家介面語言，冇就用相近語言 → 英文 → 第一個。</summary>
+    public static string Loc(JsonNode? n, string d, string? want = null)
+    {
+        if (n is JsonValue v) return v.TryGetValue<string>(out var s) ? s : d;
+        if (n is not JsonObject o) return d;
+        string code = want ?? Lang.Code(Lang.Current);
+        var keys = new List<string> { code };
+        if (code.StartsWith("zh")) keys.AddRange(new[] { "zh", code == "zh-Hans" ? "zh-Hant" : "zh-Hans", "zh-HK", "zh-TW", "zh-CN" });
+        int dash = code.IndexOf('-');
+        if (dash > 0) keys.Add(code[..dash]);
+        keys.Add("en");
+        foreach (var k in keys)
+            foreach (var kv in o)
+                if (kv.Key.Equals(k, StringComparison.OrdinalIgnoreCase) && kv.Value is JsonValue x && x.TryGetValue<string>(out var t) && t.Trim().Length > 0) return t;
+        foreach (var kv in o)
+            if (kv.Value is JsonValue x && x.TryGetValue<string>(out var t) && t.Trim().Length > 0) return t;
+        return d;
+    }
 
     /// <summary>同一個插件、另一個入口頁（插件加落介面嘅 HTML 面板用）。</summary>
     public PluginManifest WithEntry(string entry)
@@ -54,10 +75,12 @@ internal sealed class PluginManifest
         var o = JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }) as JsonObject
                 ?? throw new InvalidDataException(Lang.T("manifest.json 唔係 JSON 物件"));
         string S(string k, string d) => o[k] is JsonValue v && v.TryGetValue<string>(out var s) ? s : d;
-        m.Name = S("name", id);
+        // 名 / 介紹可以寫多種語言：{"zh-Hant": "股票", "en": "Stocks", "ja": "株価"}，按介面語言揀
+        m.Name = Loc(o["name"], id);
+        m.IdName = Loc(o["name"], id, "en");
         m.Version = S("version", "1.0.0");
         m.Author = S("author", "");
-        m.Description = S("description", "");
+        m.Description = Loc(o["description"], "");
         m.Icon = S("icon", "🧩");
         m.Type = S("type", "tool").Trim().ToLowerInvariant() == "mod" ? "mod" : "tool";
         m.Target = S("target", "").Trim();
@@ -66,7 +89,7 @@ internal sealed class PluginManifest
         if (o["permissions"] is JsonObject p)
         {
             bool B(string k) => p[k] is JsonValue x && x.TryGetValue<bool>(out var y) && y;
-            m.Notify = B("notify"); m.Clipboard = B("clipboard"); m.Secrets = B("secrets"); m.Ai = B("ai"); m.Scripts = B("scripts"); m.Ui = B("ui");
+            m.Notify = B("notify"); m.Clipboard = B("clipboard"); m.Secrets = B("secrets"); m.Ai = B("ai"); m.Scripts = B("scripts"); m.Ui = B("ui"); m.Exec = B("exec");
             if (p["net"] is JsonArray arr)
                 foreach (var n in arr) if (n is JsonValue nv && nv.TryGetValue<string>(out var h) && h.Trim().Length > 0) m.Net.Add(h.Trim().ToLowerInvariant());
         }
@@ -87,13 +110,14 @@ internal sealed class PluginManifest
         if (Secrets) l.Add((Lang.T("加密儲存密碼 / API key"), false));
         if (Ai) l.Add((Lang.T("用你嘅 AI（Claude / ChatGPT / Gemini）"), false));
         if (Scripts) l.Add((Lang.T("睇同埋開始「我的腳本」（腳本會控制滑鼠鍵盤）"), true));
+        if (Exec) l.Add((Lang.T("喺你部電腦執行插件下載嘅程式（例如 yt-dlp、ffmpeg）"), true));
         if (Ui) l.Add((Lang.T("改 MultiTool 嘅外觀（主題、背景、側欄、首頁、設定；讀到呢啲位置嘅文字、可以撳掣）"), true));
         return l;
     }
 
     /// <summary>權限指紋：改咗就要重新同意。</summary>
     public string PermKey() =>
-        string.Join("|", Net.OrderBy(x => x)) + $";{Background};{Notify};{Clipboard};{Secrets};{Ai};{Scripts}" + (Ui ? ";ui" : "");
+        string.Join("|", Net.OrderBy(x => x)) + $";{Background};{Notify};{Clipboard};{Secrets};{Ai};{Scripts}" + (Ui ? ";ui" : "") + (Exec ? ";exec" : "");
 }
 
 internal static class PluginStore
@@ -217,7 +241,7 @@ internal static class PluginStore
         string json;
         using (var r = new StreamReader(man.Open())) json = r.ReadToEnd();
         var m = PluginManifest.Parse("x", json);
-        string id = MakeId(m.Name);
+        string id = MakeId(m.IdName);
         string dir = PathOf(id);
         string full = Path.GetFullPath(dir) + Path.DirectorySeparatorChar;
         long total = 0;
@@ -395,7 +419,7 @@ internal sealed class PluginWeb
 
     public void OpenDevTools() { try { _ctl.CoreWebView2.OpenDevToolsWindow(); } catch { } }
 
-    public void Close() { try { _ctl.Close(); } catch { } }
+    public void Close() { PluginBridge.KillAll(_m.Id); try { _ctl.Close(); } catch { } }
 
     private static string MimeOf(string p) => Path.GetExtension(p).ToLowerInvariant() switch
     {
@@ -447,7 +471,7 @@ internal static class PluginBridge
         {
             JsonNode? result = method.StartsWith("ui.") || method.StartsWith("app.")
                 ? OnUi(ui, () => { Need(m.IsMod && m.Ui, "ui"); return ModEngine.Call(m, method, args, post); })
-                : await CallAsync(m, method, args, Arg, ui);
+                : await CallAsync(m, method, args, Arg, ui, post);
             return new JsonObject { ["__mt"] = 1, ["id"] = id, ["ok"] = true, ["result"] = result }.ToJsonString();
         }
         catch (Exception ex)
@@ -480,10 +504,145 @@ internal static class PluginBridge
         return (T)ui.Invoke(f)!;
     }
 
-    private static async Task<JsonNode?> CallAsync(PluginManifest m, string method, JsonArray args, Func<int, string> Arg, Control ui)
+    // ---- 外掛程式（exec 權限）：每個插件行緊嘅程序，閂插件就一齊停 ----
+    private static readonly Dictionary<string, List<Process>> Procs = new();
+
+    public static void KillAll(string pluginId)
+    {
+        List<Process> l;
+        lock (Procs) { if (!Procs.Remove(pluginId, out var x)) return; l = x; }
+        foreach (var p in l) try { if (!p.HasExited) p.Kill(true); } catch { }
+    }
+
+    /// <summary>傳事件俾頁面（mt.* callback）。</summary>
+    private static void Emit(Action<string>? post, int cb, JsonNode data)
+    {
+        if (post == null || cb <= 0) return;
+        try { post(new JsonObject { ["__mtev"] = 1, ["cb"] = cb, ["data"] = data }.ToJsonString()); } catch { }
+    }
+
+    private static int CbId(JsonArray args, int i) => i < args.Count && args[i] is JsonValue v && v.TryGetValue<int>(out var n) ? n : 0;
+
+    // 用家揀過嘅資料夾（插件可以喺度存檔 / 喺檔案總管打開）
+    private static string FoldersFile(PluginManifest m) => Path.Combine(PluginStore.DataDir(m.Id), "folders.txt");
+    private static bool FolderAllowed(PluginManifest m, string path)
+    {
+        string full = Path.GetFullPath(path);
+        if (full.StartsWith(Path.GetFullPath(FilesDir(m)), StringComparison.OrdinalIgnoreCase)) return true;
+        try
+        {
+            if (!File.Exists(FoldersFile(m))) return false;
+            foreach (var d in File.ReadAllLines(FoldersFile(m)))
+                if (d.Length > 0 && (full.StartsWith(Path.GetFullPath(d).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase) || full.Equals(Path.GetFullPath(d), StringComparison.OrdinalIgnoreCase))) return true;
+        }
+        catch { }
+        return false;
+    }
+
+    private static async Task<JsonNode?> CallAsync(PluginManifest m, string method, JsonArray args, Func<int, string> Arg, Control ui, Action<string>? post)
     {
         switch (method)
         {
+            // ---- 下載大檔案去插件資料夾（例如 yt-dlp.exe），有進度 ----
+            case "download":
+            {
+                string url = Arg(0);
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https") throw new ArgumentException(Lang.T("網址唔啱（要 https）"));
+                Need(HostAllowed(m, uri.Host), "net: [\"" + uri.Host + "\"]");
+                var dest = SafeFile(m, Arg(1));
+                int cb = CbId(args, 2);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                using var res = await PluginWeb.Client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead);
+                res.EnsureSuccessStatusCode();
+                long total = res.Content.Headers.ContentLength ?? -1, done = 0, last = 0;
+                string tmp = dest + ".part";
+                await using (var src = await res.Content.ReadAsStreamAsync())
+                await using (var fs = File.Create(tmp))
+                {
+                    var buf = new byte[1 << 16];
+                    int n;
+                    while ((n = await src.ReadAsync(buf)) > 0)
+                    {
+                        await fs.WriteAsync(buf.AsMemory(0, n));
+                        done += n;
+                        if (done - last > 256 * 1024) { last = done; Emit(post, cb, new JsonObject { ["done"] = done, ["total"] = total }); }
+                        if (done > 2L << 30) throw new InvalidOperationException(Lang.T("檔案太大"));
+                    }
+                }
+                if (File.Exists(dest)) File.Delete(dest);
+                File.Move(tmp, dest);
+                Emit(post, cb, new JsonObject { ["done"] = done, ["total"] = done });
+                return new JsonObject { ["size"] = done };
+            }
+
+            // ---- 執行插件資料夾入面嘅程式（要 "exec" 權限）----
+            case "exec":
+            {
+                Need(m.Exec, "exec");
+                var exe = SafeFile(m, Arg(0));
+                if (!exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(exe)) throw new FileNotFoundException(Lang.F("搵唔到程式：{0}", Arg(0)));
+                var psi = new ProcessStartInfo(exe)
+                {
+                    WorkingDirectory = Path.GetDirectoryName(exe)!, UseShellExecute = false, CreateNoWindow = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
+                };
+                if (args.Count > 1 && args[1] is JsonArray a)
+                    foreach (var x in a) psi.ArgumentList.Add(x?.ToString() ?? "");
+                int cb = CbId(args, 2);
+                using var p = Process.Start(psi) ?? throw new InvalidOperationException(Lang.T("開唔到程式"));
+                lock (Procs) { if (!Procs.TryGetValue(m.Id, out var l)) Procs[m.Id] = l = new(); l.Add(p); }
+                p.OutputDataReceived += (_, e) => { if (e.Data != null) Emit(post, cb, new JsonObject { ["line"] = e.Data, ["err"] = false }); };
+                p.ErrorDataReceived += (_, e) => { if (e.Data != null) Emit(post, cb, new JsonObject { ["line"] = e.Data, ["err"] = true }); };
+                p.BeginOutputReadLine();
+                p.BeginErrorReadLine();
+                await p.WaitForExitAsync();
+                lock (Procs) if (Procs.TryGetValue(m.Id, out var l2)) l2.Remove(p);
+                return new JsonObject { ["code"] = p.ExitCode };
+            }
+            case "exec.kill":
+                Need(m.Exec, "exec");
+                KillAll(m.Id);
+                return true;
+
+            // ---- 共用 ffmpeg（同錄影、轉檔一齊用；未有就下載）----
+            case "ffmpeg":
+            {
+                Need(m.Exec, "exec");
+                int cb = CbId(args, 0);
+                if (!Video.Ffmpeg.Ready)
+                    await Video.Ffmpeg.InstallAsync((t, v) => Emit(post, cb, new JsonObject { ["text"] = t, ["progress"] = v }), CancellationToken.None);
+                return Path.GetDirectoryName(Video.Ffmpeg.Exe);
+            }
+
+            // ---- 資料夾 / 路徑 ----
+            case "file.pickFolder":
+            {
+                string init = Arg(0);
+                string? path = OnUi(ui, () =>
+                {
+                    using var d = new FolderBrowserDialog { SelectedPath = Directory.Exists(init) ? init : "" };
+                    return d.ShowDialog(ui.FindForm()) == DialogResult.OK ? d.SelectedPath : null;
+                });
+                if (path == null) return null;
+                Directory.CreateDirectory(PluginStore.DataDir(m.Id));
+                var lines = File.Exists(FoldersFile(m)) ? File.ReadAllLines(FoldersFile(m)).ToList() : new List<string>();
+                if (!lines.Contains(path, StringComparer.OrdinalIgnoreCase)) { lines.Add(path); File.WriteAllLines(FoldersFile(m), lines); }
+                return path;
+            }
+            case "file.reveal":
+            {
+                string path = Arg(0);
+                if (path.Length == 0 || !FolderAllowed(m, path)) throw new UnauthorizedAccessException(Lang.T("只可以打開你揀過嘅資料夾"));
+                if (File.Exists(path)) Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = true });
+                else if (Directory.Exists(path)) Process.Start(new ProcessStartInfo("explorer.exe", "\"" + path + "\"") { UseShellExecute = true });
+                return true;
+            }
+            case "file.path":
+                return SafeFile(m, Arg(0));
+            case "file.exists":
+                return File.Exists(SafeFile(m, Arg(0)));
+
             case "info":
                 return new JsonObject { ["id"] = m.Id, ["name"] = m.Name, ["version"] = m.Version, ["lang"] = Lang.Code(Lang.Current), ["app"] = Program.Version, ["theme"] = PluginTheme.Name };
 
@@ -551,7 +710,7 @@ internal static class PluginBridge
                     if (ctype.Length > 0) req.Content.Headers.Remove("Content-Type");
                     if (ctype.Length > 0) req.Content.Headers.TryAddWithoutValidation("Content-Type", ctype);
                 }
-                if (!req.Headers.UserAgent.Any()) req.Headers.TryAddWithoutValidation("User-Agent", "MultiTool-Plugin/" + Program.Version);
+                if (!req.Headers.UserAgent.Any()) req.Headers.TryAddWithoutValidation("User-Agent", Program.FileName + "-Plugin/" + Program.Version);
                 using var res = await PluginWeb.Client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
                 var bytes = await res.Content.ReadAsByteArrayAsync();
                 if (bytes.Length > 10 << 20) throw new InvalidOperationException(Lang.T("回應超過 10 MB 上限"));
@@ -759,9 +918,14 @@ internal static class PluginBridgeJs
     clipboard: { read: () => call('clipboard.read'), write: t => call('clipboard.write', [t]) },
     file: {
       read: n => call('file.read', [n]), write: (n, t) => call('file.write', [n, t]), delete: n => call('file.delete', [n]), list: () => call('file.list'),
-      pick: o => call('file.pick', [o || {}]), save: (name, content, base64) => call('file.save', [name, content, !!base64])
+      pick: o => call('file.pick', [o || {}]), save: (name, content, base64) => call('file.save', [name, content, !!base64]),
+      pickFolder: init => call('file.pickFolder', [init || '']), reveal: path => call('file.reveal', [path]),
+      path: n => call('file.path', [n]), exists: n => call('file.exists', [n])
     },
     open: url => call('open', [url]),
+    download: (url, name, onProgress) => call('download', [url, name, cb(onProgress)]),
+    exec: Object.assign((name, args, o) => call('exec', [name, args || [], cb((o || {}).onOutput)]), { kill: () => call('exec.kill') }),
+    ffmpeg: onProgress => call('ffmpeg', [cb(onProgress)]),
     ai: { ask: p => call('ai.ask', [p]) },
     scripts: { list: () => call('scripts.list'), run: n => call('scripts.run', [n]) },
     ui: {
@@ -881,7 +1045,7 @@ internal static partial class PluginTemplates
 </html>
 """;
 
-    public static string Html => Lang.Base switch { Language.En => HtmlEn, Language.ZhHans => HtmlHans, _ => HtmlHant };
+    public static string Html => Lang.Brandify(Lang.Base switch { Language.En => HtmlEn, Language.ZhHans => HtmlHans, _ => HtmlHant });
 
     private const string JsHant = """
 // 在此編寫工具的邏輯。可使用 mt.* API（詳見上方「API 說明」）
@@ -943,7 +1107,7 @@ document.getElementById('btn').onclick = async () => {
 init();
 """;
 
-    public static string Js => Lang.Base switch { Language.En => JsEn, Language.ZhHans => JsHans, _ => JsHant };
+    public static string Js => Lang.Brandify(Lang.Base switch { Language.En => JsEn, Language.ZhHans => JsHans, _ => JsHant });
 
     private const string ApiDocHant = """
 MultiTool 插件 API（v1）
@@ -963,9 +1127,13 @@ manifest.json：
     "clipboard": true,            // mt.clipboard
     "secrets": true,              // mt.secrets（加密儲存 API key）
     "ai": true,                   // mt.ai.ask
-    "scripts": true               // mt.scripts（開始「我的腳本」）
+    "scripts": true,              // mt.scripts（開始「我的腳本」）
+    "exec": true                  // mt.exec / mt.ffmpeg（執行外部程式，危險權限）
   }
 }
+name、description 可以寫多種語言，會按介面語言顯示（冇就用英文）：
+  "name": { "zh-Hant": "股票", "zh-Hans": "股票", "en": "Stocks", "ja": "株価" }
+  語言代碼：zh-Hant、zh-Hans、en、ja、ko、ru、es、pt-BR、de、fr；mt.info().lang 會回傳目前語言。
 
 所有 API 都是非同步（回傳 Promise），須使用 await：
   mt.info()                          → { id, name, version, lang, app, theme }
@@ -980,6 +1148,11 @@ manifest.json：
   mt.file.pick({ filter: "文字檔|*.txt", binary })                 讓使用者選擇檔案 → { name, size, text, base64 }
   mt.file.save(name, content, isBase64)                           讓使用者選擇儲存位置
   mt.open(url)                                                    以瀏覽器開啟網址
+  mt.download(url, name, p => …)                                  下載大檔案（例如 .exe）到插件資料夾，p = { done, total }（網站需在 "net" 內）
+  mt.exec(name, [參數…], { onOutput: o => … })                    執行插件資料夾內的 .exe → { code }；o = { line, err }（需要 "exec"）
+  mt.exec.kill()                                                  停止此插件所有執行中的程式
+  mt.ffmpeg(p => …)                                               取得共用 ffmpeg 資料夾路徑（未有會自動下載；需要 "exec"）
+  mt.file.pickFolder(預設) / reveal(路徑) / path(name) / exists(name)   揀資料夾、在檔案總管顯示、插件檔案的完整路徑
   mt.ai.ask(prompt)                                               → AI 回覆文字（需要 "ai"）
   mt.scripts.list() / run(name)                                   （需要 "scripts"）
 
@@ -1012,9 +1185,13 @@ manifest.json：
     "clipboard": true,            // mt.clipboard
     "secrets": true,              // mt.secrets（加密储存 API key）
     "ai": true,                   // mt.ai.ask
-    "scripts": true               // mt.scripts（开始「我的脚本」）
+    "scripts": true,              // mt.scripts（开始「我的脚本」）
+    "exec": true                  // mt.exec / mt.ffmpeg（执行外部程序，危险权限）
   }
 }
+name、description 可以写多种语言，会按界面语言显示（没有就用英文）：
+  "name": { "zh-Hant": "股票", "zh-Hans": "股票", "en": "Stocks", "ja": "株価" }
+  语言代码：zh-Hant、zh-Hans、en、ja、ko、ru、es、pt-BR、de、fr；mt.info().lang 会返回当前语言。
 
 所有 API 都是非同步（回传 Promise），须使用 await：
   mt.info()                          → { id, name, version, lang, app, theme }
@@ -1029,6 +1206,11 @@ manifest.json：
   mt.file.pick({ filter: "文字档|*.txt", binary })                 让使用者选择档案 → { name, size, text, base64 }
   mt.file.save(name, content, isBase64)                           让使用者选择储存位置
   mt.open(url)                                                    以浏览器开启网址
+  mt.download(url, name, p => …)                                  下载大文件（例如 .exe）到插件文件夹，p = { done, total }（网站需在 "net" 内）
+  mt.exec(name, [参数…], { onOutput: o => … })                    执行插件文件夹内的 .exe → { code }；o = { line, err }（需要 "exec"）
+  mt.exec.kill()                                                  停止此插件所有执行中的程序
+  mt.ffmpeg(p => …)                                               取得共用 ffmpeg 文件夹路径（未有会自动下载；需要 "exec"）
+  mt.file.pickFolder(默认) / reveal(路径) / path(name) / exists(name)   选文件夹、在资源管理器显示、插件文件的完整路径
   mt.ai.ask(prompt)                                               → AI 回复文字（需要 "ai"）
   mt.scripts.list() / run(name)                                   （需要 "scripts"）
 
@@ -1061,9 +1243,13 @@ manifest.json:
     "clipboard": true,            // mt.clipboard
     "secrets": true,              // mt.secrets (encrypted storage for API keys)
     "ai": true,                   // mt.ai.ask
-    "scripts": true               // mt.scripts (start "My Scripts")
+    "scripts": true,              // mt.scripts (start "My Scripts")
+    "exec": true                  // mt.exec / mt.ffmpeg (run external programs; dangerous)
   }
 }
+name and description can be given in several languages; the one matching the interface language is shown (English if missing):
+  "name": { "zh-Hant": "股票", "zh-Hans": "股票", "en": "Stocks", "ja": "株価" }
+  Language codes: zh-Hant, zh-Hans, en, ja, ko, ru, es, pt-BR, de, fr; mt.info().lang returns the current one.
 
 Every API is asynchronous (returns a Promise) — use await:
   mt.info()                          → { id, name, version, lang, app, theme }
@@ -1078,6 +1264,11 @@ Every API is asynchronous (returns a Promise) — use await:
   mt.file.pick({ filter: "Text files|*.txt", binary })            let the user pick a file → { name, size, text, base64 }
   mt.file.save(name, content, isBase64)                           let the user choose where to save
   mt.open(url)                                                    open a URL in the browser
+  mt.download(url, name, p => …)                                  download a large file (e.g. .exe) into the plugin folder; p = { done, total } (host must be in "net")
+  mt.exec(name, [args…], { onOutput: o => … })                    run an .exe in the plugin folder → { code }; o = { line, err } (needs "exec")
+  mt.exec.kill()                                                  stop all programs this plugin is running
+  mt.ffmpeg(p => …)                                               get the shared ffmpeg folder path (downloads it if missing; needs "exec")
+  mt.file.pickFolder(default) / reveal(path) / path(name) / exists(name)   pick a folder, show in Explorer, full path of a plugin file
   mt.ai.ask(prompt)                                               → the AI's reply text (needs "ai")
   mt.scripts.list() / run(name)                                   (needs "scripts")
 
@@ -1092,7 +1283,7 @@ Notes:
   • Write interface text in the user's interface language.
 """;
 
-    public static string ApiDoc => Lang.Base switch { Language.En => ApiDocEn, Language.ZhHans => ApiDocHans, _ => ApiDocHant };
+    public static string ApiDoc => Lang.Brandify(Lang.Base switch { Language.En => ApiDocEn, Language.ZhHans => ApiDocHans, _ => ApiDocHant });
 
 }
 

@@ -283,7 +283,7 @@ internal static class Upnp
 {
     private static (string Control, string Service, IPAddress Local)? _gw;
 
-    public static Task<bool> MapAsync(int port, CancellationToken ct) => MapAsync(port, "TCP", "MultiTool", ct);
+    public static Task<bool> MapAsync(int port, CancellationToken ct) => MapAsync(port, "TCP", Program.FileName, ct);
 
     /// <summary>
     /// 喺路由器開端口（TCP / UDP）。lease = 幾多秒後路由器自動閂（0 = 永久）；
@@ -295,7 +295,7 @@ internal static class Upnp
         {
             _gw ??= await DiscoverAsync(ct);
             if (_gw is not { } g) return false;
-            desc = System.Security.SecurityElement.Escape(desc) ?? "MultiTool";
+            desc = System.Security.SecurityElement.Escape(desc) ?? Program.FileName;
             string Body(int l) => $"<u:AddPortMapping xmlns:u=\"{g.Service}\"><NewRemoteHost></NewRemoteHost><NewExternalPort>{port}</NewExternalPort>" +
                           $"<NewProtocol>{proto}</NewProtocol><NewInternalPort>{port}</NewInternalPort><NewInternalClient>{g.Local}</NewInternalClient>" +
                           $"<NewEnabled>1</NewEnabled><NewPortMappingDescription>{desc}</NewPortMappingDescription><NewLeaseDuration>{l}</NewLeaseDuration></u:AddPortMapping>";

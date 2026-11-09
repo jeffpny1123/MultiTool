@@ -48,7 +48,7 @@ internal static class EdShell
         string exe = Environment.ProcessPath ?? "";
         if (exe.Length == 0 || !exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return;
         string cmd = $"\"{exe}\" --edit \"%1\"";
-        string name = Lang.T("影片剪輯") + " (MultiTool)";
+        string name = Lang.T("影片剪輯") + " (" + Program.AppName + ")";
         using (var chk = Registry.CurrentUser.OpenSubKey($@"Software\Classes\{ProgId}\shell\open\command"))
         using (var chkName = Registry.CurrentUser.OpenSubKey($@"Software\Classes\{ProgId}\shell\open"))
             if (chk?.GetValue("") as string == cmd && chkName?.GetValue("FriendlyAppName") as string == name && Exts.All(HasExt) && Exts.All(e => HasVerb(e, cmd))) return; // 已經登記好

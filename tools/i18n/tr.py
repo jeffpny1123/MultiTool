@@ -43,7 +43,7 @@ T = [
 ("正在下載 {0}…","Downloading {0}…"),
 ("zip 內找不到 exe","No exe found in the zip"),
 ("下載更新失敗：\n","Failed to download the update:\n"),
-("自動替換檔案失敗，請手動將\n{0}\n重新命名為 MultiTool.exe。","Could not replace the file automatically. Please rename\n{0}\nto MultiTool.exe manually."),
+("自動替換檔案失敗，請手動將\n{0}\n重新命名為 {1}。","Could not replace the file automatically. Please rename\n{0}\nto {1} manually."),
 ("正在下載… {0:0.0} / {1:0.0} MB","Downloading… {0:0.0} / {1:0.0} MB"),
 ("正在下載… {0:0.0} MB","Downloading… {0:0.0} MB"),
 ("瀏覽器會彈出讓你登入（如沒有彈出，請按視窗內的指示操作）。","A browser window will open for you to sign in (if it doesn't, follow the instructions in the window). "),

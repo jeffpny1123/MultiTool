@@ -1,6 +1,6 @@
-# 發佈 MultiTool 去 MultiTool-Releases（GitHub API）
+# 發佈 Rabi Toolkit 去 MultiTool-Releases（GitHub API）
 # 用法：
-#   python tools/publish_release.py draft  v2.1 notes.md   → 開草稿 Release + 上載 Build\MultiTool-v2.1.zip（說明尾自動加 <!-- build: N -->，N = App.cs 嘅 Program.Build）
+#   python tools/publish_release.py draft  v2.1 notes.md   → 開草稿 Release + 上載 Build\RabiToolkit-v2.1.zip（說明尾自動加 <!-- build: N -->，N = App.cs 嘅 Program.Build）
 #   python tools/publish_release.py publish v2.1            → 將草稿正式發佈，設做 latest
 #   python tools/publish_release.py readme                  → 用 Build\MultiTool-Releases-README.md 更新 README.md
 # token 讀自 repo 根目錄嘅 .release-token（已喺 .git/info/exclude，唔會 commit）
@@ -37,13 +37,13 @@ def find_release(tag):
     # 包埋草稿（草稿冇 tag，用 tag_name 對）
     for r in call("GET", API + "/releases?per_page=50"):
         # 用網頁改過嘅草稿 tag_name 可能變咗 untagged-xxx，所以都用標題對
-        if r["tag_name"] == tag or (r["draft"] and r["name"] == "MultiTool " + tag):
+        if r["tag_name"] == tag or (r["draft"] and r["name"] in ("MultiTool " + tag, "Rabi Toolkit " + tag)):
             return r
     return None
 
 
 def draft(tag, notes_path):
-    zip_path = os.path.join(ROOT, "Build", f"MultiTool-{tag}.zip")
+    zip_path = os.path.join(ROOT, "Build", f"RabiToolkit-{tag}.zip")
     if not os.path.isfile(zip_path):
         sys.exit("搵唔到 " + zip_path)
     notes = open(notes_path, encoding="utf-8").read()
@@ -58,10 +58,10 @@ def draft(tag, notes_path):
         sys.exit(f"{tag} 已經發佈咗")
     if rel is None:
         rel = call("POST", API + "/releases", {"tag_name": tag, "target_commitish": "main",
-                                             "name": "MultiTool " + tag, "body": notes, "draft": True})
+                                             "name": "Rabi Toolkit " + tag, "body": notes, "draft": True})
     else:
         rel = call("PATCH", f"{API}/releases/{rel['id']}", {"tag_name": tag, "target_commitish": "main",
-                                                         "name": "MultiTool " + tag, "body": notes})
+                                                         "name": "Rabi Toolkit " + tag, "body": notes})
     name = os.path.basename(zip_path)
     for a in rel.get("assets", []):
         if a["name"] == name:  # 舊嘅同名附件先刪走再上載

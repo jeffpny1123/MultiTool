@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; font: 14px "Segoe UI", "Microsoft JhengHei UI", sans-serif; background: var(--mt-bg); color: var(--mt-text); }
+  .card { background: var(--mt-card); border: 1px solid var(--mt-border); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+  h2 { margin: 0 0 4px; font-size: 16px; }
+  .hint { color: var(--mt-text-dim); font-size: 12.5px; margin: 0 0 12px; line-height: 1.5; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  textarea, select { background: var(--mt-input); color: var(--mt-text); border: 1px solid var(--mt-border); border-radius: 8px; padding: 8px 10px; font: inherit; }
+  textarea { width: 100%; max-width: 640px; height: 70px; resize: vertical; }
+  textarea:focus, select:focus { outline: none; border-color: var(--mt-accent); }
+  button { background: var(--mt-card-hi); color: var(--mt-text); border: 1px solid var(--mt-border); border-radius: 8px; padding: 7px 14px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--mt-border-hi); }
+  button.primary { background: var(--mt-accent); border-color: var(--mt-accent); color: #fff; }
+  button.go { background: var(--mt-success); border-color: var(--mt-success); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  label { color: var(--mt-text-dim); }
+  .folder { color: var(--mt-text); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status { color: var(--mt-text-dim); }
+  .bar { height: 6px; background: var(--mt-input); border-radius: 3px; overflow: hidden; width: 320px; }
+  .bar > div { height: 100%; width: 0; background: var(--mt-accent); transition: width .2s; }
+  .job { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--mt-border); }
+  .job .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .job .s { width: 240px; color: var(--mt-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .job .s.ok { color: var(--mt-success); } .job .s.bad { color: var(--mt-danger); }
+  .job button { padding: 4px 10px; }
+  a { color: var(--mt-accent); cursor: pointer; }
+  #setup { display: none; }
+</style>
+</head>
+<body>
+  <div class="card" id="setup">
+    <h2 data-t="setupTitle"></h2>
+    <p class="hint" data-t="setupHint"></p>
+    <div class="row"><button class="primary" id="install" data-t="install"></button><span class="status" id="setupStatus"></span></div>
+    <div class="bar"><div id="setupBar"></div></div>
+  </div>
+
+  <div class="card" id="main">
+    <h2 data-t="title"></h2>
+    <p class="hint"><span data-t="intro"></span><br><span data-t="sites"></span> <a id="siteList" data-t="siteList"></a></p>
+    <div class="row"><textarea id="url"></textarea></div>
+    <div class="row">
+      <button id="paste" data-t="paste"></button>
+      <label data-t="format"></label>
+      <select id="fmt"><option value="mp3">MP3</option><option value="mp4">MP4</option></select>
+      <label data-t="quality"></label>
+      <select id="q"></select>
+      <label><input type="checkbox" id="playlist"> <span data-t="playlist"></span></label>
+    </div>
+    <div class="row">
+      <label data-t="saveTo"></label>
+      <span class="folder" id="folder"></span>
+      <button id="pick" data-t="change"></button>
+      <button id="openFolder" data-t="openFolder"></button>
+    </div>
+    <div class="row">
+      <button class="go" id="go" data-t="download"></button>
+      <button id="update" data-t="update"></button>
+      <span class="status" id="status"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 data-t="list"></h2>
+    <p class="hint" data-t="listHint"></p>
+    <div class="row"><button id="clear" data-t="clear"></button></div>
+    <div id="jobs"></div>
+  </div>
+<script src="app.js"></script>
+</body>
+</html>

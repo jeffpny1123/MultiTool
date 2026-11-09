@@ -68,7 +68,24 @@ internal static class TUi
         menu.BackColor = Ui.CardHi;
         menu.ForeColor = Ui.Text;
         menu.Closed += (_, _) => owner.BeginInvoke(() => menu.Dispose());
+        // 子選單都要用深色，唔係會撞色（黑字黑底）
+        menu.Opening += (_, _) => ThemeItems(menu.Items);
         return menu;
+    }
+
+    private static void ThemeItems(ToolStripItemCollection items)
+    {
+        foreach (ToolStripItem it in items)
+        {
+            it.ForeColor = Ui.Text;
+            if (it is ToolStripMenuItem mi && mi.HasDropDownItems)
+            {
+                try { mi.DropDown.Renderer = DarkTheme.MenuRenderer(); } catch { }
+                mi.DropDown.BackColor = Ui.CardHi;
+                mi.DropDown.ForeColor = Ui.Text;
+                ThemeItems(mi.DropDownItems);
+            }
+        }
     }
 
     /// <summary>喺掣下面彈選單揀一個值。</summary>
@@ -1246,7 +1263,7 @@ $stream.Dispose()
             if (max <= 2600) return path;
             double k = 2600.0 / max;
             using var bmp = new Bitmap(img, Math.Max(1, (int)(img.Width * k)), Math.Max(1, (int)(img.Height * k)));
-            var p = Path.Combine(Path.GetTempPath(), "MultiTool-ocr-big.png");
+            var p = Path.Combine(Path.GetTempPath(), Program.FileName + "-ocr-big.png");
             bmp.Save(p, System.Drawing.Imaging.ImageFormat.Png);
             return p;
         }
@@ -1279,7 +1296,7 @@ $stream.Dispose()
             g2.InterpolationMode = InterpolationMode.HighQualityBicubic;
             g2.DrawImage(bmp, 0, 0, final.Width, final.Height);
         }
-        var path = Path.Combine(Path.GetTempPath(), "MultiTool-ocr.png");
+        var path = Path.Combine(Path.GetTempPath(), Program.FileName + "-ocr.png");
         final.Save(path, System.Drawing.Imaging.ImageFormat.Png);
         if (final != bmp) final.Dispose();
         return path;

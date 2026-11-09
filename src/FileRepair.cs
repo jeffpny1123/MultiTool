@@ -340,7 +340,7 @@ internal static class FileRepair
     private static async Task UntruncAsync(string path, string outDir, string ext, RepairOptions o, RepairOutcome r, Action<string, double> progress, CancellationToken ct)
     {
         // 複製一份去暫存資料夾先做（untrunc 會喺原檔隔籬寫新檔）
-        string work = Path.Combine(Path.GetTempPath(), "MultiTool-repair-" + Guid.NewGuid().ToString("N")[..8]);
+        string work = Path.Combine(Path.GetTempPath(), Program.FileName + "-repair-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(work);
         try
         {
@@ -376,7 +376,7 @@ internal static class FileRepair
         progress(Lang.T("檢查緊…"), -1);
         byte[] data = await File.ReadAllBytesAsync(path, ct);
         byte[] fixedBytes = data;
-        string tmp = Path.Combine(Path.GetTempPath(), "MultiTool-repair-" + Guid.NewGuid().ToString("N")[..8] + ext);
+        string tmp = Path.Combine(Path.GetTempPath(), Program.FileName + "-repair-" + Guid.NewGuid().ToString("N")[..8] + ext);
         try
         {
             if (ext is ".jpg" or ".jpeg") fixedBytes = FixJpeg(data, r.Notes);
@@ -819,7 +819,7 @@ internal static class FileRepair
             {
                 if (start > 0) r.Notes.Add(Lang.T("剪走咗檔頭前面嘅多餘資料。"));
                 if (!hasEof) r.Notes.Add(Lang.T("PDF 唔完整（結尾唔見咗）。"));
-                tmp = Path.Combine(Path.GetTempPath(), "MultiTool-repair-" + Guid.NewGuid().ToString("N")[..8] + ".pdf");
+                tmp = Path.Combine(Path.GetTempPath(), Program.FileName + "-repair-" + Guid.NewGuid().ToString("N")[..8] + ".pdf");
                 using (var fs = File.Create(tmp))
                 {
                     fs.Write(d, Math.Max(0, start), d.Length - Math.Max(0, start));
@@ -887,7 +887,7 @@ internal static class RepairTools
         string url, dir;
         Func<string, string?> map; // zip 入面嘅路徑 → 解壓去邊（null = 唔要）
         using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMinutes(20) };
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("MultiTool");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd(Program.FileName);
         if (tool == "qpdf")
         {
             dir = QpdfDir;

@@ -18,7 +18,7 @@ internal static class ReplaySettings
     private static string File_ => Path.Combine(AppPaths.Data, "replay.txt");
     public static int Seconds = 30, Monitor, Fps = 60, Res = 1080, Quality = 1, SysVol = 100, MicVol = 100;
     public static bool SysAudio = true, Mic, Cursor = true, AutoStart = true;
-    public static string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "MultiTool", "Replays");
+    public static string Folder = Path.Combine(Program.BrandFolder(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos)), "Replays");
 
     static ReplaySettings()
     {
@@ -77,7 +77,7 @@ internal static class ReplaySettings
 /// <summary>精彩重播：背景一直錄住（循環覆蓋），撳快捷鍵就將最近 N 秒存做 MP4。</summary>
 internal static class ReplayEngine
 {
-    public static string TempDir => Path.Combine(Path.GetTempPath(), "MultiTool-replay");
+    public static string TempDir => Path.Combine(Path.GetTempPath(), Program.FileName + "-replay");
     private static RecordSession? _session;
     private static bool _busy;
     public static event Action? Changed;
@@ -144,7 +144,7 @@ internal static class ReplayEngine
         if (!Running) { Toast.Show(Lang.T("精彩重播未開始（背景錄影關咗）"), Ui.Danger); return; }
         if (_busy) return;
         _busy = true;
-        string snap = Path.Combine(Path.GetTempPath(), "MultiTool-replay-save");
+        string snap = Path.Combine(Path.GetTempPath(), Program.FileName + "-replay-save");
         try
         {
             Set(Lang.T("儲存緊重播…"));

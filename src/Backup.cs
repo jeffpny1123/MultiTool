@@ -46,7 +46,7 @@ internal static class DataBackup
         using var dlg = new SaveFileDialog
         {
             Filter = Lang.T("備份檔") + " (*.zip)|*.zip",
-            FileName = $"MultiTool-backup-{DateTime.Now:yyyyMMdd-HHmm}.zip",
+            FileName = $"{Program.FileName}-backup-{DateTime.Now:yyyyMMdd-HHmm}.zip",
             InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
         };
         if (dlg.ShowDialog(owner) != DialogResult.OK) return;
@@ -62,7 +62,7 @@ internal static class DataBackup
                 {
                     var m = zip.CreateEntry(Marker);
                     using (var w = new StreamWriter(m.Open()))
-                        w.Write($"MultiTool {Program.Version}\n{DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
+                        w.Write($"{Program.FileName} {Program.Version}\n{DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
                     foreach (var f in Files())
                     {
                         var rel = Path.GetRelativePath(AppPaths.Data, f).Replace('\\', '/');

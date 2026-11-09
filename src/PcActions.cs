@@ -51,7 +51,7 @@ internal static class PcActions
             try
             {
                 File.WriteAllLines(KeywordsFile,
-                    new[] { "# MultiTool 掃描到嘅程式（每次開程式都會自動更新，唔使改）", $"# {DateTime.Now:yyyy-MM-dd HH:mm:ss}" }
+                    new[] { "# " + Program.FileName + " 掃描到嘅程式（每次開程式都會自動更新，唔使改）", $"# {DateTime.Now:yyyy-MM-dd HH:mm:ss}" }
                         .Concat(list.Select(a => a.Name).OrderBy(n => n, StringComparer.OrdinalIgnoreCase)),
                     new UTF8Encoding(true));
             }
@@ -148,7 +148,7 @@ internal static class PcActions
     // ================= 俾 AI 嘅說明（唔包任何寫死嘅網站 / 程式清單）=================
 
     public static string Rules =>
-        "You run inside MultiTool on the user's Windows PC. Each user message starts with [Now: ...] = the PC's current local date/time; " +
+        "You run inside Rabi Toolkit (Chinese name 拉比工具箱, formerly MultiTool) on the user's Windows PC. Each user message starts with [Now: ...] = the PC's current local date/time; " +
         "use it to answer time/date/weekday questions (do not say you cannot know the time). " +
         "You CAN open things on the PC with action tags (they are hidden from the user and executed by the app): " +
         "<<open:URL>> opens a website in the default browser - use the official https address from your own knowledge. " +

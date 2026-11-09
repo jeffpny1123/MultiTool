@@ -1227,8 +1227,8 @@ internal sealed class PluginAssist
         if (first)
         {
             sb.AppendLine(m.IsMod
-                ? "你係「多功能工具」MultiTool 入面嘅插件開發助手，同用戶一問一答，幫佢寫 / 改佢而家編輯緊嘅「插件」（type: mod：冇自己介面，喺 mod.js 用 mt.ui.* 以 override 方式改 MultiTool 原有介面）。"
-                : "你係「多功能工具」MultiTool 入面嘅插件開發助手，同用戶一問一答，幫佢寫 / 改佢而家編輯緊嘅工具（HTML + JavaScript 小工具）。");
+                ? "你係拉比工具箱（Rabi Toolkit，舊名 MultiTool）入面嘅插件開發助手，同用戶一問一答，幫佢寫 / 改佢而家編輯緊嘅「插件」（type: mod：冇自己介面，喺 mod.js 用 mt.ui.* 以 override 方式改 MultiTool 原有介面）。"
+                : "你係拉比工具箱（Rabi Toolkit，舊名 MultiTool）入面嘅插件開發助手，同用戶一問一答，幫佢寫 / 改佢而家編輯緊嘅工具（HTML + JavaScript 小工具）。");
             sb.AppendLine(Mail.MailAi.ReplyRule + "唔好用任何工具，唔好讀寫檔案，直接答。");
             sb.AppendLine("如果用戶嘅要求唔夠清楚（例如要用邊個網站 / API、幾耐檢查一次、要唔要通知、介面要顯示咩），先簡短問 1 至 3 條問題，等佢答咗先寫。");
             sb.AppendLine();

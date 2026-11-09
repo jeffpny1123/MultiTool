@@ -1416,8 +1416,8 @@ internal static partial class PluginTemplates
 //   wallpaper: 'bg.jpg', dim: 0.4, cardOpacity: 0.85
 // });
 
-// 例子 2：將左上角的程式名稱改為強調色（停用插件會自動還原）
-mt.ui.override('@sidebar Label[key="多功能工具"]', { foreColor: 'theme:accent' });
+// 例子 2：將左下角的「主題」選單文字改為強調色（停用插件會自動還原；程式名稱及版本號不可修改）
+mt.ui.override('@sidebar Label#themeMenu', { foreColor: 'theme:accent' });
 
 console.log('插件已載入');
 """;
@@ -1435,8 +1435,8 @@ console.log('插件已載入');
 //   wallpaper: 'bg.jpg', dim: 0.4, cardOpacity: 0.85
 // });
 
-// 例子 2：将左上角的程序名称改为强调色（停用插件会自动还原）
-mt.ui.override('@sidebar Label[key="多功能工具"]', { foreColor: 'theme:accent' });
+// 例子 2：将左下角的「主题」选单文字改为强调色（停用插件会自动还原；程序名称及版本号不可修改）
+mt.ui.override('@sidebar Label#themeMenu', { foreColor: 'theme:accent' });
 
 console.log('插件已载入');
 """;
@@ -1454,13 +1454,13 @@ console.log('插件已载入');
 //   wallpaper: 'bg.jpg', dim: 0.4, cardOpacity: 0.85
 // });
 
-// Example 2: show the app name at the top left in the accent colour (restored when the plugin is turned off)
-mt.ui.override('@sidebar Label[key="多功能工具"]', { foreColor: 'theme:accent' });
+// Example 2: show the "Theme" menu at the bottom left in the accent colour (restored when the plugin is turned off; the app name and version can't be changed)
+mt.ui.override('@sidebar Label#themeMenu', { foreColor: 'theme:accent' });
 
 console.log('Plugin loaded');
 """;
 
-    public static string ModJs => Lang.Base switch { Language.En => ModJsEn, Language.ZhHans => ModJsHans, _ => ModJsHant };
+    public static string ModJs => Lang.Brandify(Lang.Base switch { Language.En => ModJsEn, Language.ZhHans => ModJsHans, _ => ModJsHant });
 
     private const string ModDocHant = """
 
@@ -1689,5 +1689,5 @@ The app name and version number can't be changed, hidden or covered.
 Security: password boxes can't be read or changed. Plugins can read text in the sidebar, home and settings pages and click buttons — only install plugins you trust.
 """;
 
-    public static string ModDoc => Lang.Base switch { Language.En => ModDocEn, Language.ZhHans => ModDocHans, _ => ModDocHant };
+    public static string ModDoc => Lang.Brandify(Lang.Base switch { Language.En => ModDocEn, Language.ZhHans => ModDocHans, _ => ModDocHant });
 }

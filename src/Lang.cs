@@ -124,6 +124,12 @@ public static partial class Lang
     /// <summary>翻譯一句（搵唔到就用英文，再搵唔到就照原文）。</summary>
     public static string T(string key)
     {
+        if (Branded.TryGetValue(key, out var done)) return done;
+        return Branded[key] = Brandify(Raw(key));
+    }
+
+    private static string Raw(string key)
+    {
         var cur = Current;
         if (cur > Language.En && Extra.TryGetValue(key, out var x) && x.Length > 0) return x;
         if (Table.TryGetValue(key, out var v))
@@ -132,6 +138,26 @@ public static partial class Lang
             if (s.Length > 0) return s;
         }
         return key;
+    }
+
+    // ---- 程式名：介面一律顯示 Brand（翻譯 key 照用舊名，插件嘅 [key="多功能工具"] 照樣揀得到）----
+    /// <summary>程式名：中文介面叫「拉比工具箱」，其他語言叫「Rabi Toolkit」。</summary>
+    public static string Brand => Current is Language.ZhHant or Language.ZhHans ? "拉比工具箱" : "Rabi Toolkit";
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Branded = new();
+    // 「MultiTool」做檔名 / 網址嘅一部分（MultiTool.exe、MultiTool-Releases、data\MultiTool…）唔換
+    private static readonly System.Text.RegularExpressions.Regex BrandRx =
+        new(@"(?<!\w|\w[.\-]|[\\/])MultiTool(?!\w|[.\-]\w|[\\/])|多功能工具", System.Text.RegularExpressions.RegexOptions.Compiled);
+    public static string Brandify(string s)
+    {
+        if (s.IndexOf("MultiTool", StringComparison.Ordinal) < 0 && s.IndexOf("多功能工具", StringComparison.Ordinal) < 0) return s;
+        s = BrandRx.Replace(s, Brand);
+        // 中文名：拎走「使用 拉比工具箱 編輯」入面多餘嘅空格
+        if (Brand == "拉比工具箱")
+        {
+            s = System.Text.RegularExpressions.Regex.Replace(s, @"(?<=\p{IsCJKUnifiedIdeographs}|[，。、：（「])[ ]+(?=拉比工具箱)", "");
+            s = System.Text.RegularExpressions.Regex.Replace(s, @"(?<=拉比工具箱)[ ]+(?=\p{IsCJKUnifiedIdeographs}|[，。、：）」？！])", "");
+        }
+        return s;
     }
 
     /// <summary>介面上見到嘅字 → 原本嘅 key（插件用 [key="…"] 揀元件，唔理介面係咩語言）；唔係翻譯出嚟嘅就 null。</summary>

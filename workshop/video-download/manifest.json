@@ -1,0 +1,38 @@
+{
+  "name": {
+    "zh-Hant": "影片下載",
+    "zh-Hans": "视频下载",
+    "en": "Video Downloader",
+    "ja": "動画ダウンロード",
+    "ko": "동영상 다운로드",
+    "ru": "Загрузка видео",
+    "es": "Descargar vídeos",
+    "pt-BR": "Baixar vídeos",
+    "de": "Video-Download",
+    "fr": "Téléchargement de vidéos"
+  },
+  "version": "1.0.0",
+  "author": "白兔糖v3v",
+  "description": {
+    "zh-Hant": "貼上 YouTube、Bilibili、Twitch、TikTok、X、Vimeo、SoundCloud 等一千多個網站的連結，儲存為 MP3 或 MP4，支援播放清單。使用開源 yt-dlp（首次使用時自動下載）及共用 ffmpeg。只下載你有權使用的內容。",
+    "zh-Hans": "粘贴 YouTube、Bilibili、Twitch、TikTok、X、Vimeo、SoundCloud 等一千多个网站的链接，保存为 MP3 或 MP4，支持播放列表。使用开源 yt-dlp（首次使用时自动下载）及共用 ffmpeg。只下载你有权使用的内容。",
+    "en": "Paste links from YouTube, Bilibili, Twitch, TikTok, X, Vimeo, SoundCloud and 1000+ other sites and save them as MP3 or MP4, playlists included. Uses the open-source yt-dlp (downloaded on first use) and the shared ffmpeg. Only download content you have the right to use.",
+    "ja": "YouTube、Bilibili、Twitch、TikTok、X、Vimeo、SoundCloud など 1000 以上のサイトのリンクを貼り付けて MP3 / MP4 で保存（プレイリスト対応）。オープンソースの yt-dlp（初回に自動ダウンロード）と共有 ffmpeg を使用します。使用する権利のあるコンテンツだけをダウンロードしてください。",
+    "ko": "YouTube, Bilibili, Twitch, TikTok, X, Vimeo, SoundCloud 등 1000개 이상 사이트의 링크를 붙여 넣어 MP3 또는 MP4로 저장(재생목록 지원). 오픈소스 yt-dlp(처음 사용 시 자동 다운로드)와 공용 ffmpeg를 사용합니다. 사용할 권리가 있는 콘텐츠만 다운로드하세요.",
+    "ru": "Вставьте ссылку с YouTube, Bilibili, Twitch, TikTok, X, Vimeo, SoundCloud и ещё 1000+ сайтов и сохраните в MP3 или MP4, включая плейлисты. Использует открытый yt-dlp (загружается при первом запуске) и общий ffmpeg. Скачивайте только то, на что у вас есть права.",
+    "es": "Pega enlaces de YouTube, Bilibili, Twitch, TikTok, X, Vimeo, SoundCloud y más de 1000 sitios y guárdalos en MP3 o MP4, incluidas listas de reproducción. Usa yt-dlp de código abierto (se descarga la primera vez) y el ffmpeg compartido. Descarga solo contenido que tengas derecho a usar.",
+    "pt-BR": "Cole links do YouTube, Bilibili, Twitch, TikTok, X, Vimeo, SoundCloud e mais de 1000 sites e salve em MP3 ou MP4, incluindo playlists. Usa o yt-dlp de código aberto (baixado no primeiro uso) e o ffmpeg compartilhado. Baixe apenas conteúdo que você tem direito de usar.",
+    "de": "Links von YouTube, Bilibili, Twitch, TikTok, X, Vimeo, SoundCloud und über 1000 weiteren Seiten einfügen und als MP3 oder MP4 speichern, auch Playlists. Nutzt das quelloffene yt-dlp (wird beim ersten Start geladen) und das gemeinsame ffmpeg. Lade nur Inhalte herunter, die du nutzen darfst.",
+    "fr": "Collez des liens YouTube, Bilibili, Twitch, TikTok, X, Vimeo, SoundCloud et de plus de 1000 sites et enregistrez-les en MP3 ou MP4, playlists comprises. Utilise yt-dlp open source (téléchargé à la première utilisation) et le ffmpeg partagé. Ne téléchargez que des contenus que vous avez le droit d'utiliser."
+  },
+  "icon": "⬇️",
+  "entry": "ui.html",
+  "background": false,
+  "permissions": {
+    "net": [
+      "github.com"
+    ],
+    "notify": true,
+    "exec": true
+  }
+}

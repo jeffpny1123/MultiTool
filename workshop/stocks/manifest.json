@@ -1,0 +1,39 @@
+{
+  "name": {
+    "zh-Hant": "股票",
+    "zh-Hans": "股票",
+    "en": "Stocks",
+    "ja": "株価",
+    "ko": "주식",
+    "ru": "Акции",
+    "es": "Bolsa",
+    "pt-BR": "Ações",
+    "de": "Aktien",
+    "fr": "Bourse"
+  },
+  "version": "1.0.0",
+  "author": "白兔糖v3v",
+  "description": {
+    "zh-Hant": "查看美股、港股、加股及加密貨幣的報價與走勢圖：自選股、K 線、輸入買入價計算盈虧、到價提醒。數據來自 Yahoo Finance 公開接口（毋須註冊），可能有延遲，只供參考，並非投資建議。",
+    "zh-Hans": "查看美股、港股、加股及加密货币的报价与走势图：自选股、K 线、输入买入价计算盈亏、到价提醒。数据来自 Yahoo Finance 公开接口（无需注册），可能有延迟，仅供参考，并非投资建议。",
+    "en": "Quotes and charts for US, Hong Kong and Canadian stocks and crypto: watchlist, candlestick charts, gain/loss from your buy price, and price alerts. Data from Yahoo Finance's public endpoints (no sign-up), may be delayed. For reference only, not investment advice.",
+    "ja": "米国株・香港株・カナダ株・暗号資産の株価とチャート：ウォッチリスト、ローソク足、取得価格からの損益、価格アラート。データは Yahoo Finance の公開 API（登録不要）で、遅延する場合があります。参考情報であり、投資助言ではありません。",
+    "ko": "미국·홍콩·캐나다 주식과 암호화폐의 시세와 차트: 관심 종목, 캔들 차트, 매수가 기준 손익, 가격 알림. 데이터는 Yahoo Finance 공개 API(가입 불필요)이며 지연될 수 있습니다. 참고용이며 투자 조언이 아닙니다.",
+    "ru": "Котировки и графики акций США, Гонконга, Канады и криптовалют: список наблюдения, свечные графики, прибыль/убыток от цены покупки и оповещения о цене. Данные из открытых источников Yahoo Finance (без регистрации), возможна задержка. Только для справки, не инвестиционный совет.",
+    "es": "Cotizaciones y gráficos de acciones de EE. UU., Hong Kong y Canadá y de criptomonedas: lista de seguimiento, velas, ganancia/pérdida según tu precio de compra y alertas de precio. Datos de Yahoo Finance (sin registro), pueden tener retraso. Solo como referencia, no es asesoramiento de inversión.",
+    "pt-BR": "Cotações e gráficos de ações dos EUA, Hong Kong e Canadá e de criptomoedas: lista de acompanhamento, candles, ganho/perda pelo seu preço de compra e alertas de preço. Dados do Yahoo Finance (sem cadastro), podem ter atraso. Apenas para referência, não é recomendação de investimento.",
+    "de": "Kurse und Charts für Aktien aus den USA, Hongkong und Kanada sowie Kryptowährungen: Watchlist, Kerzencharts, Gewinn/Verlust zum Kaufpreis und Kursalarme. Daten von Yahoo Finance (ohne Anmeldung), ggf. verzögert. Nur zur Information, keine Anlageberatung.",
+    "fr": "Cours et graphiques des actions américaines, hongkongaises et canadiennes et des cryptomonnaies : liste de suivi, chandeliers, gain/perte selon votre prix d'achat et alertes de prix. Données Yahoo Finance (sans inscription), parfois différées. À titre indicatif, pas un conseil en investissement."
+  },
+  "icon": "📈",
+  "entry": "ui.html",
+  "background": true,
+  "permissions": {
+    "net": [
+      "query1.finance.yahoo.com",
+      "query2.finance.yahoo.com",
+      "streamer.finance.yahoo.com"
+    ],
+    "notify": true
+  }
+}

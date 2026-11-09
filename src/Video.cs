@@ -36,7 +36,7 @@ internal static class Ffmpeg
         string tmp = zip + ".part";
         using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) })
         {
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("MultiTool");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd(Program.FileName);
             using var resp = await http.GetAsync(Url, HttpCompletionOption.ResponseHeadersRead, ct);
             resp.EnsureSuccessStatusCode();
             long total = resp.Content.Headers.ContentLength ?? -1, done = 0;
@@ -332,7 +332,7 @@ internal static class RecSettings
     {
         0 => Lang.T("原始"), 1440 => "2K", 2160 => "4K", _ => r + "P"
     };
-    public static string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "MultiTool");
+    public static string Folder = Program.BrandFolder(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos));
 
     static RecSettings()
     {
@@ -465,7 +465,7 @@ internal sealed class RecordSession
 
         if (_o.ReplayDir != null) Directory.CreateDirectory(_o.ReplayDir);
         Directory.CreateDirectory(_o.Folder);
-        OutFile = Path.Combine(_o.Folder, $"MultiTool {DateTime.Now:yyyy-MM-dd HH-mm-ss}.{_o.Format}");
+        OutFile = Path.Combine(_o.Folder, $"{Program.FileName} {DateTime.Now:yyyy-MM-dd HH-mm-ss}.{_o.Format}");
 
         string codec = _o.Codec, enc = await Task.Run(() => Ffmpeg.Encoder(codec, _o.Hw));
         try { await RunAsync(rect, sb, mon, full, enc, useDda: true); }

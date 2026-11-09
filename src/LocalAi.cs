@@ -64,7 +64,7 @@ internal static class LocalAi
     private static HttpClient NewClient()
     {
         var c = new HttpClient { Timeout = TimeSpan.FromMinutes(60) };
-        c.DefaultRequestHeaders.UserAgent.ParseAdd("MultiTool");
+        c.DefaultRequestHeaders.UserAgent.ParseAdd(Program.FileName);
         return c;
     }
 

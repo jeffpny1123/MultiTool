@@ -11,12 +11,20 @@ namespace MultiTool;
 internal static class Program
 {
     public static string AppName => Lang.T("多功能工具");
-    public const string Version = "v0.2.6";
+    /// <summary>檔名 / 資料夾名用嘅英文名（RabiToolkit.exe、Downloads\RabiToolkit…）。</summary>
+    public const string FileName = "RabiToolkit";
+    /// <summary>新預設資料夾：舊版用開「MultiTool」就照用舊嗰個（費事搵唔返之前嘅檔案）。</summary>
+    public static string BrandFolder(string parent)
+    {
+        string old = Path.Combine(parent, "MultiTool");
+        return Directory.Exists(old) ? old : Path.Combine(parent, FileName);
+    }
+    public const string Version = "v0.2.7";
     /// <summary>
     /// 內部版本編號：每次發佈都要加大（同顯示嘅版本號無關）。自動更新用佢判斷新舊，
     /// 咁顯示嘅版本號以後點改（例如轉做 0.x）都唔會影響更新。發佈時 publish_release.py 會寫入 Release 說明。
     /// </summary>
-    public const int Build = 254;
+    public const int Build = 255;
     public const string Author = "白兔糖v3v";
     /// <summary>程式啟動時間；開頭幾秒當係「啟動緊」，重嘢（例如插件嘅 WebView2）遲啲先做。</summary>
     public static readonly DateTime Started = DateTime.Now;
@@ -54,6 +62,7 @@ internal static class Program
         }
         PendingEdit = edit;
         Updater.CleanupLeftover();
+        AutoStart.Migrate();
         bool startup = argv.Any(a => a == "--startup");
         Application.Run(new MainForm(startup && edit == null));
     }
@@ -153,6 +162,25 @@ internal sealed class MainForm : Form
             if (Program.PendingEdit is { } pe) { Program.PendingEdit = null; BeginInvoke(() => OpenInEditor(pe)); }
             // 啟用咗嘅插件（改介面）：等程式開好先行
             _ = StartModsAsync();
+            // 工作坊工具有 "background": true（例如股票到價提醒）：開程式就喺背景載入，唔使撳開個頁
+            foreach (var pid in Plugins.PluginStore.Pinned.ToList())
+            {
+                try
+                {
+                    var pm = Plugins.PluginStore.Load(pid);
+                    if (!pm.Background || pm.IsMod || !Plugins.PluginStore.Approved(pm)) continue;
+                    string key = "plugin:" + pid;
+                    BeginInvoke(() =>
+                    {
+                        var pg = EnsurePage(_pageKeys.FindIndex(k => k.Key == key));
+                        if (pg?.Page is { } c) _ = c.Handle; // 隱藏住都要建立，WebView2 先會開始
+                    });
+                }
+                catch { }
+            }
+            // NAS 管理：有紀錄就開程式時預先載入頁面（頁面會自動連線）
+            if (Extensions.IsInstalled(Extensions.Nas) && Tools.NasStore.Load().Count > 0)
+                BeginInvoke(() => EnsurePage(_pageKeys.FindIndex(k => k.Key == "nas")));
         };
         FormClosed += (_, _) => Scripts.ShareService.Stop();
         ResizeEnd += (_, _) =>
@@ -262,11 +290,11 @@ internal sealed class MainForm : Form
         AddPage(Lang.T("文字辨識"), Tools.OcrPage.Build, "ocr", Extensions.Ocr);
         AddPage(Lang.T("格式轉換"), Tools.ConvertHub.Build, "convert", Extensions.Convert);
         AddPage(Lang.T("遊戲伺服器"), Tools.GameServerPage.Build, "gameserver", Extensions.GameServer);
-        AddPage(Lang.T("影片下載"), Tools.DownloadPage.Build, "download", Extensions.Download);
         AddPage(Lang.T("遠端桌面（測試）"), Tools.RemotePage.Build, "remote", Extensions.Remote);
         AddPage(Lang.T("效能監控"), Tools.PerfHub.Build, "perf", Extensions.Perf);
         AddPage(Lang.T("磁碟空間及健康"), Tools.DiskPage.Build, "disk", Extensions.Disk);
         AddPage(Lang.T("檔案修復"), Tools.FileRepairPage.Build, "repair", Extensions.Repair);
+        AddPage(Lang.T("NAS 管理"), Tools.NasPage.Build, "nas", Extensions.Nas);
         // 加咗去工具欄嘅插件
         foreach (var id in Plugins.PluginStore.Pinned.ToList()) AddPluginPage(id);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");
@@ -403,6 +431,14 @@ internal sealed class MainForm : Form
         }
         ShowKey("editor");
         Video.EditorPage.Instance?.OpenAsNewProject(files);
+    }
+
+    /// <summary>由外面叫：顯示主視窗並跳去某頁。</summary>
+    internal void BringToFrontAndShow(string key)
+    {
+        RestoreFromTray();
+        ShowKey(key);
+        Activate();
     }
 
     private void RestoreFromTray()
@@ -831,6 +867,20 @@ internal sealed class MainForm : Form
     private void Show(int index)
     {
         if (index == _current) return;
+        var p = EnsurePage(index)!.Value;
+        for (int i = 0; i < _pages.Count; i++)
+        {
+            _pages[i].Nav.Active = i == index;
+            if (_pages[i].Page != null) _pages[i].Page!.Visible = i == index;
+        }
+        _current = index;
+        try { PageShown?.Invoke(_pageKeys[index].Key); } catch (Exception ex) { AppPaths.LogError("插件 page 事件", ex); }
+    }
+
+    /// <summary>未起過嘅頁面就起佢（隱藏住），唔會切換過去。</summary>
+    private (NavItem Nav, Func<Control> Build, Control? Page)? EnsurePage(int index)
+    {
+        if (index < 0 || index >= _pages.Count) return null;
         var p = _pages[index];
         if (p.Page == null)
         {
@@ -847,13 +897,7 @@ internal sealed class MainForm : Form
             _content.Controls.Add(page);
             p = _pages[index];
         }
-        for (int i = 0; i < _pages.Count; i++)
-        {
-            _pages[i].Nav.Active = i == index;
-            if (_pages[i].Page != null) _pages[i].Page!.Visible = i == index;
-        }
-        _current = index;
-        try { PageShown?.Invoke(_pageKeys[index].Key); } catch (Exception ex) { AppPaths.LogError("插件 page 事件", ex); }
+        return p;
     }
 
     /// <summary>首頁：簡單介紹各個功能，撳「前往」直接跳去。</summary>
@@ -1037,8 +1081,21 @@ internal static class AppSettings
 internal static class AutoStart
 {
     private const string Key = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string Name = "MultiTool";
+    private const string Name = Program.FileName, OldName = "MultiTool";
     private static string Exe => Environment.ProcessPath ?? Application.ExecutablePath;
+
+    /// <summary>舊版用「MultiTool」做登錄名：改做新名，順便更新 exe 路徑。</summary>
+    public static void Migrate()
+    {
+        try
+        {
+            using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(Key, true);
+            if (k?.GetValue(OldName) is not string) return;
+            k.DeleteValue(OldName, false);
+            k.SetValue(Name, $"\"{Exe}\" --startup");
+        }
+        catch { }
+    }
 
     public static bool Enabled
     {

@@ -25,7 +25,6 @@ internal static class Extensions
     public const string Ocr = "ocr";
     public const string Convert = "convert";
     public const string GameServer = "gameserver";
-    public const string Download = "download";
     public const string Remote = "remote";
     public const string Perf = "perf";
     public const string Disk = "disk";
@@ -34,6 +33,7 @@ internal static class Extensions
     public const string Mail = "mail";
     public const string Plugins = "plugins";
     public const string Repair = "repair";
+    public const string Nas = "nas";
 
     /// <summary>工具庫分類（一個工具可以屬幾類）。</summary>
     public static readonly string[] Categories = { "game", "media", "work", "system", "net" };
@@ -60,18 +60,18 @@ internal static class Extensions
         Ocr => new[] { "work" },
         Convert => new[] { "media", "work" },
         GameServer => new[] { "game", "net" },
-        Download => new[] { "media", "net" },
         Remote => new[] { "net", "system" },
         Perf => new[] { "system", "game" },
         Disk => new[] { "system" },
         Mail => new[] { "work", "net" },
         Plugins => new[] { "work" },
         Repair => new[] { "work", "system", "media" },
+        Nas => new[] { "net", "system", "work" },
         _ => Array.Empty<string>()
     };
 
     /// <summary>用 ffmpeg 嘅工具：最後一個移除先刪 ffmpeg。</summary>
-    private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert, Download, Editor, Repair };
+    private static readonly string[] FfmpegUsers = { Recorder, Replay, Convert, Editor, Repair };
 
     private static void RemoveFfmpeg(string id)
     {
@@ -101,6 +101,9 @@ internal static class Extensions
         var p = v.Trim().TrimStart('v', 'V').Split('.');
         int major = p.Length > 0 && int.TryParse(p[0], out var a) ? a : 0;
         int minor = p.Length > 1 && int.TryParse(p[1], out var b) ? b : 0;
+        int patch = p.Length > 2 && int.TryParse(p[2], out var c) ? c : 0;
+        // 新格式 v0.2.7 → 1207（一定大過舊嘅 v2.6 = 206、v0.252 = 252）
+        if (major == 0 && p.Length >= 3) return 1000 + minor * 100 + patch;
         return major * 100 + minor;
     }
 
@@ -130,9 +133,6 @@ internal static class Extensions
         new(GameServer, Lang.T("遊戲伺服器"),
             Lang.T("一撳架設 Palworld、Valheim、7 Days to Die 等 Steam 遊戲伺服器，有設定、自動備份同開端口。需要下載 SteamCMD。"), false,
             (p, ct) => Tools.SteamCmd.InstallAsync(p, ct), () => Tools.SteamCmd.Ready, Tools.SteamCmd.Delete, "~5 MB"),
-        new(Download, Lang.T("影片下載"),
-            Lang.T("貼上 YouTube、Bilibili、Twitch、TikTok、X、Vimeo、SoundCloud 等 1000 幾個網站嘅連結，存做 MP3 或者 MP4，支援播放清單。需要下載 yt-dlp 同 ffmpeg。"), false,
-            (p, ct) => Tools.YtDlp.InstallAsync(p, ct), () => Tools.YtDlp.Ready, () => { Tools.YtDlp.Delete(); RemoveFfmpeg(Download); }, "~120 MB"),
         new(Remote, Lang.T("遠端桌面（測試）"),
             Lang.T("MultiTool 內置嘅遠端桌面：用 ID + 密碼控制其他電腦或者俾人連入嚟，全程加密。冇中轉伺服器：被控電腦用流動數據、CGNAT 或者公共網絡就連唔到。"), false,
             Remove: () => Tools.RemoteHost.Stop()),
@@ -153,13 +153,16 @@ internal static class Extensions
         new(Repair, Lang.T("檔案修復"),
             Lang.T("開唔到嘅影片、聲音、相片、ZIP / Word / Excel / PowerPoint、PDF 拖入嚟就自動修復，修好嘅另存一份。部分修復第一次用要下載免費開源工具（ffmpeg、qpdf、untrunc）。"), false,
             Remove: () => { Tools.RepairTools.Delete(); RemoveFfmpeg(Repair); }, Since: "v0.252"),
+        new(Nas, Lang.T("NAS 管理"),
+            Lang.T("連接自己嘅 Synology NAS：好似 Google Drive 咁瀏覽同管理檔案，拖放上載、下載、建立分享連結，睇 CPU、RAM、硬碟狀態，遙距開機、重新啟動同關機。支援兩步驗證。"), false,
+            Since: "v0.2.7"),
         new(Disk, Lang.T("磁碟空間及健康"),
             Lang.T("睇每個磁碟剩幾多位、硬碟健康（溫度、SSD 壽命、讀寫錯誤），掃描邊個資料夾最食位，一撳掉入資源回收筒。"), false),
     };
 
     /// <summary>工具庫 / 首頁排序：新工具最前，跟住常用嘅，我的腳本第一，測試版最後。</summary>
     private static readonly string[] Order =
-        { Scripts, Repair, Mail, Plugins, Recorder, Editor, Download, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
+        { Scripts, Nas, Repair, Mail, Plugins, Recorder, Editor, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
 
     private static readonly bool Sorted = SortAll();
 
@@ -213,13 +216,13 @@ internal static class Extensions
         Ocr => ("T", Ui.Accent2),
         Convert => ("⇄", Ui.Success),
         GameServer => ("◆", Ui.Success),
-        Download => ("⇩", Ui.Danger),
         Remote => ("⇆", Ui.Accent),
         Perf => ("▤", Ui.Success),
         Disk => ("◔", Ui.Accent2),
         Mail => ("✉", Ui.Hex(0xEA4335)),
         Plugins => ("◈", Ui.Accent2),
         Repair => ("✚", Ui.Success),
+        Nas => ("🗄", Ui.Hex(0x4A90D9)),
         Doc => ("▦", Ui.Accent),
         "ai" => ("✦", Ui.Accent2),
         "home" => ("⌂", Ui.Accent),
