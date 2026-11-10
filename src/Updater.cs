@@ -61,11 +61,17 @@ internal static class Updater
     private static bool IsNewer(Release rel) =>
         rel.Build >= 0 ? rel.Build > Program.Build : ParseVersion(rel.Tag) > ParseVersion(Program.Version);
 
+    /// <summary>發佈 repo 搵唔到（被刪 / 改咗 private）。</summary>
+    private sealed class ReleaseGoneException : Exception { }
+
     private static async Task<Release?> GetLatestAsync()
     {
         using var http = NewClient();
+        http.Timeout = TimeSpan.FromSeconds(20);
         using var resp = await http.GetAsync($"https://api.github.com/repos/{Repo}/releases/latest");
-        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null; // 未有任何 Release
+        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) throw new ReleaseGoneException();
+        // GitHub API 每個 IP 每小時 60 次；用晒就改睇網頁版嘅 latest 轉址
+        if ((int)resp.StatusCode is 403 or 429) return await GetLatestWebAsync();
         resp.EnsureSuccessStatusCode();
         var json = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
@@ -95,23 +101,52 @@ internal static class Updater
         return url == null ? null : new Release(tag, notes, url, name!);
     }
 
-    /// <summary>檢查更新。silent = 開程式時自動檢查：冇新版 / 出錯都唔出聲。</summary>
+    /// <summary>API 用晒次數時：github.com/.../releases/latest 會轉去 /releases/tag/vX，由個網址攞版本號。</summary>
+    private static async Task<Release?> GetLatestWebAsync()
+    {
+        using var h = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) };
+        h.DefaultRequestHeaders.UserAgent.ParseAdd(Program.FileName + "-Updater");
+        using var resp = await h.GetAsync(RepoUrl + "/releases/latest");
+        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) throw new ReleaseGoneException();
+        string loc = resp.Headers.Location?.ToString() ?? "";
+        int k = loc.IndexOf("/releases/tag/", StringComparison.Ordinal);
+        if (k < 0) throw new HttpRequestException("HTTP " + (int)resp.StatusCode);
+        string tag = Uri.UnescapeDataString(loc[(k + 14)..].Trim('/'));
+        string name = Program.FileName + "-" + tag + ".zip";
+        return new Release(tag, "", RepoUrl + "/releases/download/" + Uri.EscapeDataString(tag) + "/" + name, name);
+    }
+
+    /// <summary>更新唔到：彈訊息，然後關閉程式（一定要用最新版本）。</summary>
+    private static void Block(Form owner, string msg)
+    {
+        try { MessageBox.Show(owner, msg, Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning); } catch { }
+        Application.Exit();
+    }
+
+    /// <summary>檢查更新。silent = 開程式時自動檢查（已經係最新就唔出聲）。連唔到、搵唔到或者更新失敗都會關閉程式。</summary>
     public static async Task CheckAsync(Form owner, bool silent)
     {
         if (_busy) return;
         _busy = true;
         try
         {
-            Release? rel;
-            try { rel = await GetLatestAsync(); }
-            catch (Exception ex)
+            Release? rel = null;
+            Exception? err = null;
+            // 連唔到就等一陣再試一次（避免一時網絡唔穩就閂咗）
+            for (int attempt = 0; attempt < 2; attempt++)
             {
-                if (!silent)
-                    MessageBox.Show(owner, Lang.T("連唔到 GitHub 檢查更新：\n") + ex.Message, Program.AppName,
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                try { rel = await GetLatestAsync(); err = null; break; }
+                catch (ReleaseGoneException) { Block(owner, Lang.T("搵唔到更新伺服器，程式已經停止提供，無法繼續使用。")); return; }
+                catch (Exception ex) { err = ex; if (attempt == 0) await Task.Delay(3000); }
+            }
+            if (err != null)
+            {
+                AppPaths.LogError("檢查更新", err);
+                Block(owner, Lang.T("連唔到 GitHub 檢查更新。程式要連線確認係最新版本先可以使用，請檢查網絡之後再開。\n\n") + err.Message);
                 return;
             }
-            if (rel == null || !IsNewer(rel))
+            if (rel == null) { Block(owner, Lang.T("搵唔到更新伺服器，程式已經停止提供，無法繼續使用。")); return; }
+            if (!IsNewer(rel))
             {
                 if (!silent)
                     MessageBox.Show(owner, Lang.F("已經係最新版本（{0}）。", Program.Version), Program.AppName,
@@ -119,12 +154,9 @@ internal static class Updater
                 return;
             }
 
-            // 自動更新：有新版就直接下載、換檔、重開，唔使問
+            // 自動更新：有新版就直接下載、換檔、重開，唔使問；失敗就唔俾用
             if (!await DownloadAndRestartAsync(owner, rel))
-            {
-                if (silent) MultiTool.Tools.Toast.Show(Lang.T("自動更新失敗，下次開程式會再試"), MultiTool.UI.Ui.Danger, 4000);
-                else MessageBox.Show(owner, Lang.T("下載更新失敗，詳情已寫入 data\\error.log"), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
+                Block(owner, Lang.F("更新到 {0} 失敗，一定要用最新版本先可以使用。請稍後再開，或者去 {1} 手動下載。", rel.Tag, RepoUrl));
         }
         finally { _busy = false; }
     }

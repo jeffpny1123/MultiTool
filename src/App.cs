@@ -19,12 +19,12 @@ internal static class Program
         string old = Path.Combine(parent, "MultiTool");
         return Directory.Exists(old) ? old : Path.Combine(parent, FileName);
     }
-    public const string Version = "v0.2.7";
+    public const string Version = "v0.2.8";
     /// <summary>
     /// 內部版本編號：每次發佈都要加大（同顯示嘅版本號無關）。自動更新用佢判斷新舊，
     /// 咁顯示嘅版本號以後點改（例如轉做 0.x）都唔會影響更新。發佈時 publish_release.py 會寫入 Release 說明。
     /// </summary>
-    public const int Build = 255;
+    public const int Build = 256;
     public const string Author = "白兔糖v3v";
     /// <summary>程式啟動時間；開頭幾秒當係「啟動緊」，重嘢（例如插件嘅 WebView2）遲啲先做。</summary>
     public static readonly DateTime Started = DateTime.Now;

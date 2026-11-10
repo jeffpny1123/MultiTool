@@ -2458,5 +2458,8 @@
 "網址唔啱（要 https）": "URL non valide (https uniquement)",
 "檔案太大": "Fichier trop volumineux",
 "開唔到程式": "Impossible de lancer le programme",
-"只可以打開你揀過嘅資料夾": "Seuls les dossiers que vous avez choisis peuvent être ouverts"
+"只可以打開你揀過嘅資料夾": "Seuls les dossiers que vous avez choisis peuvent être ouverts",
+"搵唔到更新伺服器，程式已經停止提供，無法繼續使用。": "Serveur de mise à jour introuvable. Ce programme n'est plus proposé et ne peut pas être utilisé.",
+"連唔到 GitHub 檢查更新。程式要連線確認係最新版本先可以使用，請檢查網絡之後再開。\n\n": "Impossible de joindre GitHub pour vérifier les mises à jour. Le programme doit confirmer qu'il est à jour avant de pouvoir être utilisé. Vérifiez le réseau et rouvrez-le.\n\n",
+"更新到 {0} 失敗，一定要用最新版本先可以使用。請稍後再開，或者去 {1} 手動下載。": "La mise à jour vers {0} a échoué. Seule la dernière version peut être utilisée. Réessayez plus tard ou téléchargez-la manuellement sur {1}."
 }

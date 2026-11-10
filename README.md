@@ -331,6 +331,10 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 ## Changelog 更新紀錄
 
+### v0.2.8
+- **Changed: Updates are required** — Rabi Toolkit checks for updates every time it starts and must be on the latest version to run. If it can't reach GitHub (e.g. no internet), can't find the update server, or the update fails, it shows a message and closes. An internet connection is needed each time you open it.
+  **變更：必須更新**——Rabi Toolkit 每次開啟時都會檢查更新，必須為最新版本才可使用。若無法連接 GitHub（例如沒有網絡）、找不到更新伺服器或更新失敗，會顯示訊息並關閉。每次開啟時均須連接網絡。
+
 ### v0.2.7
 - **Changed: New name** — MultiTool is now **Rabi Toolkit 拉比工具箱**, with a new icon. New downloads are `RabiToolkit.exe`; if you are updated automatically, your existing file name and shortcuts keep working.
   **變更：新名稱**——MultiTool 改名為 **Rabi Toolkit 拉比工具箱**，並換上新圖示。新下載的執行檔為 `RabiToolkit.exe`；自動更新的用戶會沿用原有檔名，捷徑不受影響。
@@ -647,6 +651,9 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 
 Download the latest zip from **[MultiTool-Releases](https://github.com/jeffpny1123/MultiTool-Releases/releases/latest)**, extract it and run `RabiToolkit.exe`. No .NET installation is required.
 從 **[MultiTool-Releases](https://github.com/jeffpny1123/MultiTool-Releases/releases/latest)** 下載最新的壓縮檔，解壓後直接執行 `RabiToolkit.exe`，無須安裝 .NET。
+
+An internet connection is needed each time it starts: it checks GitHub for updates and closes if it can't update.
+每次開啟時均須連接網絡：程式會到 GitHub 檢查更新，無法更新時會關閉。
 
 Scripts, screenshots and settings are stored in the `data/` folder next to the executable.
 腳本、截圖及設定均儲存於執行檔旁的 `data/` 資料夾。

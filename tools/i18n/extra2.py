@@ -1790,4 +1790,7 @@ E2 += [
 ('搵唔到程式：{0}', '找不到程式：{0}', 'Program not found: {0}'),
 ('開唔到程式', '無法開啟程式', "Can't start the program"),
 ('只可以打開你揀過嘅資料夾', '只可以開啟你選擇過的資料夾', 'Only folders you picked can be opened'),
+('搵唔到更新伺服器，程式已經停止提供，無法繼續使用。', '找不到更新伺服器，程式已停止提供，無法繼續使用。', "The update server can't be found. This program is no longer available and can't be used."),
+(r"連唔到 GitHub 檢查更新。程式要連線確認係最新版本先可以使用，請檢查網絡之後再開。\n\n", '無法連接 GitHub 檢查更新。程式須連線確認為最新版本才可使用，請檢查網絡後再開啟。\n\n', "Can't reach GitHub to check for updates. The program must confirm it is the latest version before it can be used. Check your network and open it again.\n\n"),
+('更新到 {0} 失敗，一定要用最新版本先可以使用。請稍後再開，或者去 {1} 手動下載。', '更新至 {0} 失敗，必須使用最新版本才可使用。請稍後再開啟，或前往 {1} 手動下載。', 'Updating to {0} failed. Only the latest version can be used. Try again later, or download it manually from {1}.'),
 ]
