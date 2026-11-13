@@ -455,7 +455,7 @@ extra=[  # key (raw C#), hant, hans, en
 def unesc(s): return s.encode('latin1','backslashreplace').decode('unicode_escape') if False else s.replace('\\\\','\x00').replace('\\n','\n').replace('\\"','"').replace('\x00','\\')
 def esc(s): return s.replace('\\','\\\\').replace('"','\\"').replace('\n','\\n')
 ph=re.compile(r'\{\d+(?::[^}]*)?\}')
-fix={'缺省':'默认','截屏':'截图','复原':'撤销','鼠标点击':'鼠标点击','視窗':'窗口'}
+fix={'缺省':'默认','截屏':'截图','复原':'撤销','鼠标点击':'鼠标点击','視窗':'窗口','投视频':'幻灯片','电子表格统计':'电子表格统计','演讲者备忘稿':'演讲者备注','备忘稿':'备注','试算表':'电子表格','枢纽分析表':'数据透视表','拷贝幻灯片':'复制幻灯片'}
 bad=0
 rows=[]
 for k,(h,e) in zip(keys,T):

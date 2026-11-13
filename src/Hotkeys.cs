@@ -45,6 +45,7 @@ internal static class HotkeyHub
         new() { Id = "window.borderless", Ext = Extensions.Window, Page = "window", Name = () => Lang.T("視窗管理：目前視窗無邊框全螢幕 / 還原") },
         new() { Id = "clipboard.show", Ext = Extensions.Clipboard, Page = "clipboard", Name = () => Lang.T("剪貼簿紀錄：打開紀錄視窗") },
         new() { Id = "ocr.capture", Ext = Extensions.Ocr, Page = "ocr", Name = () => Lang.T("文字辨識：框選畫面辨識") },
+        new() { Id = "translate.toggle", Ext = Extensions.Translate, Page = "translate", Name = () => Lang.T("畫面翻譯：畫框開始 / 停止翻譯") },
         new() { Id = "perf.overlay", Ext = Extensions.Perf, Page = "perf", Name = () => Lang.T("效能監控：顯示 / 隱藏遊戲疊加") },
         new() { Id = "perf.gamemode", Ext = Extensions.Perf, Page = "perf", Name = () => Lang.T("效能監控：開 / 關遊戲模式") },
     };

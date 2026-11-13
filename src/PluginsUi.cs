@@ -381,6 +381,11 @@ internal sealed class PluginsPage : Panel
             menu.Items.Add(Lang.T("📥 匯入…"), null, (_, _) => ImportPlugin());
             menu.Show(addBtn!, new Point(0, addBtn!.Height));
         }, null, BtnKind.Primary);
+        if (SteamHub.Ready)
+        {
+            Btn(lBar, Lang.T("🌐 Steam 工作坊"), () => SteamHub.OpenUrl(SteamHub.WorkshopUrl(SteamHub.TagPlugin)), Lang.T("喺 Steam 工作坊訂閱插件，就會自動安裝；取消訂閱會移除。"));
+            Btn(lBar, "⟳", () => { SteamHub.SyncSubscribed(); Toast.Show(Lang.T("已同步訂閱"), Ui.Success, 1500); }, Lang.T("⟳ 立即同步"));
+        }
         var lHint = Ui.Text_(Lang.T("撳一個工具或者插件睇介紹；工具想常用就「加到左側工具欄」，插件要「啟用」先會生效。"), Ui.TextFaint, Ui.F(9f), new Padding(0));
         lHint.AutoSize = false; lHint.Dock = DockStyle.Top; lHint.Height = Ui.S(30);
         _empty = Ui.Text_(Lang.T("撳上面「+ 新增」開始寫你自己嘅工具或者插件。\n\n工具：用 HTML + JavaScript 寫，可以連網上 API、彈通知、儲存資料、叫 AI 幫手…\n插件：冇自己介面，用 JavaScript 改 MultiTool 原有嘅介面（例如換背景、改顏色、加掣）。\n唔識寫 code？入去編寫之後撳「✦ AI 幫我寫」同 AI 傾就得。"),
@@ -398,6 +403,7 @@ internal sealed class PluginsPage : Panel
         _pinBtn = Btn(dBar, "", TogglePin, Lang.T("加咗之後喺左邊工具欄有自己一格，一開 MultiTool 就會運行"), BtnKind.Primary);
         Btn(dBar, Lang.T("✎ 編寫"), () => GoEdit());
         Btn(dBar, Lang.T("📤 匯出"), ExportCurrent, Lang.T("存做 .mtplugin 檔，俾其他人匯入"));
+        if (SteamHub.Ready) Btn(dBar, Lang.T("☁ 上載到工作坊"), () => { if (_cur != null) WorkshopPublishDialog.ShowPlugin(FindForm(), _cur); }, Lang.T("上載到 Steam 工作坊，俾其他人訂閱"));
         Btn(dBar, Lang.T("🗑 刪除"), DeleteCurrent);
         _dInfo = Ui.Text_("", Ui.TextDim, Ui.F(9.5f), new Padding(0));
         _dInfo.AutoSize = false; _dInfo.Dock = DockStyle.Left; _dInfo.Width = Ui.S(300); _dInfo.UseMnemonic = false;
@@ -1052,15 +1058,21 @@ internal sealed class PluginSidePage : Panel
         // 開程式時唔好即刻開 WebView2（拖慢啟動）：等主視窗出咗、閒咗先開
         HandleCreated += async (_, _) =>
         {
-            await Task.Delay(Program.StartupDone ? 0 : 2500);
-            if (!IsDisposed) Start();
+            if (_started) return;
+            await Task.Delay(Program.StartupDone || Visible ? 0 : 2500);
+            if (!IsDisposed && !_started) Start();
         };
+        // 用家撳入嚟嗰陣仲未開始（開程式等緊嗰幾秒）：即刻開，唔好俾佢見到一片空白
+        VisibleChanged += (_, _) => { if (Visible && !_started && IsHandleCreated && !IsDisposed) Start(); };
         Disposed += (_, _) => { PluginRuntime.Running.Remove(Id); _view?.Close(); };
     }
 
+    private bool _started;
+
     private void Start()
     {
-        foreach (Control c in Controls.Cast<Control>().ToList()) { Controls.Remove(c); c.Dispose(); }
+        _started = true;
+        foreach (Control c in Controls.Cast<Control>().ToList()) { Controls.Remove(c); if (c is PluginView pv) pv.Close(); else c.Dispose(); }
         PluginManifest m;
         try { m = PluginStore.Load(Id); }
         catch (Exception ex) { Msg(Lang.T("manifest.json 有錯：") + ex.Message); return; }

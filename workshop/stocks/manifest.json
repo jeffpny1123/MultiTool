@@ -11,7 +11,7 @@
     "de": "Aktien",
     "fr": "Bourse"
   },
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "白兔糖v3v",
   "description": {
     "zh-Hant": "查看美股、港股、加股及加密貨幣的報價與走勢圖：自選股、K 線、輸入買入價計算盈虧、到價提醒。數據來自 Yahoo Finance 公開接口（毋須註冊），可能有延遲，只供參考，並非投資建議。",

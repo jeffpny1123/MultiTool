@@ -241,6 +241,49 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - FFmpeg, qpdf and untrunc are downloaded only when a file needs them, after asking.
   FFmpeg、qpdf 及 untrunc 只會在需要時經詢問後下載。
 
+**Cloud Server 雲端伺服器** · **Flash Games Flash 小遊戲** — install them from the Tool library / 於工具庫安裝
+
+- **Cloud Server**: rent a cloud server from Vultr (billed by Vultr by usage, with your own Vultr API key) and start Minecraft, Palworld, Valheim or Terraria servers and Discord bots in one click; several can run at once, 24/7, without leaving your own PC on.
+  **雲端伺服器**：向 Vultr 租用雲端伺服器（費用按用量由 Vultr 直接收取，使用你自己的 Vultr API 金鑰），一鍵開設 Minecraft、Palworld、Valheim、Terraria 伺服器及 Discord bot；可同時運行多個，24 小時無須開著自己的電腦。
+- **Flash Games**: add `.swf` files and play classic Flash games with the open-source Ruffle emulator (downloaded on first use, about 10 MB). No Flash Player needed.
+  **Flash 小遊戲**：加入 `.swf` 檔即可用開源 Flash 模擬器 Ruffle 遊玩（首次使用時自動下載，約 10 MB），無須安裝 Flash Player。
+
+**Documents 文書工具** — install it from the Tool library / 於工具庫安裝
+
+- **One tool for office files** — the file type decides the editor. Documents (.docx), spreadsheets (.xlsx), slides (.pptx) and PDF, with menus modelled on Google Docs / Sheets / Slides.
+  **一個工具處理文書檔案** — 按檔案類型使用對應的編輯器。支援文件（.docx）、試算表（.xlsx）、簡報（.pptx）及 PDF，選單參考 Google 文件／試算表／簡報。
+- **Document editor** — fonts, sizes, colours, styles, lists, tables, images, headers and footers, page setup, find and replace, printing; saves back to .docx. A backup of the original is kept in `data\office\backup` the first time a file is overwritten.
+  **文件編輯器** — 字型、大小、顏色、樣式、清單、表格、圖片、頁首頁尾、頁面設定、尋找及取代、列印；儲存為 .docx。首次覆寫檔案前，會把原檔備份到 `data\office\backup`。
+- **Spreadsheet editor** — formulas, number formats, fonts, colours, borders, merged cells, freeze panes, sort, filter, find and replace, multiple sheets; saves back to .xlsx and can export the current sheet as CSV. **Charts** (column, bar, line, area, pie) float over the grid, follow the cell values and are saved as real Excel charts; charts of these types made in other programs are read back and stay editable. Other chart types (stacked, combined, scatter, 3D), images, pivot tables, conditional formatting and data validation are not supported yet: such files open with a warning and are saved as a new file so the original is never overwritten.
+  **試算表編輯器** — 公式、數字格式、字型、顏色、框線、合併儲存格、凍結窗格、排序、篩選、尋找及取代、多個工作表；儲存為 .xlsx，並可把目前的工作表匯出為 CSV。**圖表**（直條圖、橫條圖、折線圖、區域圖、圓形圖）浮於格線上、隨儲存格數值更新，並儲存為真正的 Excel 圖表；其他程式製作的同類圖表亦可讀回並繼續修改。暫未支援其他圖表類型（堆疊、組合、散佈、立體）、圖片、樞紐分析表、條件式格式及資料驗證：開啟此類檔案時會提示，儲存時會另存新檔，不會覆寫原檔。
+- **Slides editor** — slide list, add / duplicate / delete / reorder slides, move and resize objects, edit text, text boxes, images, font size and colour, background colour, speaker notes (existing notes only), full-screen slideshow, export to PDF. Edits are written into the original file, so animations, masters and charts that were not touched are kept.
+  **簡報編輯器** — 投影片清單，新增／複製／刪除／排序投影片，移動及縮放物件，修改文字，文字方塊、圖片、文字大小及顏色、背景顏色、演講者備忘稿（只限原本已有者）、全螢幕播放、匯出 PDF。修改直接寫入原檔，未改動的動畫、母片及圖表會保留。
+- **Home with history, separate windows, Windows integration** — create or open by type, reopen recent files, open several windows, and register as an "Open with" / default app for .docx, .xlsx, .pptx and .pdf, each with its own file icon.
+  **首頁及歷史紀錄、獨立視窗、Windows 整合** — 按類型新增或開啟、重開最近的檔案、同時開啟多個視窗，並可登記為 .docx、.xlsx、.pptx 及 .pdf 的「開啟檔案」/ 預設程式（各有專屬檔案圖示）。
+- **AI** — with an AI connected, ask about the document or have the AI rewrite, format, add or remove paragraphs.
+  **AI** — 已連接 AI 時，可詢問文件內容，或讓 AI 改寫、設定格式、加入或刪除段落。
+- Everything is processed on your PC; the editor page cannot access the network.
+  所有處理均在你的電腦進行；編輯器頁面無法連接網絡。
+
+**PDF Editor PDF 修改器** — part of Documents; PDF files open in it automatically / 屬於文書工具，開啟 PDF 檔案時自動使用
+
+- **Annotate**: add text (any language), images, pen strokes, highlights and white-out boxes; drag to move, drag the corner to resize, Delete to remove. Undo / redo.
+  **加註**：加入文字（任何語言）、圖片、畫筆、螢光筆及塗白方塊；拖曳移動、拖曳角落調整大小、按 Delete 刪除，可復原／重做。
+- **Sign**: draw your signature or use an image, place it anywhere; signatures can be remembered for next time (stored on this PC only).
+  **簽名**：手畫簽名或使用圖片，放在任何位置；可記住簽名供下次使用（只儲存在本機）。
+- **Pages**: rotate, delete, move up / down, add a blank page, and append pages from another PDF (merge). Saved as a new PDF; the original is never changed.
+  **頁面**：旋轉、刪除、上移／下移、加入空白頁，以及加入另一個 PDF 的頁面（合併）。另存為新 PDF，不會更改原檔。
+- **Forms**: fill in the PDF's own text fields, checkboxes and drop-downs directly (values are saved into the PDF); its Reset / Print / Save buttons work. Add your own **fillable fields** (text field, multi-line field, checkbox, Print button, Reset button) to turn any PDF into a fillable form or contract.
+  **表單**：直接填寫 PDF 自帶的輸入欄、剔選方格及下拉選單（數值會寫入 PDF）；其重設／列印／儲存按鈕亦可使用。可加入自己的**可填寫欄位**（輸入欄、多行輸入欄、剔選方格、列印按鈕、重設按鈕），把任何 PDF 變成可填寫的表格或合約。
+- **Recent files** on the start screen: reopen with one click, remove single entries or clear the list. **Print** from the toolbar (Ctrl+P).
+  開始畫面設有**最近開啟**清單：一按重新開啟，可移除個別紀錄或全部清除。工具列可**列印**（Ctrl+P）。
+- **Windows integration**: PDFs can be opened in their own window (several at once) with the ⧉ button; right-click a PDF → **Open with Rabi Toolkit - PDF** (on Windows 11, under "Show more options"), and Rabi Toolkit can be chosen as the default PDF app in Windows Settings. Removed again when the tool is uninstalled.
+  **Windows 整合**：按 ⧉ 可用獨立視窗開啟 PDF（可同時開多個）；右鍵 PDF →**使用 Rabi Toolkit - PDF 開啟**（Windows 11 於「顯示更多選項」內），並可在 Windows 設定中選擇 Rabi Toolkit 作為預設 PDF 程式。移除工具時會一併清除。
+- **Private**: files are processed only on your PC; the editor page cannot reach the internet.
+  **私隱**：檔案只在你的電腦處理；編輯器頁面無法連接互聯網。
+- **AI** (shown when an AI is connected): ask about the document (summary, key points, questions) or tell the AI to rotate / delete / move pages, add text or add fillable fields; changes can be undone.
+  **AI**（已連接 AI 時顯示）：查詢文件內容（摘要、重點、提問），或讓 AI 旋轉／刪除／移動頁面、加入文字或可填寫欄位；改動可復原。
+
 **NAS Manager NAS 管理** — for Synology NAS, install it from the Tool library / 適用於 Synology NAS，於工具庫安裝
 
 - Browse your NAS like Google Drive (grid or list view, remembered): drag-and-drop upload, download, new folder, rename, delete and share links. Shared folders are the top level.
@@ -248,12 +291,29 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - System status (CPU, RAM, disks), Wake-on-LAN, restart and shut down. Supports two-step verification and self-signed HTTPS certificates (you confirm the certificate once). Passwords are encrypted with Windows DPAPI; a NAS that connected before is reconnected automatically when Rabi Toolkit starts.
   系統狀態（CPU、RAM、硬碟）、遙距開機（Wake-on-LAN）、重新啟動及關機。支援兩步驗證及自簽 HTTPS 證書（首次確認一次）。密碼以 Windows DPAPI 加密；曾成功連線的 NAS 會在開啟 Rabi Toolkit 時自動連線。
 
-**Disk Space & Health 磁碟空間及健康**
+**Disk & App Manager 磁碟及軟件管理** (formerly Disk Space & Health / 前稱「磁碟空間及健康」)
 
 - Used / free space for every drive, and drive health (status, temperature, SSD life used, power-on hours, read / write errors) from Windows' built-in storage data. Temperature, wear and hours need Rabi Toolkit to run as Administrator.
   顯示每個磁碟的已用／剩餘空間，以及 Windows 內置存放裝置資料中的硬碟健康（狀態、溫度、SSD 已用壽命、開機時數、讀寫錯誤）。溫度、損耗及開機時數須以系統管理員身分執行 Rabi Toolkit。
 - **Space analysis**: scan a drive or folder and browse it as a treemap; the 30 largest files (100 MB+) are listed. Right-click to open in Explorer or move to the Recycle Bin (with confirmation).
   **空間分析**：掃描磁碟或資料夾並以方格圖瀏覽，列出最大的 30 個檔案（100 MB 以上）；右鍵可於檔案總管開啟或移至資源回收筒（會先確認）。
+- **Duplicate files**: finds files with identical content (size → first 64 KB → full SHA-256). Ticked files go to the Recycle Bin; at least one file is always kept in each group.
+  **重複檔案**：找出內容完全相同的檔案（先比大小 → 頭 64 KB → 整個檔案的 SHA-256）。已選的檔案移到資源回收筒，每組最少保留一個。
+- **Startup programs**: disable or re-enable programs that start with Windows (the same mechanism as Task Manager; nothing is deleted). **Installed software**: search, sort by size, and open a program's own uninstaller.
+  **開機程式**：停用或重新啟用開機自動執行的程式（與工作管理員相同的機制，不會刪除任何項目）。**已安裝軟件**：搜尋、按大小排序，並開啟該軟件自己的解除安裝程式。
+
+**Image Tools 圖片處理** · **QR Codes 二維碼** · **Screen Translator 畫面翻譯** · **Expense Tracker 記帳** · **Unit & Currency Converter 單位及匯率換算**
+
+- **Image Tools**: batch resize, compress, convert (JPG / PNG / BMP / GIF / TIFF), auto levels, brightness / contrast / saturation, sharpen, text watermark, rename and strip photo metadata. Originals are never changed.
+  **圖片處理**：批次縮小、壓縮、轉換格式（JPG／PNG／BMP／GIF／TIFF）、自動調整光暗、亮度／對比／飽和度、銳化、文字水印、重新命名及清除相片資料。原圖不會被修改。
+- **QR Codes**: create codes for text, links, Wi-Fi and contacts, or read one from the screen, an image or the clipboard. The encoder and decoder are written in-house (no third-party library) and run offline.
+  **二維碼**：產生文字、網址、Wi-Fi 及聯絡人二維碼，或由畫面、圖片、剪貼簿讀取。編碼及解碼均為自行編寫（沒有使用第三方程式庫），離線運作。
+- **Screen Translator**: draw a box on the screen and the text inside is translated whenever it changes, using Windows' built-in text recognition and the AI you chose (local AI works offline).
+  **畫面翻譯**：在畫面上畫一個框，框內文字一變就翻譯；使用 Windows 內置文字辨識及你選擇的 AI（本地 AI 可離線使用）。
+- **Expense Tracker**: daily income and spending, monthly totals, spending by category, CSV export. Stored only on your PC.
+  **記帳**：每日收支、每月總結、各類別支出、匯出 CSV。資料只儲存在你的電腦。
+- **Unit & Currency Converter**: offline unit conversion; daily exchange rates from public data (no AI, no account), cached for offline use.
+  **單位及匯率換算**：離線單位換算；匯率使用公開的每日數據（無須 AI、無須帳戶），並會快取供離線使用。
 
 **Remote Desktop (beta) 遠端桌面（測試版）** — built in, no extra program / 內置，無須額外程式
 
@@ -330,6 +390,22 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 ---
 
 ## Changelog 更新紀錄
+
+### v0.2.9
+- **New: Documents** (Tool library, installed by default for new users) — one tool for documents (.docx), spreadsheets (.xlsx, with real charts), slides (.pptx) and PDFs; the file you open decides which editor is shown. The PDF Editor is now part of it. Files are processed only on your PC.
+  **新增：文書工具**（工具庫，新用戶預設安裝）——一個工具處理文件（.docx）、試算表（.xlsx，可建立真正的圖表）、簡報（.pptx）及 PDF；開啟甚麼檔案就顯示對應的編輯器。PDF 修改器已併入其中。檔案只在你的電腦上處理。
+- **New tools** (Tool library): **Cloud Server** (rent a Vultr server and start game servers or Discord bots in one click), **Flash Games** (play `.swf` files with Ruffle), **Image Tools** (batch resize, convert, enhance, watermark, rename, strip photo data), **QR Codes** (create and read, offline), **Screen Translator** (draw a box and translate the text inside as it changes), **Expense Tracker** (pie / bar charts, CSV export) and **Unit & Currency Converter**.
+  **新增工具**（工具庫）：**雲端伺服器**（租用 Vultr 伺服器，一鍵開設遊戲伺服器或 Discord bot）、**Flash 小遊戲**（以 Ruffle 遊玩 `.swf`）、**圖片處理**（批次縮小、轉換格式、修飾、加水印、重新命名、清除相片資料）、**二維碼**（產生及讀取，離線）、**畫面翻譯**（畫一個框，框內文字一變就翻譯）、**記帳**（圓形圖／棒形圖、匯出 CSV）及**單位及匯率換算**。
+- **Changed: Disk Space & Health is now Disk & App Manager** — adds duplicate file search, startup program management and an installed software list with uninstall.
+  **變更：「磁碟空間及健康」改名為「磁碟及軟件管理」**——新增重複檔案搜尋、開機程式管理，以及可解除安裝的已安裝軟件清單。
+- **New: AI Assistant** — the local AI can now see attached images (models marked “Sees images” download with their image add-on), look things up online from free public sources before answering (off by default; you can also enter your own search API key), and make short videos on your PC (text to video / image to video, free Wan models). Qwen3.5 2B is back as the lightest model. Models your PC can't run are marked in red and show a warning before download.
+  **新增：AI 助手**——本地 AI 現可查看附加的圖片（標明「支援查看圖片」的模型會連同圖片識別組件下載）、回答前先從免費公開來源上網搜尋資料（預設關閉；亦可填寫自己的搜尋 API 金鑰），並可在你的電腦上製作短片（文字轉影片／圖片轉影片，免費 Wan 模型）。重新提供最輕量的 Qwen3.5 2B。電腦未達最低要求的模型會以紅色標示，下載前會顯示警告。
+- **New: Interface** — the sidebar can be collapsed (and collapses automatically while a document is open); the Tool library has clearer categories (Gaming, Office, Media, System, Network) and HOT tags; Settings has a “Report a problem / suggest a feature” form.
+  **新增：介面**——側欄可以摺疊（開啟文件時會自動摺起）；工具庫分類更清晰（遊戲、文書、媒體、系統、網絡）並加入 HOT 標籤；設定頁新增「回報問題／功能建議」表單。
+- **Fixed: Email** — “All accounts” no longer waits for every account: each account's mail appears as soon as it loads, so one unreachable server doesn't block the others.
+  **修正：電子郵件**——「全部帳戶」不再等待所有帳戶：各帳戶的郵件一載入即顯示，一個伺服器連不上不會拖住其他帳戶。
+- **Fixed: antivirus false positives** — PowerShell helpers no longer use `-EncodedCommand` / `-ExecutionPolicy Bypass`.
+  **修正：防毒軟件誤報**——PowerShell 輔助程式不再使用 `-EncodedCommand`／`-ExecutionPolicy Bypass`。
 
 ### v0.2.8
 - **Changed: Updates are required** — Rabi Toolkit checks for updates every time it starts and must be on the latest version to run. If it can't reach GitHub (e.g. no internet), can't find the update server, or the update fails, it shows a message and closes. An internet connection is needed each time you open it.
@@ -669,12 +745,12 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 |---|---|
 | `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiFiles.cs` chat attachments 對話附件；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 螢幕錄影；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Manager, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗管理、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Nas.cs`, `NasBrowser.cs`, `NasUi.cs` NAS Manager NAS 管理；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs`, `PerfExtra.cs` Performance Monitor, Ping, Game Mode 效能監控、Ping 監看、遊戲模式；`ScriptsExtra.cs` script variables, text recognition, notifications, schedule 腳本變數、文字辨識、通知、定時；`Backup.cs` backup & restore 備份及還原；`VideoEditor.cs`, `VideoEditorUi.cs` Video Editor 影片剪輯；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔；`FileRepair.cs`, `FileRepairUi.cs` File Repair 檔案修復；`Mail.cs`, `MailUi.cs`, `MailWeb.cs` Email 電子郵件；`Plugins.cs`, `PluginsUi.cs`, `PluginMods.cs` Workshop and plugins 工作坊及插件；`Themes.cs` themes and background image 主題及背景圖 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
-| `lib/` | Files embedded into `MultiTool.dll` as resources 嵌入 `MultiTool.dll` 的檔案：`webview2/` (Microsoft Edge WebView2 SDK), `codemirror/` (CodeMirror 5) |
+| `lib/` | Files embedded into `MultiTool.dll` as resources 嵌入 `MultiTool.dll` 的檔案：`webview2/` (Microsoft Edge WebView2 SDK), `codemirror/` (CodeMirror 5), `pdfedit/` (PDF Editor page with pdf.js and pdf-lib) and `office/` (Documents page, built from `web/office/` by `web/office/build.sh`), packed into `pdfedit.zip` / `office.zip` by `tools/pack_pdfedit.py`, `steamworks/` (Steamworks.NET, Steam version only) |
 | `workshop/` | Source of the free Workshop plugins 免費工作坊插件的原始碼（`video-download/`, `stocks/`; `dist/*.mtplugin` are attached to each release 每個版本附上）|
 | `archive/` | Old built-in code no longer compiled 已不再編譯的舊內置程式碼 |
-| `template/` | Example script shipped to users 隨附的範例腳本（自動點擊） |
+| `template/` | Example script shipped to users 隨附的範例腳本（Auto Click） |
 | `release/` | User guide shipped with releases 隨發佈版本附上的使用說明（`使用說明.txt`） |
-| `Build/` | Local build output, ignored by git 本機打包輸出（不納入 git） |
+| `Build/` | Local build output, ignored by git: `Normal/` (GitHub version) and `Steam/` (Steam version, see `steam/README.md`) 本機打包輸出（不納入 git）：`Normal/`（GitHub 版）與 `Steam/`（Steam 版，見 `steam/README.md`） |
 
 ---
 
@@ -684,15 +760,16 @@ No Windows Desktop SDK is required. Compile with Roslyn `csc` against the framew
 無須安裝 Windows Desktop SDK。使用 Roslyn `csc`，引用從現有 .NET 9 WinForms 單一執行檔中解出的框架組件進行編譯，然後重新打包：
 
 ```
-python tools/bundle.py Build/RabiToolkit.exe ref/
+python tools/bundle.py Build/Normal/RabiToolkit.exe ref/
+python tools/pack_pdfedit.py
 csc -nostdlib -noconfig -target:winexe -langversion:13 -nullable:enable -unsafe -optimize+ -out:MultiTool.dll -r:ref/*.dll ^
     -r:lib/webview2/Microsoft.Web.WebView2.Core.dll -resource:lib/webview2/Microsoft.Web.WebView2.Core.dll,wv2.core ^
     -resource:lib/webview2/WebView2Loader.dll,wv2.loader -resource:lib/webview2/WebView2Loader.x86.dll,wv2.loader.x86 ^
-    -resource:lib/codemirror/cm.js,cm.js -resource:lib/codemirror/cm.css,cm.css ^
+    -resource:lib/codemirror/cm.js,cm.js -resource:lib/codemirror/cm.css,cm.css -resource:lib/pdfedit.zip,pdfedit.zip -resource:assets/pdf.ico,icon.pdf -resource:lib/office.zip,office.zip -resource:assets/docx.ico,icon.docx -resource:assets/xlsx.ico,icon.xlsx -resource:assets/pptx.ico,icon.pptx ^
     -resource:lib/lang/ja.json,lang.ja.json -resource:lib/lang/ko.json,lang.ko.json -resource:lib/lang/ru.json,lang.ru.json ^
     -resource:lib/lang/es.json,lang.es.json -resource:lib/lang/pt-BR.json,lang.pt-BR.json -resource:lib/lang/de.json,lang.de.json ^
     -resource:lib/lang/fr.json,lang.fr.json src/*.cs
-python tools/make_exe.py Build/RabiToolkit.exe MultiTool.dll Build/RabiToolkit.exe.new tools/apphost.exe
+python tools/make_exe.py Build/Normal/RabiToolkit.exe MultiTool.dll Build/Normal/RabiToolkit.exe.new tools/apphost.exe
 ```
 
 Interface languages: Traditional / Simplified Chinese and English live in `src/LangTable.cs` (generated by `tools/i18n/gen.py`); Japanese, Korean, Russian, Spanish, Portuguese (Brazil), German and French are `lib/lang/<code>.json` (same key as `LangTable.cs` → translation), embedded as resources. Missing entries fall back to English. A file at `data\lang\<code>.json` overrides the embedded one, so translations can be fixed without rebuilding.
@@ -701,8 +778,8 @@ Interface languages: Traditional / Simplified Chinese and English live in `src/L
 `workshop/video-download/multitool_bili.py` is a yt-dlp extractor plugin that the Video Downloader plugin installs next to yt-dlp; it lets yt-dlp read Bilibili video pages with a language path (`/en/video/…`) until yt-dlp fixes this itself.
 `workshop/video-download/multitool_bili.py` 為 yt-dlp 擷取器插件，由影片下載插件安裝到 yt-dlp 旁；在 yt-dlp 自行修正前，令其可讀取帶語言路徑（`/en/video/…`）的 Bilibili 影片頁。
 
-`make_exe.py` uses the previous `Build/RabiToolkit.exe` as its base (runtime), so keep that file. The optional last argument `tools/apphost.exe` is the app host with the Rabi Toolkit icon.
-`make_exe.py` 以上一版 `Build/RabiToolkit.exe` 作為基礎（執行環境），因此請保留該檔案。最後一個可選參數 `tools/apphost.exe` 為已加入 Rabi Toolkit 圖示的應用程式主機。
+`make_exe.py` uses the previous `Build/Normal/RabiToolkit.exe` as its base (runtime), so keep that file. The optional last argument `tools/apphost.exe` is the app host with the Rabi Toolkit icon.
+`make_exe.py` 以上一版 `Build/Normal/RabiToolkit.exe` 作為基礎（執行環境），因此請保留該檔案。最後一個可選參數 `tools/apphost.exe` 為已加入 Rabi Toolkit 圖示的應用程式主機。
 
 The icon is in `assets/` (`icon.png`, `MultiTool.ico`). To change it, edit and run `tools/make_icon.py`, then `python tools/seticon.py tools/apphost.exe assets/MultiTool.ico tools/apphost.exe` (requires `pip install lief`).
 圖示位於 `assets/`（`icon.png`、`MultiTool.ico`）。如需修改，可編輯並執行 `tools/make_icon.py`，再執行上述 `seticon.py` 指令（需要 `pip install lief`）。
@@ -713,9 +790,9 @@ The icon is in `assets/` (`icon.png`, `MultiTool.ico`). To change it, edit and r
 
 1. Update `Version` in `src/App.cs` (e.g. `v1.4`) and **increase `Build`** (an internal number that must go up with every release).
    更新 `src/App.cs` 中的 `Version`（例如 `v1.4`），並**加大 `Build`**（內部版本編號，每次發佈都必須比上一版大）。
-2. Set the version shown in File Explorer / Task Manager, then build `Build/RabiToolkit.exe`:
+2. Set the version shown in File Explorer / Task Manager, then build `Build/Normal/RabiToolkit.exe`:
    `python tools/setversion.py tools/apphost.exe tools/apphost.exe "Rabi Toolkit" RabiToolkit.exe 0.2.7 "白兔糖v3v"` (requires `pip install lief`).
-   先設定檔案總管／工作管理員顯示的版本資訊（上述指令），再打包產生 `Build/RabiToolkit.exe`。
+   先設定檔案總管／工作管理員顯示的版本資訊（上述指令），再打包產生 `Build/Normal/RabiToolkit.exe`。
 3. Create the Release in the public **[MultiTool-Releases](https://github.com/jeffpny1123/MultiTool-Releases)** repo (this source repo is private; the updater reads releases from there). The **tag must match the version** (`v1.2`); attach `RabiToolkit.exe` or a zip containing it, and mark it as **latest**.
    於公開的 **MultiTool-Releases** repo 建立 Release（此原始碼 repo 為私人；自動更新從該處讀取）。**標籤須與版本號相同**（`v1.2`），附上 `RabiToolkit.exe` 或包含該檔案的壓縮檔，並設為 **latest**。
 4. Existing users are updated automatically the next time they launch the app.
@@ -736,11 +813,23 @@ Bundled in the executable / 已包含於執行檔內：
 
 - [Microsoft Edge WebView2 SDK](https://www.nuget.org/packages/Microsoft.Web.WebView2) (`Microsoft.Web.WebView2.Core.dll`, `WebView2Loader.dll`) — Microsoft WebView2 SDK license; uses the WebView2 Runtime already installed with Windows / 使用 Windows 已安裝的 WebView2 Runtime
 - [CodeMirror 5](https://codemirror.net/5/) — MIT License, used by the Workshop code editor / 工作坊程式碼編輯器使用
+- [PDF.js](https://mozilla.github.io/pdf.js/) — Apache License 2.0, used by the PDF Editor to display pages / PDF 修改器用於顯示頁面
+- [pdf-lib](https://pdf-lib.js.org/) — MIT License, used by the PDF Editor to write PDFs / PDF 修改器用於寫入 PDF
+- [Univer](https://github.com/dream-num/univer) — Apache License 2.0, the spreadsheet grid in Documents / 文書工具的試算表介面
+- [ExcelJS](https://github.com/exceljs/exceljs) — MIT License, reads and writes .xlsx / 讀寫 .xlsx
+- [Chart.js](https://www.chartjs.org/) — MIT License, draws spreadsheet charts / 繪製試算表圖表
+- [pptx-browser](https://www.npmjs.com/package/pptx-browser) — MIT License, renders, plays and writes .pptx (with two small fixes applied by `web/office/patch-deps.js`) / 顯示、播放及寫入 .pptx（`web/office/patch-deps.js` 修正了兩個小問題）
+- [fawazahmed0/exchange-api](https://github.com/fawazahmed0/exchange-api) — CC0-1.0, daily exchange rates fetched at run time (fallback: European Central Bank reference rates) / 執行時取得每日匯率（後備：歐洲央行參考匯率）
+- [docx-editor](https://github.com/eigenpal/docx-editor) — Apache License 2.0, the document (.docx) editor in Documents, bundled with React, ProseMirror, JSZip and other MIT / Apache-licensed packages (full list in `lib/office/THIRD-PARTY-LICENSES.txt`) / 文書工具的文件編輯器，連同 React、ProseMirror、JSZip 等 MIT / Apache 授權套件（完整清單見 `lib/office/THIRD-PARTY-LICENSES.txt`）
 
 Downloaded by the user on demand, not bundled in the executable / 由用戶按需下載，並未包含於執行檔內：
 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and [OpenAI Whisper](https://github.com/openai/whisper) models — MIT License
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) — MIT License
+- [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) — MIT License, downloaded when you install an AI image or AI video model / 安裝 AI 製圖或 AI 製影片模型時下載
+- [Wan 2.1 / 2.2 video models](https://github.com/Wan-Video) — Apache License 2.0, downloaded from Hugging Face when you choose one / 選用時由 Hugging Face 下載
+- [Ruffle](https://ruffle.rs/) — MIT / Apache License 2.0, downloaded the first time Flash Games is used / 首次使用 Flash 小遊戲時下載
+- Web lookup for the local AI queries these public services at run time (only when you turn it on): Wikipedia, GDELT, Hacker News, AniList, Bangumi, AnimeChan, PokéAPI, Steam, CheapShark, TVmaze, MusicBrainz / 本地 AI 的上網搜尋功能（開啟後才會使用）於執行時查詢上述公開服務
 - [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the recorder, Instant Replay, Video Editor, Converter, File Repair and the Video Downloader plugin as a separate program / GPL 授權，螢幕錄影、精彩重播、影片剪輯、格式轉換、檔案修復及影片下載插件以獨立程式方式調用
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) — Unlicense, downloaded by the Video Downloader Workshop plugin / 由影片下載工作坊插件下載
 - [qpdf](https://github.com/qpdf/qpdf) — Apache License 2.0, downloaded by File Repair for PDFs / 由檔案修復下載，用於 PDF

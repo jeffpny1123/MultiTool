@@ -52,7 +52,7 @@ internal static class ScriptJson
           {"type":"scroll","x":100,"y":200,"notches":-3}             // 滑鼠滾輪：喺 (x,y) 碌 notches 格；正數向上，負數向下
           {"type":"drag","button":"left","x":100,"y":200,"x2":300,"y2":200,"seconds":0.5}   // 由 (x,y) 撳住拖去 (x2,y2)，用時 seconds
           {"type":"move","x":100,"y":200,"x2":300,"y2":200,"seconds":0.5}   // 淨係移動滑鼠（唔撳）：由 (x,y) 移去 (x2,y2)，用時 seconds
-          {"type":"image","images":["怪物.png"],"similarity":80}   // 喺畫面搵其中一張圖（最多 6 張），搵到就點擊佢，搵唔到就跳過繼續
+          {"type":"image","images":["確定掣.png"],"similarity":80}   // 喺畫面搵其中一張圖（最多 6 張），搵到就點擊佢，搵唔到就跳過繼續
           {"type":"loop","count":0,"limit_seconds":0,"until":"","steps":[...]}   // 重複 count 次；0 = 一直重複；limit_seconds = 行咗幾多秒就停（0 = 唔限）；until = 到呢個現實時間 "HH:mm" 就停（空 = 唔限）
           {"type":"system","action":"open_app","target":"C:\\...\\app.exe","name":"App"}   // 系統：play_sound 播音效（target = wav/mp3 路徑，repeat = true 一直重複到腳本停）；open_app 開程式（target = 路徑）；close_app 閂程式（target = process 名，例如 notepad）；switch_window 切換視窗（target = process 名，name = 視窗標題，可空）；shutdown 關機（seconds = 幾多秒後）
           {"type":"stop"}                                          // 停止成個腳本（包括 IF 框）
@@ -63,7 +63,7 @@ internal static class ScriptJson
           {"type":"var","name":"次數","op":"add","value":1}         // 變數：op = set / add / sub；read = 讀畫面數字（x,y,x2,y2 範圍）
               op = find_images：搵晒一樣嘅圖（images, similarity, sort = reading / nearest / right_to_left / bottom_to_top），位置存入同名清單，變數 = 數量
               op = list_remove_first / list_remove_last / list_remove_at（value = 第幾個，由 1 起）：清單操作，數量跟住更新
-          {"type":"notify","text":"刷咗 {次數} 次","windows":true,"discord":false}   // 通知；{變數名} 會換做數值
+          {"type":"notify","text":"完成咗 {次數} 次","windows":true,"discord":false}   // 通知；{變數名} 會換做數值
           {"type":"call","script":"資料夾名","name":"顯示名"}       // 行其他腳本嘅主步驟一次
         滑鼠點擊 click 可以加 "target"：
           "position"（預設，用 x,y）；"image"（images, similarity：搵到就撳佢中間）；
@@ -1063,7 +1063,7 @@ internal sealed class AssistPanel : Panel
         _log.Clear();
         if (st.Msgs.Count == 0 && Intro != null) Line(null, Intro, Ui.TextFaint, 9f);
         else if (st.Msgs.Count == 0)
-            Line(null, Lang.T("話我知你想個腳本做啲咩，例如：「每 5 秒撳一下 F1，搵到怪物圖就點佢」。\n") +
+            Line(null, Lang.T("話我知你想個腳本做啲咩，例如：「每 5 分鐘撳一下 Ctrl+S，見到「確定」掣就撳佢」。\n") +
                        Lang.T("我會睇住你而家個腳本幫你改，寫好之後撳「套用到腳本」就會換上（可以復原）。"), Ui.TextFaint, 9f);
         foreach (var (role, text) in st.Msgs)
         {

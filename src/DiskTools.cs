@@ -40,9 +40,15 @@ $r = foreach ($d in Get-PhysicalDisk) {
     ReadErr=$c.ReadErrorsUncorrected; WriteErr=$c.WriteErrorsUncorrected }
 }
 ConvertTo-Json -Compress -InputObject @($r)";
-        var psi = new ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " +
-            Convert.ToBase64String(Encoding.Unicode.GetBytes(ps)))
+        // 寫做普通 .ps1 檔再行（唔用 -EncodedCommand：Base64 指令係惡意程式常用手法，防毒軟件見到好易誤報）
+        string dir = Path.Combine(AppPaths.Data, "tools", "disk");
+        Directory.CreateDirectory(dir);
+        string file = Path.Combine(dir, "disk-health.ps1");
+        await File.WriteAllTextAsync(file, ps, new UTF8Encoding(true));   // PowerShell 5 要 BOM 先識讀 UTF-8
+        var psi = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"),
+            $"-NoProfile -NonInteractive -File \"{file}\"")
         { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true, StandardOutputEncoding = Encoding.UTF8 };
+        Scripts.Win.AllowOwnScript(psi);
         using var p = Process.Start(psi)!;
         var outTask = p.StandardOutput.ReadToEndAsync();
         _ = p.StandardError.ReadToEndAsync();

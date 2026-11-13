@@ -185,7 +185,7 @@ internal sealed class HomePage : Panel
             var tf = Ui.F(17f, FontStyle.Bold);
             TextRenderer.DrawText(g, hello, tf, new Point(p, y), Ui.Text, TextFormatFlags.NoPadding);
             y += tf.Height + Ui.S(8);
-            var sub = Program.Version + "  ·  " + Lang.T("開發者：") + Program.Author + "  ·  " + Lang.F("已安裝 {0} 個工具", _count);
+            var sub = Program.Version + "  ·  " + Lang.F("已安裝 {0} 個工具", _count);
             TextRenderer.DrawText(g, sub, Ui.F(9.5f), new Point(p, y), Ui.TextDim, TextFormatFlags.NoPadding);
             y += Ui.F(9.5f).Height + Ui.S(10);
             int textW = (Width < Ui.S(620) ? Width : _lib.Left) - p * 2;
@@ -313,7 +313,7 @@ internal sealed class HomePage : Panel
             (Extensions.Clipboard, Lang.T("剪貼簿紀錄：用快捷鍵喺任何地方叫出細視窗，撳 1-9 直接貼上。")),
             (null, Lang.T("每個工具嘅快捷鍵可以喺「設定 → 快捷鍵」一次過睇同改，亦可以揀喺工具頁以外用唔用得。")),
             (null, Lang.T("左邊側欄可以拖住上下搬，排你鍾意嘅次序。")),
-            (null, Lang.T("所有設定同腳本都存喺 exe 隔籬嘅 data 資料夾；出錯會寫入 data\\error.log。"))
+            (null, Program.IsSteam ? Lang.T("所有設定同腳本都存喺 AppData 入面嘅 data 資料夾；出錯會寫入 data\\error.log。") : Lang.T("所有設定同腳本都存喺 exe 隔籬嘅 data 資料夾；出錯會寫入 data\\error.log。"))
         };
 
         private string[] _tips = Array.Empty<string>();

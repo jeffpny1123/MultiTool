@@ -72,12 +72,13 @@ while ($true) {
         Directory.CreateDirectory(Dir);
         var ps1 = Path.Combine(Dir, "ocr-server.ps1");
         File.WriteAllText(ps1, Script, new UTF8Encoding(true)); // PowerShell 5 要 BOM 先識讀 UTF-8
-        var psi = new ProcessStartInfo(PowerShell, $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{ps1}\"")
+        var psi = new ProcessStartInfo(PowerShell, $"-NoProfile -NonInteractive -File \"{ps1}\"")
         {
             UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
         };
+        Win.AllowOwnScript(psi);
         _p = Process.Start(psi)!;
         _p.ErrorDataReceived += (_, _) => { };
         _p.BeginErrorReadLine();

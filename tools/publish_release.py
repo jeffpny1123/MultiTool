@@ -1,8 +1,9 @@
 # 發佈 Rabi Toolkit 去 MultiTool-Releases（GitHub API）
 # 用法：
-#   python tools/publish_release.py draft  v2.1 notes.md   → 開草稿 Release + 上載 Build\RabiToolkit-v2.1.zip（說明尾自動加 <!-- build: N -->，N = App.cs 嘅 Program.Build）
+#   python tools/publish_release.py draft  v2.1 notes.md   → 開草稿 Release + 上載 Build\Normal\RabiToolkit-v2.1.zip（說明尾自動加 <!-- build: N -->，N = App.cs 嘅 Program.Build）
 #   python tools/publish_release.py publish v2.1            → 將草稿正式發佈，設做 latest
-#   python tools/publish_release.py readme                  → 用 Build\MultiTool-Releases-README.md 更新 README.md
+#   python tools/publish_release.py all    v2.1 notes.md   → 一次過做晒：草稿 + zip、workshop\\dist 插件、正式發佈、README、舊 repo（要先 git push）
+#   python tools/publish_release.py readme                  → 用 Build\Normal\MultiTool-Releases-README.md 更新 README.md
 # token 讀自 repo 根目錄嘅 .release-token（已喺 .git/info/exclude，唔會 commit）
 import base64, json, os, sys, urllib.request, urllib.error
 
@@ -43,7 +44,7 @@ def find_release(tag):
 
 
 def draft(tag, notes_path):
-    zip_path = os.path.join(ROOT, "Build", f"RabiToolkit-{tag}.zip")
+    zip_path = os.path.join(ROOT, "Build", "Normal", f"RabiToolkit-{tag}.zip")
     if not os.path.isfile(zip_path):
         sys.exit("搵唔到 " + zip_path)
     notes = open(notes_path, encoding="utf-8").read()
@@ -85,7 +86,7 @@ def publish(tag):
 
 
 def readme():
-    src = os.path.join(ROOT, "Build", "MultiTool-Releases-README.md")
+    src = os.path.join(ROOT, "Build", "Normal", "MultiTool-Releases-README.md")
     content = open(src, "rb").read()
     cur = call("GET", API + "/contents/README.md")
     if base64.b64decode(cur["content"]) == content:
@@ -96,8 +97,72 @@ def readme():
     print("README 已更新")
 
 
+def upload_asset(repo, rel, path, ctype="application/octet-stream"):
+    """上載一個附件去 Release（同名嘅舊附件先刪）。"""
+    name = os.path.basename(path)
+    for a in rel.get("assets", []):
+        if a["name"] == name:
+            call("DELETE", f"https://api.github.com/repos/{repo}/releases/assets/{a['id']}")
+    up = f"https://uploads.github.com/repos/{repo}/releases/{rel['id']}/assets?name={name}"
+    with open(path, "rb") as f:
+        a = call("POST", up, data=f.read(), ctype=ctype)
+    print(f"  已上載 {a['name']} ({a['size']} bytes)")
+
+
+def plugins(tag):
+    """將 workshop/dist/*.mtplugin 上載去草稿 Release。"""
+    rel = find_release(tag)
+    if not rel:
+        sys.exit("搵唔到 Release " + tag)
+    d = os.path.join(ROOT, "workshop", "dist")
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if f.endswith(".mtplugin"):
+            upload_asset(REPO, rel, os.path.join(d, f))
+
+
+def old_repo(tag, notes_path):
+    """舊 repo（jeffpny1123/MultiTool）都出一個 Release：tag 冇 v，v2.5.1 或更舊嘅用戶由呢度更新。"""
+    import re
+    repo = "jeffpny1123/MultiTool"
+    api = "https://api.github.com/repos/" + repo
+    zip_path = os.path.join(ROOT, "Build", "Normal", f"RabiToolkit-{tag}.zip")
+    notes = open(notes_path, encoding="utf-8").read()
+    m = re.search(r"public const int Build = (\d+);", open(os.path.join(ROOT, "src", "App.cs"), encoding="utf-8").read())
+    notes = re.sub(r"\s*<!--\s*build:\s*\d+\s*-->\s*$", "", notes) + f"\n\n<!-- build: {m.group(1)} -->\n"
+    bare = tag.lstrip("v")
+    rel = None
+    for r in call("GET", api + "/releases?per_page=50"):
+        if r["tag_name"] == bare or (r["draft"] and r["name"] == tag):
+            rel = r
+    if rel and not rel["draft"]:
+        print("舊 repo：", bare, "已經發佈咗，略過")
+        return
+    if rel is None:
+        rel = call("POST", api + "/releases", {"tag_name": bare, "target_commitish": "main", "name": tag, "body": notes, "draft": True})
+    upload_asset(repo, rel, zip_path, "application/zip")
+    d = os.path.join(ROOT, "workshop", "dist")
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if f.endswith(".mtplugin"):
+            upload_asset(repo, rel, os.path.join(d, f))
+    r = call("PATCH", f"{api}/releases/{rel['id']}", {"tag_name": bare, "target_commitish": "main", "draft": False, "make_latest": "true"})
+    print("舊 repo 已發佈：", r["html_url"])
+
+
+def everything(tag, notes_path):
+    """一次過：草稿 + zip → 插件 → 正式發佈 → README → 舊 repo。要先 git push。"""
+    draft(tag, notes_path)
+    plugins(tag)
+    publish(tag)
+    readme()
+    old_repo(tag, notes_path)
+    print("全部完成。")
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
+    if a[:1] == ["all"] and len(a) == 3:
+        everything(a[1], a[2])
+        sys.exit(0)
     if a[:1] == ["draft"] and len(a) == 3:
         draft(a[1], a[2])
     elif a[:1] == ["publish"] and len(a) == 2:

@@ -41,7 +41,8 @@
   .row .px { text-align: right; flex: none; }
   .row .px b { font-weight: 600; display: block; }
   .row .px span { font-size: 12px; }
-  .row .pl { font-size: 11.5px; display: block; }
+  .row .pl { font-size: 11.5px; display: block; font-weight: 600; }
+  .row .buy { display: inline-block; margin-top: 3px; font-size: 11px; color: var(--mt-accent); border: 1px solid var(--mt-accent); border-radius: 5px; padding: 0 5px; line-height: 16px; white-space: nowrap; }
   .row spark { display: none; }
   .empty { padding: 18px 14px; color: var(--mt-text-dim); line-height: 1.6; }
   #foot { padding: 6px 12px; font-size: 11.5px; color: var(--mt-text-dim); border-top: 1px solid var(--mt-border); display: flex; gap: 6px; align-items: center; }
@@ -56,7 +57,18 @@
   #hName small { font-weight: 400; color: var(--mt-text-dim); margin-left: 6px; }
   #hPrice { font-size: 26px; font-weight: 600; margin-top: 2px; }
   #hPrice span { font-size: 15px; font-weight: 500; margin-left: 8px; }
-  #hMine { font-size: 13px; margin-top: 2px; min-height: 18px; }
+  #hMine { margin-top: 8px; min-height: 18px; }
+  .pos { display: flex; flex-wrap: wrap; gap: 8px; cursor: pointer; }
+  .pos .c { background: var(--mt-card); border: 1px solid var(--mt-border); border-radius: 9px; padding: 5px 12px; line-height: 1.25; }
+  .pos .c small { display: block; font-size: 11px; color: var(--mt-text-dim); }
+  .pos .c b { font-size: 15px; font-weight: 600; }
+  .pos .c.buy { border-color: var(--mt-accent); box-shadow: inset 3px 0 0 var(--mt-accent); }
+  .pos .c.buy b { color: var(--mt-accent); }
+  .pos .c.pl.up { border-color: var(--up); background: color-mix(in srgb, var(--up) 12%, var(--mt-card)); }
+  .pos .c.pl.down { border-color: var(--down); background: color-mix(in srgb, var(--down) 12%, var(--mt-card)); }
+  .pos .c.pl b { color: inherit; }
+  .pos .c.add { color: var(--mt-text-dim); border-style: dashed; padding: 7px 12px; font-size: 12.5px; }
+  .pos .c.add:hover, .pos .c:hover { border-color: var(--mt-accent); }
   #bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0 6px; }
   #bar .sep { width: 1px; height: 20px; background: var(--mt-border); margin: 0 4px; }
   #bar .sp { flex: 1; }

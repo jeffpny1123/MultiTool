@@ -191,11 +191,12 @@ internal static class MailAi
         _ => "Any text shown in the user interface (labels, buttons, messages, notifications) must be in " + Lang.EnglishName(Lang.Current) + "."
     };
 
-    public static async Task<string> AskAsync(string prompt)
+    /// <param name="files">附件（AiFiles.Prepare 準備好嘅路徑）；唔留對話紀錄（quick）。</param>
+    public static async Task<string> AskAsync(string prompt, IReadOnlyList<string>? files = null)
     {
         var prov = Ai.AiProvider.LoadCurrent() ?? throw new InvalidOperationException(Lang.T("未揀 AI：請去「AI 助手」頁登入 Claude / ChatGPT / Gemini。"));
         var exe = prov.Find() ?? throw new InvalidOperationException(Lang.F("搵唔到 {0}：請去「AI 助手」頁安裝。", prov.ToolName));
-        var a = await prov.AskAsync(exe, prompt, null, _ => { }, quick: true);
+        var a = await prov.AskAsync(exe, prompt, null, _ => { }, quick: true, files: files is { Count: > 0 } ? files : null);
         if (a.IsError) throw new InvalidOperationException(a.Text);
         return a.Text.Trim();
     }
@@ -1036,22 +1037,45 @@ internal sealed class MailPage : Panel
         string q = _search;
         var accts = MailStore.All.ToList();
         var fails = new List<string>();
+        var waiting = accts.Select(a => a.Email).ToList();
+        // 每個帳戶各自載入，邊個返到嚟就即刻顯示邊個；一個伺服器死咗（例如 Outlook 壞機）唔會拖住其他帳戶。
+        // 呢度啲 await 之後都係返到介面執行緒，所以唔使鎖。
+        void Progress()
+        {
+            if (cts.IsCancellationRequested) return;
+            string st = waiting.Count > 0 ? Lang.F("仲等緊：{0}", string.Join("、", waiting)) : "";
+            if (fails.Count > 0) st = Lang.T("連唔到：") + string.Join("；", fails) + (st.Length > 0 ? "　" + st : "");
+            if (st.Length == 0 && _search.Length > 0) st = Lang.F("搵到 {0} 封", _multi.Values.Sum(x => x.Uids.Count));
+            SetStatus(st, fails.Count > 0);
+        }
+        Progress();
         await Task.WhenAll(accts.Select(async a =>
         {
             try
             {
-                var uids = await MailPool.UseAsync(a, "INBOX", (c, t) => q.Length > 0 ? c.SearchTextAsync(q, t) : c.SearchAsync("ALL", t), cts.Token, 60, reselect: true);
+                // 30 秒冇回應就當連唔到（之前 60 秒，而且要等齊所有帳戶先顯示）
+                var uids = await MailPool.UseAsync(a, "INBOX", (c, t) => q.Length > 0 ? c.SearchTextAsync(q, t) : c.SearchAsync("ALL", t), cts.Token, 30, reselect: true);
                 uids.Reverse();
-                _multi[a.Id] = (uids, 0);
+                var batch = uids.Take(30).ToList();
+                var hs = batch.Count > 0 ? await MailPool.UseAsync(a, "INBOX", (c, t) => c.FetchHeadersAsync(batch, t), cts.Token, 60) : new List<MailHeader>();
+                if (cts.IsCancellationRequested) return;
+                foreach (var h in hs) h.Acct = a;
+                _multi[a.Id] = (uids, batch.Count);
+                _items.AddRange(hs);
+                SortAll();
+                _list.HasMore = _multi.Values.Any(x => x.Next < x.Uids.Count);
+                _list.Loading = false;   // 有嘢睇得就唔再顯示「載入緊」
+                _list.Invalidate();
             }
             catch (Exception ex) when (!cts.IsCancellationRequested) { fails.Add(a.Email + "：" + MailHint.Explain(ex.Message).Split('\n')[0]); }
             catch { }
+            waiting.Remove(a.Email);
+            Progress();
         }));
         if (cts.IsCancellationRequested) return;
-        await LoadMoreAllAsync(cts);
-        if (cts.IsCancellationRequested) return;
-        int total = _multi.Values.Sum(x => x.Uids.Count);
-        SetStatus(fails.Count > 0 ? Lang.T("連唔到：") + string.Join("；", fails) : _search.Length > 0 ? Lang.F("搵到 {0} 封", total) : "", fails.Count > 0);
+        _list.Loading = false;
+        _list.Invalidate();
+        BeginInvoke(_list.CheckMore);
         foreach (var a in accts) _ = MailPool.UseAsync(a, null, (c, t) => c.UnseenAsync("INBOX", t), CancellationToken.None)
             .ContinueWith(t => { if (t.Status == TaskStatus.RanToCompletion) MailWatch.SetUnread(a, t.Result); });
     }

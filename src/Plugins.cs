@@ -198,6 +198,7 @@ internal static class PluginStore
         File.WriteAllText(Path.Combine(dir, "manifest.json"), PluginTemplates.Manifest(name));
         File.WriteAllText(Path.Combine(dir, "ui.html"), PluginTemplates.Html);
         File.WriteAllText(Path.Combine(dir, "main.js"), PluginTemplates.Js);
+        SteamHub.Achieve(SteamHub.Ach.PluginMaker);
         Notify();
         return id;
     }
@@ -210,6 +211,7 @@ internal static class PluginStore
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "manifest.json"), PluginTemplates.ModManifest(name, target));
         File.WriteAllText(Path.Combine(dir, "mod.js"), PluginTemplates.ModJs);
+        SteamHub.Achieve(SteamHub.Ach.PluginMaker);
         Notify();
         return id;
     }
@@ -241,6 +243,7 @@ internal static class PluginStore
         string json;
         using (var r = new StreamReader(man.Open())) json = r.ReadToEnd();
         var m = PluginManifest.Parse("x", json);
+        SteamHub.Achieve(SteamHub.Ach.PluginInstall);
         string id = MakeId(m.IdName);
         string dir = PathOf(id);
         string full = Path.GetFullPath(dir) + Path.DirectorySeparatorChar;
@@ -313,7 +316,16 @@ internal sealed class PluginWeb
         w._ctl.DefaultBackgroundColor = UI.Ui.Bg;
         w._ctl.Bounds = host.ClientRectangle;
         host.Resize += (_, _) => { try { w._ctl.Bounds = host.ClientRectangle; } catch { } };
+        // 隱藏住開嘅頁（背景插件）再顯示：重新對好大細，順便檢查頁面仲有冇反應
+        host.VisibleChanged += (_, _) => { if (host.Visible) _ = w.WakeAsync(); };
         var wv = w._ctl.CoreWebView2;
+        // 瀏覽器 / 頁面程序死咗（例如電腦瞓完覺醒返）：自動重新載入，唔會淨係得一片空白
+        wv.ProcessFailed += (_, e) =>
+        {
+            w.Log?.Invoke("warn", Lang.F("插件頁面停咗（{0}），重新載入", e.ProcessFailedKind));
+            if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited) { try { host.BeginInvoke(() => w.Crashed?.Invoke()); } catch { } }
+            else try { host.BeginInvoke(() => w.Reload(w._m)); } catch { }
+        };
         try { wv.Profile.PreferredColorScheme = UI.Ui.Light ? CoreWebView2PreferredColorScheme.Light : CoreWebView2PreferredColorScheme.Dark; } catch { }
         var st = wv.Settings;
         st.IsScriptEnabled = true;
@@ -418,6 +430,32 @@ internal sealed class PluginWeb
     }
 
     public void OpenDevTools() { try { _ctl.CoreWebView2.OpenDevToolsWindow(); } catch { } }
+
+    /// <summary>瀏覽器程序冇咗：要成個重新開過。</summary>
+    public Action? Crashed;
+
+    private bool _waking;
+    /// <summary>頁面顯示返出嚟：對好位置大細；3 秒內冇反應或者載入失敗就重新載入。</summary>
+    public async Task WakeAsync()
+    {
+        if (_waking) return;
+        _waking = true;
+        try
+        {
+            _ctl.IsVisible = true;
+            _ctl.Bounds = _host.ClientRectangle;
+            _ctl.NotifyParentWindowPositionChanged();
+            // 正常頁面一定有 mt；載入失敗嘅錯誤頁 / 死咗嘅頁面就冇（或者完全冇回應）
+            var check = _ctl.CoreWebView2.ExecuteScriptAsync("window.mt && location.href.indexOf(" + JsonSerializer.Serialize(_origin) + ") === 0 ? 'ok' : 'no'");
+            if (await Task.WhenAny(check, Task.Delay(3000)) != check || check.Result == "\"no\"")
+            {
+                Log?.Invoke("warn", Lang.T("插件頁面冇反應，重新載入"));
+                Reload(_m);
+            }
+        }
+        catch { }
+        finally { _waking = false; }
+    }
 
     public void Close() { PluginBridge.KillAll(_m.Id); try { _ctl.Close(); } catch { } }
 
@@ -1345,6 +1383,7 @@ internal sealed class PluginView : Panel
     {
         var w = await PluginWeb.CreateAsync(this, Manifest, Dev, (l, t) => BeginInvokeLog(l, t));
         w.Navigating = () => Navigating?.Invoke();
+        w.Crashed = () => { if (IsDisposed) return; try { w.Close(); } catch { } _web = null; _msg.Text = Lang.T("載入緊…"); _msg.Visible = true; _ = StartAsync(); };
         return w;
     }
 

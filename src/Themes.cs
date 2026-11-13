@@ -32,7 +32,7 @@ internal sealed class ThemeSpec
 
 internal static class ThemeStore
 {
-    private static string Data => Path.Combine(AppContext.BaseDirectory, "data");
+    private static string Data => AppPaths.Data;
     public static string Dir => Path.Combine(Data, "themes");
     private static string CurFile => Path.Combine(Data, "theme.txt");
 

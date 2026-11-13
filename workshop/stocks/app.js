@@ -15,10 +15,10 @@ const T = {
     emptyStar: '未有標記嘅股票：撳股票左邊嘅 ☆ 標記想特別留意嘅。',
     emptyHidden: '預設股票已經隱藏：喺上面搜尋或者撳「🔥 熱門」加入你想睇嘅。',
     pick: '撳左邊一隻股票睇走勢圖', loading: '載入緊…', noData: '呢段時間冇數據', searching: '搜尋緊…', noHit: '搵唔到', searchFail: '搜尋失敗：',
-    note: '數據來自 Yahoo Finance，可能有延遲，只供參考，唔係投資建議。走勢圖：滑鼠指住 K 線先會顯示詳細數據；滾輪放大縮細；撳住拖可以上下睇（放大咗仲可以左右睇）。',
+    note: '數據來自 Yahoo Finance，可能有延遲，只供參考，唔係投資建議。走勢圖：滑鼠指住 K 線先會顯示詳細數據；滾輪放大縮細；撳住拖可以上下睇（放大咗仲可以左右睇）；右鍵畫咗嘅線可以刪除。',
     updated: '更新：', live: '即時推送', poll: '每 30 秒更新', fetching: '攞緊報價…',
     open: '開', high: '高', low: '低', close: '收', change: '升跌', volume: '成交量', prevClose: '昨收', costLine: '買入價',
-    mine: '我嘅回報：', perShare: '每股', total: '💰 總賺蝕：',
+    mine: '我嘅回報：', perShare: '每股', total: '💰 總賺蝕：', pBuy: '買入價', rsi: 'RSI', volBtn: '成交量', hline: '─ 水平線', trend: '╱ 趨勢線', clearDraw: '🧹 清除畫線', hlineTip: '撳一下圖表加一條水平線（例如支持位 / 阻力位）', trendTip: '喺圖表撳住拖，畫一條趨勢線', clearTip: '刪除呢隻股票全部畫線（右鍵一條線就只刪嗰條）', pShares: '股數', pCost: '成本', pValue: '市值', pPnl: '賺蝕', pSet: '💰 設定買入價',
     costTitle: '💰 設定我嘅買入價', costHint: '只係用嚟計你賺蝕幾多，唔會連接任何券商，亦唔會買賣。全部清空就等於刪除買入價。',
     costLabel: '買入價（每股平均成本）', sharesLabel: '股數（可以留空：留空就只計 %）', clearCost: '清除買入價',
     alertTitle: '🔔 到價提醒', alertHint: '到價會彈 Windows 通知：價錢提醒響一次就自動取消；% 提醒每日最多響一次，會一直保留。要拉比工具箱開住先會提醒（縮細去系統匣都得）。',
@@ -41,10 +41,10 @@ const T = {
     emptyStar: 'No starred stocks: click the ☆ next to a stock to star it.',
     emptyHidden: 'Preset stocks are hidden: search above or click "🔥 Popular" to add the ones you want.',
     pick: 'Click a stock on the left to see its chart', loading: 'Loading…', noData: 'No data for this period', searching: 'Searching…', noHit: 'No results', searchFail: 'Search failed: ',
-    note: 'Data from Yahoo Finance, may be delayed. For reference only, not investment advice. Chart: hover a candle for details; scroll to zoom; drag to look up and down (and sideways when zoomed).',
+    note: 'Data from Yahoo Finance, may be delayed. For reference only, not investment advice. Chart: hover a candle for details; scroll to zoom; drag to look up and down (and sideways when zoomed); right-click a drawn line to delete it.',
     updated: 'Updated: ', live: 'Live', poll: 'Every 30 s', fetching: 'Getting quotes…',
     open: 'Open', high: 'High', low: 'Low', close: 'Close', change: 'Change', volume: 'Volume', prevClose: 'Prev close', costLine: 'Buy price',
-    mine: 'My return: ', perShare: 'per share', total: '💰 Total P/L: ',
+    mine: 'My return: ', perShare: 'per share', total: '💰 Total P/L: ', pBuy: 'Buy price', rsi: 'RSI', volBtn: 'Volume', hline: '─ Horizontal line', trend: '╱ Trend line', clearDraw: '🧹 Clear lines', hlineTip: 'Click the chart to add a horizontal line (e.g. support / resistance)', trendTip: 'Press and drag on the chart to draw a trend line', clearTip: 'Delete all lines on this stock (right-click a line to delete just that one)', pShares: 'Shares', pCost: 'Cost', pValue: 'Value', pPnl: 'Gain / loss', pSet: '💰 Set buy price',
     costTitle: '💰 Set my buy price', costHint: 'Only used to work out your gain or loss. It does not connect to any broker and never trades. Clear everything to remove the buy price.',
     costLabel: 'Buy price (average cost per share)', sharesLabel: 'Shares (optional: leave empty to show % only)', clearCost: 'Clear buy price',
     alertTitle: '🔔 Price alert', alertHint: 'You get a Windows notification. Price alerts fire once and then clear; the % alert fires at most once a day and stays. Rabi Toolkit must be running (minimised to the tray is fine).',
@@ -91,13 +91,15 @@ function groupOf(sym) {
 let items = [];          // [{symbol, name, above, below, pct, pctFired, starred, cost, shares, userAdded}]
 const quotes = {};       // symbol → {price, prev, name, cur, exch, time, gmt}
 const errors = {};
-let prefs = { redUp: false, style: 'area', volume: true, hidePresets: false, range: 0, ma20: false, ma50: false, collapsed: [], starOnly: false, sel: '' };
+let prefs = { redUp: false, style: 'area', volume: true, hidePresets: false, range: 0, ma20: false, ma50: false, ma200: false, rsi: false, collapsed: [], starOnly: false, sel: '' };
+let drawings = {}; // 代號 → 畫咗嘅線
 let sel = '', lastUpdate = null, chart = null, chartToken = 0, dragging = null;
 
 const find = sym => items.find(x => x.symbol.toUpperCase() === String(sym).toUpperCase());
 const hasAlert = it => it.above != null || it.below != null || it.pct != null;
 const isPreset = it => !it.userAdded && !it.starred && it.cost == null && !hasAlert(it) && DEFAULTS.some(d => d[0] === it.symbol.toUpperCase());
 const saveItems = () => mt.storage.set('watch', items).catch(() => {});
+const saveDrawings = () => mt.storage.set('draw', drawings).catch(() => {});
 const savePrefs = () => mt.storage.set('prefs', prefs).catch(() => {});
 
 // ---------- Yahoo ----------
@@ -129,9 +131,19 @@ async function getQuote(sym) {
 }
 
 /** 走勢圖數據（時間轉做交易所當地時間）。 */
+// 開咗 MA 就要多攞前面嘅數據，第一條 K 線開始已經有 MA（例如 6 個月都睇到 MA200）
+const SPAN = { '1mo': 31, '6mo': 183, '1y': 366, '5y': 1827 };
+function fetchRange(range, iv) {
+  const need = prefs.ma200 ? 200 : prefs.ma50 ? 50 : prefs.ma20 ? 20 : 0;
+  if (!need || !SPAN[range]) return range;
+  const days = SPAN[range] + need * (iv === '1wk' ? 7 : 1.5); // 一年大約 250 個交易日
+  return [['6mo', 183], ['1y', 366], ['2y', 731], ['5y', 1827], ['10y', 3653]].find(x => x[1] >= days)?.[0] || 'max';
+}
+
 async function getChart(sym, ri) {
   const [range, iv, intraday] = RANGES[ri];
-  const r = result(await yget(chartUrl(sym, range, iv)), sym), m = r.meta || {}, gmt = m.gmtoffset || 0;
+  const fr = fetchRange(range, iv);
+  const r = result(await yget(chartUrl(sym, fr, iv)), sym), m = r.meta || {}, gmt = m.gmtoffset || 0;
   const ts = r.timestamp || [], q = (r.indicators && r.indicators.quote && r.indicators.quote[0]) || {};
   const candles = [];
   for (let i = 0; i < ts.length; i++) {
@@ -141,7 +153,13 @@ async function getChart(sym, ri) {
   }
   let prev = num(m.chartPreviousClose); if (isNaN(prev)) prev = num(m.previousClose);
   const ivMin = iv.endsWith('m') ? parseInt(iv) : iv === '1d' ? 1440 : 10080;
-  return { candles, prevClose: isNaN(prev) ? 0 : prev, intraday, iv: ivMin, range, gmt, cur: m.currency || '' };
+  // 只顯示原本揀嘅時段；前面多攞嘅數據淨係用嚟計 MA
+  let start = 0;
+  if (fr !== range && candles.length) {
+    const from = candles[candles.length - 1].t - SPAN[range] * 864e5;
+    start = Math.max(0, candles.findIndex(k => k.t >= from));
+  }
+  return { candles, start, prevClose: isNaN(prev) ? 0 : prev, intraday, iv: ivMin, range, gmt, cur: m.currency || '' };
 }
 
 async function searchYahoo(q) {
@@ -292,9 +310,11 @@ function render() {
         h += `<div class="row${it.symbol === sel ? ' sel' : ''}" draggable="true" data-s="${esc(it.symbol)}" data-g="${g}">` +
           `<span class="star${it.starred ? ' on' : ''}">${it.starred ? '★' : '☆'}</span>` +
           `<div class="nm"><div class="sym">${esc(it.symbol)}${hasAlert(it) ? `<span class="bell" title="${esc(L.alertSet)}">🔔</span>` : ''}</div>` +
-          `<div class="full" title="${esc(err || '')}">${esc(err ? '⚠ ' + err : (q && q.name) || it.name || '')}</div></div>` +
+          `<div class="full" title="${esc(err || '')}">${esc(err ? '⚠ ' + err : (q && q.name) || it.name || '')}</div>` +
+          // 有買入價：名下面顯示「買入價 144.30 × 60」
+          (it.cost > 0 ? `<div class="buy" title="${esc(L.pBuy)}">${esc(L.pBuy)} ${fmt(it.cost)}${it.shares != null ? ' × ' + esc(String(it.shares)) : ''}</div>` : '') + `</div>` +
           `<div class="px">${q ? `<b>${fmt(q.price)}</b><span class="${cls(ch)}">${(pc >= 0 ? '+' : '') + pc.toFixed(2)}%</span>` : '<span class="faint">–</span>'}` +
-          (p ? `<span class="pl ${cls(p.per)}">${p.total != null ? sign(p.total) : (p.pct >= 0 ? '+' : '') + p.pct.toFixed(2) + '%'}</span>` : '') + `</div></div>`;
+          (p ? `<span class="pl ${cls(p.per)}">${(p.total != null ? sign(p.total) + ' · ' : '') + (p.pct >= 0 ? '+' : '') + p.pct.toFixed(2) + '%'}</span>` : '') + `</div></div>`;
       }
     }
     const top = box.scrollTop; box.innerHTML = h; box.scrollTop = top;
@@ -324,8 +344,16 @@ function head() {
     $('hPrice').innerHTML = esc(fmt(q.price)) + `<span class="${cls(ch)}">${sign(ch)} (${(pc >= 0 ? '+' : '') + pc.toFixed(2)}%)</span>`;
   } else $('hPrice').innerHTML = '<span class="faint">–</span>';
   const p = pnl(it, q);
-  $('hMine').innerHTML = p ? `<span class="${cls(p.per)}">${esc(L.mine)}${(p.pct >= 0 ? '+' : '') + p.pct.toFixed(2)}% · ${sign(p.per)} ${esc(L.perShare)}` +
-    (p.total != null ? ` · ${sign(p.total)} ${esc(q.cur)}` : '') + `</span> <span class="faint">(${esc(L.costLine)} ${fmt(it.cost)}${it.shares != null ? ' × ' + it.shares : ''})</span>` : '';
+  // 我嘅持倉：一格格咁顯示（買入價、股數、成本、市值、賺蝕）
+  const fmtMoney = v => fmt(v) + (q && q.cur ? ' ' + esc(q.cur) : '');
+  const chip = (label, val, cl) => `<div class="c${cl ? ' ' + cl : ''}"><small>${esc(label)}</small><b>${val}</b></div>`;
+  if (it.cost > 0) {
+    let h = chip(L.pBuy, esc(fmt(it.cost)), 'buy');
+    if (it.shares != null) h += chip(L.pShares, esc(String(it.shares))) + chip(L.pCost, fmtMoney(it.cost * it.shares)) +
+      (q && isFinite(q.price) ? chip(L.pValue, fmtMoney(q.price * it.shares)) : '');
+    if (p) h += chip(L.pPnl, (p.total != null ? sign(p.total) + ' · ' : sign(p.per) + ' ' + esc(L.perShare) + ' · ') + (p.pct >= 0 ? '+' : '') + p.pct.toFixed(2) + '%', 'pl ' + cls(p.per));
+    $('hMine').innerHTML = `<div class="pos" data-a="cost" title="${esc(L.costMenu)}">${h}</div>`;
+  } else $('hMine').innerHTML = `<div class="pos"><div class="c add" data-a="cost">${esc(L.pSet)}</div></div>`;
   if (chart) { const c = it.cost > 0 ? it.cost : null; if (chart.o.cost !== c) { chart.o.cost = c; chart.draw(); } }
   bar();
 }
@@ -333,7 +361,11 @@ function head() {
 function bar() {
   const it = find(sel), b = $('bar');
   let h = L.ranges.map((r, i) => `<button data-r="${i}" class="${prefs.range === i ? 'on' : ''}">${esc(r)}</button>`).join('');
-  h += `<span class="sep"></span><button data-ma="ma20" class="${prefs.ma20 ? 'on' : ''}">MA20</button><button data-ma="ma50" class="${prefs.ma50 ? 'on' : ''}">MA50</button>`;
+  h += `<span class="sep"></span><button data-ma="ma20" class="${prefs.ma20 ? 'on' : ''}">MA20</button><button data-ma="ma50" class="${prefs.ma50 ? 'on' : ''}">MA50</button><button data-ma="ma200" class="${prefs.ma200 ? 'on' : ''}">MA200</button>` +
+    `<button data-ind="rsi" class="${prefs.rsi ? 'on' : ''}">${esc(L.rsi)}</button><button data-ind="volume" class="${prefs.volume ? 'on' : ''}">${esc(L.volBtn)}</button>` +
+    `<span class="sep"></span><button data-tool="h" title="${esc(L.hlineTip)}" class="${chart && chart.tool === 'h' ? 'on' : ''}">${esc(L.hline)}</button>` +
+    `<button data-tool="t" title="${esc(L.trendTip)}" class="${chart && chart.tool === 't' ? 'on' : ''}">${esc(L.trend)}</button>` +
+    ((drawings[sel] || []).length ? `<button data-a="clearDraw" title="${esc(L.clearTip)}">${esc(L.clearDraw)}</button>` : '');
   h += `<button id="resetBtn" title="${esc(L.resetTip)}" style="${chart && chart.moved ? '' : 'display:none'}">${esc(L.reset)}</button><span class="sp"></span>`;
   if (it) h += `<button data-a="star" class="${it.starred ? 'on' : ''}">${esc(it.starred ? L.unstar : L.star)}</button>` +
     `<button data-a="cost">${esc(L.cost)}</button><button data-a="alert" class="${hasAlert(it) ? 'on' : ''}">${esc(L.alert)}</button>` +
@@ -343,6 +375,7 @@ function bar() {
 
 async function select(sym) {
   sel = sym; prefs.sel = sym; savePrefs();
+  if (chart) { chart.setTool(null); chart.lines = drawings[sym] || []; }
   render(); await showChart();
 }
 
@@ -539,8 +572,14 @@ function colors() {
   so.onclick = () => { prefs.starOnly = !prefs.starOnly; so.classList.toggle('on', prefs.starOnly); savePrefs(); render(); };
 
   chart = new StockChart($('cv'), $('tip'));
-  chart.o = Object.assign(chart.o, { style: prefs.style, volume: prefs.volume, ma20: prefs.ma20, ma50: prefs.ma50,
+  chart.o = Object.assign(chart.o, { style: prefs.style, volume: prefs.volume, ma20: prefs.ma20, ma50: prefs.ma50, ma200: prefs.ma200, rsi: prefs.rsi,
     L: { open: L.open, high: L.high, low: L.low, close: L.close, change: L.change, volume: L.volume, prevClose: L.prevClose, costLine: L.costLine } });
+  // 畫線：每隻股票分開儲存
+  drawings = (await mt.storage.get('draw')) || {};
+  chart.lines = drawings[sel] || [];
+  chart.onLines = lines => { drawings[sel] = lines; saveDrawings(); bar(); };
+  chart.onTool = () => bar();
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && chart.tool) chart.setTool(null); });
   chart.onView = moved => { const b = $('resetBtn'); if (b) b.style.display = moved ? '' : 'none'; };
 
   // 搜尋
@@ -580,11 +619,22 @@ function colors() {
   });
   list.addEventListener('dragend', () => { dragging = null; render(); });
 
+  // 撳持倉格：改買入價
+  $('hMine').addEventListener('click', e => { if (e.target.closest('[data-a="cost"]') && sel) costDlg(sel); });
+
   // 工具列
   $('bar').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.r != null) { prefs.range = +b.dataset.r; savePrefs(); bar(); showChart(); }
-    else if (b.dataset.ma) { prefs[b.dataset.ma] = !prefs[b.dataset.ma]; chart.o[b.dataset.ma] = prefs[b.dataset.ma]; savePrefs(); bar(); chart.draw(); }
+    else if (b.dataset.ind) { const k = b.dataset.ind; prefs[k] = !prefs[k]; chart.o[k] = prefs[k]; savePrefs(); bar(); chart.draw(); }
+    else if (b.dataset.tool) { chart.setTool(chart.tool === b.dataset.tool ? null : b.dataset.tool); }
+    else if (b.dataset.a === 'clearDraw') { drawings[sel] = []; chart.lines = drawings[sel]; saveDrawings(); bar(); chart.draw(); }
+    else if (b.dataset.ma) {
+      const [range, iv] = RANGES[prefs.range], before = fetchRange(range, iv);
+      prefs[b.dataset.ma] = !prefs[b.dataset.ma]; chart.o[b.dataset.ma] = prefs[b.dataset.ma]; savePrefs(); bar();
+      // 要多啲舊數據先計到條 MA：重新攞
+      if (fetchRange(range, iv) !== before) showChart(); else chart.draw();
+    }
     else if (b.id === 'resetBtn') chart.reset();
     else if (b.dataset.a === 'star') toggleStar(sel);
     else if (b.dataset.a === 'cost') costDlg(sel);
@@ -593,6 +643,7 @@ function colors() {
   });
 
   sel = find(prefs.sel) ? find(prefs.sel).symbol : ((items.find(x => x.starred) || items[0] || {}).symbol || '');
+  chart.lines = drawings[sel] || [];
   render(); bar(); showChart();
   refresh();
   setInterval(refresh, 30000);

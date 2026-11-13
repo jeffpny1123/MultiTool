@@ -2203,7 +2203,7 @@ public sealed class ScriptsPage : Panel
         _listView.Dock = DockStyle.Fill;
         Controls.Add(_listView);
 
-        // 右下角：腳本庫（搜尋 / 下載其他人公開嘅腳本）
+        // 右下角：腳本庫（匯入 / 分享腳本；將來接 Steam 工作坊）
         _libBtn = new FancyButton { Text = Lang.T("腳本庫 →"), Kind = BtnKind.Primary, Font = Ui.F(10f, FontStyle.Bold) };
         _libBtn.Size = new Size(Math.Max(Ui.S(120), _libBtn.GetPreferredSize(Size.Empty).Width), Ui.S(40));
         _libBtn.Click += (_, _) => OpenLibrary();
@@ -2251,24 +2251,45 @@ public sealed class ScriptsPage : Panel
         };
         _poll.Start();
         HandleDestroyed += (_, _) => { _poll.Stop(); ScriptRunner.StopAll(); };
-        // 由腳本庫下載咗新腳本：返嚟呢頁時加入清單
-        VisibleChanged += (_, _) =>
-        {
-            if (!Visible) return;
-            try
-            {
-                var known = new HashSet<string>(_scripts.Select(x => x.Folder), StringComparer.OrdinalIgnoreCase);
-                bool added = false;
-                foreach (var d in Directory.Exists(AppPaths.Scripts) ? Directory.GetDirectories(AppPaths.Scripts) : Array.Empty<string>())
-                {
-                    if (known.Contains(Path.GetFileName(d))) continue;
-                    if (Script.Load(d) is { } sc) { _scripts.Add(sc); added = true; }
-                }
-                if (added) _grid.Refresh2();
-            }
-            catch { }
-        };
+        // 匯入咗新腳本：返嚟呢頁時加入清單
+        VisibleChanged += (_, _) => { if (Visible) AddNewFromDisk(); };
+        // 拖 .mtscript 入「我的腳本」就匯入
+        AllowDrop = true;
+        DragEnter += (_, e) => e.Effect = ScriptFiles.Dropped(e).Length > 0 ? DragDropEffects.Copy : DragDropEffects.None;
+        DragDrop += (_, e) => { foreach (var f in ScriptFiles.Dropped(e)) ScriptFiles.Import(FindForm(), f); };
     }
+
+    /// <summary>data\scripts 多咗嘅腳本資料夾（例如啱啱匯入）加入清單。</summary>
+    public void AddNewFromDisk()
+    {
+        try
+        {
+            var known = new HashSet<string>(_scripts.Select(x => x.Folder), StringComparer.OrdinalIgnoreCase);
+            bool added = false;
+            foreach (var d in Directory.Exists(AppPaths.Scripts) ? Directory.GetDirectories(AppPaths.Scripts) : Array.Empty<string>())
+            {
+                if (known.Contains(Path.GetFileName(d))) continue;
+                if (Script.Load(d) is { } sc) { _scripts.Add(sc); added = true; }
+            }
+            if (added) _grid.Refresh2();
+        }
+        catch { }
+    }
+
+    /// <summary>某個腳本資料夾喺硬碟更新咗（例如工作坊新版本）：重新讀返。行緊就唔郁，回傳 false。</summary>
+    public bool ReloadFolder(string folder)
+    {
+        int i = _scripts.FindIndex(x => x.Folder.Equals(folder, StringComparison.OrdinalIgnoreCase));
+        if (i < 0) { AddNewFromDisk(); return true; }
+        if (ScriptRunner.IsRunning(_scripts[i])) return false;
+        if (Script.Load(Path.Combine(AppPaths.Scripts, folder)) is not { } sc) return false;
+        _scripts[i] = sc;
+        _grid.Refresh2();
+        return true;
+    }
+
+    /// <summary>腳本而家行緊（工作坊更新前檢查）。</summary>
+    public bool IsFolderRunning(string folder) => _scripts.Any(x => x.Folder.Equals(folder, StringComparison.OrdinalIgnoreCase) && ScriptRunner.IsRunning(x));
 
     private FancyButton _startSel = null!;
     private FancyButton _stopAll = null!;
@@ -2403,13 +2424,8 @@ internal sealed class ScriptGrid : Control
         _menu.Items.Add(Lang.T("預覽"), null, (_, _) => { if (Valid(_menuIndex)) PreviewRequested?.Invoke(_scripts[_menuIndex]); });
         _menu.Items.Add(Lang.T("修改"), null, (_, _) => { if (Valid(_menuIndex)) EditRequested?.Invoke(_scripts[_menuIndex]); });
         _menu.Items.Add(Lang.T("複製"), null, (_, _) => { if (Valid(_menuIndex)) CopyRequested?.Invoke(_scripts[_menuIndex]); });
-        _menu.Items.Add(Lang.T("公開到腳本庫…"), null, (_, _) =>
-        {
-            if (!Valid(_menuIndex)) return;
-            using var d = new PublishDialog(_scripts[_menuIndex]);
-            d.ShowDialog(FindForm());
-            Invalidate();
-        });
+        _menu.Items.Add(Lang.T("📤 匯出（.mtscript）…"), null, (_, _) => { if (Valid(_menuIndex)) ScriptFiles.Export(FindForm(), _scripts[_menuIndex]); });
+        if (SteamHub.Ready) _menu.Items.Add(Lang.T("☁ 上載到 Steam 工作坊…"), null, (_, _) => { if (Valid(_menuIndex)) WorkshopPublishDialog.ShowScript(FindForm(), _scripts[_menuIndex]); });
         _menu.Items.Add(Lang.T("刪除"), null, (_, _) => { if (Valid(_menuIndex)) DeleteRequested?.Invoke(_scripts[_menuIndex]); });
         ScriptRunner.Status += (id, text) => { _status[id] = text; Invalidate(); };
     }
@@ -2520,7 +2536,7 @@ internal sealed class ScriptGrid : Control
             TextRenderer.DrawText(g, sc.Name, Ui.F(10.5f, FontStyle.Bold), new Rectangle(tx, r.Y + Ui.S(11), textW, Ui.S(22)),
                 Ui.Text, TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
             string info = Lang.F("{0} 個步驟", sc.Steps.Count) + (sc.Ifs.Count > 0 ? Lang.F(" · {0} 個 IF", sc.Ifs.Count) : "")
-                          + (sc.Public ? " · " + Lang.T("🌐 已公開") : "");
+                          ;
             string sched = ScriptSchedule.ListText(sc);
             // 運行中：顯示第幾輪 / 第幾步
             bool showRun = run && _status.TryGetValue(sc.Id, out var stText) && stText.Length > 0;
@@ -4182,7 +4198,7 @@ internal sealed class StepList : Panel, ISizeCache, IBandTint
             {
                 var tb = new TextBox { Text = st.Target, MaxLength = 500 };
                 var host = new InputHost(tb, Ui.S(280));
-                _tip.SetToolTip(tb, Lang.T("通知內容。{變數名} 會換做變數嘅數值，例如「刷咗 {次數} 次」。"));
+                _tip.SetToolTip(tb, Lang.T("通知內容。{變數名} 會換做變數嘅數值，例如「已完成 {次數} 次」。"));
                 tb.TextChanged += (_, _) => { st.Target = tb.Text; Changed(false); };
                 var win = new ToggleChip("Windows") { Checked = st.Toast };
                 win.Size = new Size(win.Width, Ui.S(30));
@@ -7229,6 +7245,13 @@ internal sealed class RunCtx
 /// <summary>Windows 視窗相關：列出視窗、背景截圖、送滑鼠 / 鍵盤訊息。</summary>
 internal static class Win
 {
+    /// <summary>
+    /// 行我哋自己寫落 data\tools 嘅 .ps1（OCR、硬碟健康）：Windows 預設唔准行 .ps1 檔，要喺呢個 process 放寬。
+    /// 用環境變數（等同 Set-ExecutionPolicy -Scope Process）而唔用命令列嘅 -ExecutionPolicy Bypass / -EncodedCommand，
+    /// 因為嗰兩個參數係惡意程式常見手法，防毒軟件嘅行為偵測見到好易誤報。公司群組原則設咗嘅限制照樣有效。
+    /// </summary>
+    public static void AllowOwnScript(System.Diagnostics.ProcessStartInfo psi) => psi.Environment["PSExecutionPolicyPreference"] = "Bypass";
+
     [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
     public static nint Foreground() => GetForegroundWindow();
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint h);

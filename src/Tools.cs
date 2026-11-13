@@ -1226,11 +1226,12 @@ $stream.Dispose()
         Directory.CreateDirectory(Dir);
         // 每次寫一次（升級後內容會更新）；PowerShell 5 要有 BOM 先識讀 UTF-8
         await File.WriteAllTextAsync(ScriptPath, Script, new UTF8Encoding(true), ct);
-        var psi = new ProcessStartInfo(PowerShell, $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{ScriptPath}\" {args}")
+        var psi = new ProcessStartInfo(PowerShell, $"-NoProfile -NonInteractive -File \"{ScriptPath}\" {args}")
         {
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
         };
+        Scripts.Win.AllowOwnScript(psi);
         using var p = Process.Start(psi)!;
         var o = p.StandardOutput.ReadToEndAsync(ct);
         var e = p.StandardError.ReadToEndAsync(ct);

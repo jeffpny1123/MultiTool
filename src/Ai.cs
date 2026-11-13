@@ -422,7 +422,7 @@ internal sealed class GeminiProvider : AiProvider
 internal sealed class AiPage : Panel
 {
     private readonly Label _status;
-    private readonly FancyButton _detect, _login, _newChat, _send, _settings, _attachBtn;
+    private readonly FancyButton _detect, _login, _newChat, _send, _settings, _attachBtn, _drawBtn, _videoBtn, _webBtn;
     private readonly AttachBar _attach = new();
     private readonly System.Windows.Forms.Timer _voiceKey = new() { Interval = 30 };
     private bool _voiceWasDown;
@@ -447,8 +447,24 @@ internal sealed class AiPage : Panel
 
     public static Control Build() => new AiPage();
 
+    /// <summary>而家嘅 AI 助手頁（第一次開程式嘅 AI 設定用）。</summary>
+    public static AiPage? Instance { get; private set; }
+
+    /// <summary>彈「AI 模型」揀 Claude / ChatGPT / Gemini。</summary>
+    public void OpenAccounts() => ShowPicker();
+
+    /// <summary>彈「本地 AI」下載視窗；下載好就轉用本地 AI。</summary>
+    public void OpenLocalSetup()
+    {
+        using var dlg = new LocalAiDialog();
+        dlg.Changed += () => { if (LocalAi.Current != null) { SetProvider(AiProvider.All.OfType<LocalProvider>().First()); _ = RefreshStatusAsync(); } };
+        dlg.ShowDialog(FindForm());
+    }
+
     private AiPage()
     {
+        Instance = this;
+        Disposed += (_, _) => { if (Instance == this) Instance = null; };
         BackColor = Ui.Bg;
         Dock = DockStyle.Fill;
         Padding = new Padding(Ui.S(24), Ui.S(20), Ui.S(24), Ui.S(20));
@@ -460,8 +476,8 @@ internal sealed class AiPage : Panel
         title.Location = new Point(0, Ui.S(8));
         _status = Ui.Text_(Lang.T("偵測緊…"), Ui.TextDim, Ui.F(9.5f), new Padding(0));
         _detect = Btn(Lang.T("重新偵測"), BtnKind.Ghost, async () => await RefreshStatusAsync());
-        _login = Btn(Lang.T("帳號"), BtnKind.Ghost, ShowPicker);
-        _settings = Btn(Lang.T("語音設定"), BtnKind.Ghost, () =>
+        _login = Btn(Lang.T("AI 模型"), BtnKind.Ghost, ShowPicker);
+        _settings = Btn(Lang.T("語音設定") + Lang.T("（測試中）"), BtnKind.Ghost, () =>
         {
             using var dlg = new AiSettingsDialog();
             dlg.ShowDialog(FindForm());
@@ -522,23 +538,41 @@ internal sealed class AiPage : Panel
         _attachBtn = Btn("📎", BtnKind.Ghost, () => _attach.Pick(FindForm()));
         _attachBtn.Size = new Size(Ui.S(44), Ui.S(80));
         _tipAttach.SetToolTip(_attachBtn, Lang.T("附加圖片或文件（亦可以拖入嚟，或者 Ctrl+V 貼上截圖）"));
+        // 🎨 AI 製圖：用輸入框嘅文字做描述，喺你部機畫圖（免費模型，要先下載）
+        _drawBtn = Btn("🎨", BtnKind.Ghost, () => { using var d = new ImageGenDialog(_input.Text.Trim()); d.ShowDialog(FindForm()); });
+        _drawBtn.Size = new Size(Ui.S(44), Ui.S(80));
+        _tipAttach.SetToolTip(_drawBtn, Lang.T("AI 製圖：喺你部機用免費模型畫圖（輸入框嘅文字會用做描述）"));
         _bottom.Controls.Add(_attach);
         _bottom.Controls.Add(inputHost);
         _bottom.Controls.Add(_attachBtn);
+        // 🎬 AI 製影片：文字轉影片 / 圖轉影片，喺你部機整（免費模型，要先下載）
+        _videoBtn = Btn("🎬", BtnKind.Ghost, () => { using var d = new VideoGenDialog(_input.Text.Trim()); d.ShowDialog(FindForm()); });
+        _videoBtn.Size = new Size(Ui.S(44), Ui.S(80));
+        _tipAttach.SetToolTip(_videoBtn, Lang.T("AI 製影片：喺你部機用免費模型整短片（文字轉影片 / 圖轉影片）"));
+        // 🌐 上網搵資料（本地 AI）：撳入去開關同設定；開咗個掣會著色
+        _webBtn = Btn("🌐", BtnKind.Ghost, () => { using var d = new WebSearchDialog(); d.ShowDialog(FindForm()); WebBtnRefresh(); });
+        _webBtn.Size = new Size(Ui.S(44), Ui.S(80));
+        WebBtnRefresh();
+        _bottom.Controls.Add(_drawBtn);
+        _bottom.Controls.Add(_videoBtn);
+        _bottom.Controls.Add(_webBtn);
         _bottom.Controls.Add(_send);
         _bottom.Layout += (_, _) =>
         {
             int top = _bottom.Padding.Top;
-            int w = _bottom.ClientSize.Width - _send.Width - _attachBtn.Width - Ui.S(20);
+            int w = _bottom.ClientSize.Width - _send.Width - _attachBtn.Width - _drawBtn.Width - _videoBtn.Width - _webBtn.Width - Ui.S(50);
             if (_attach.Visible) { _attach.SetBounds(0, top, w, _attach.Height); top += _attach.Height; }
             int h = _bottom.ClientSize.Height - top;
             _send.SetBounds(_bottom.ClientSize.Width - _send.Width, top, _send.Width, h);
             _attachBtn.SetBounds(_send.Left - Ui.S(10) - _attachBtn.Width, top, _attachBtn.Width, h);
+            _drawBtn.SetBounds(_attachBtn.Left - Ui.S(10) - _drawBtn.Width, top, _drawBtn.Width, h);
+            _videoBtn.SetBounds(_drawBtn.Left - Ui.S(10) - _videoBtn.Width, top, _videoBtn.Width, h);
+            _webBtn.SetBounds(_videoBtn.Left - Ui.S(10) - _webBtn.Width, top, _webBtn.Width, h);
             inputHost.SetBounds(0, top, w, h);
         };
         _attach.Changed += () =>
         {
-            _attach.Width = Math.Max(Ui.S(100), _bottom.ClientSize.Width - _send.Width - _attachBtn.Width - Ui.S(20));
+            _attach.Width = Math.Max(Ui.S(100), _bottom.ClientSize.Width - _send.Width - _attachBtn.Width - _drawBtn.Width - Ui.S(30));
             _bottom.Height = Ui.S(92) + (_attach.Visible ? _attach.Height : 0);
             _bottom.PerformLayout();
         };
@@ -597,7 +631,7 @@ internal sealed class AiPage : Panel
 
     private void Intro() =>
         AppendSystem(Lang.T("呢度會用你自己部電腦已安裝、已登入嘅 AI（Claude Code / Codex CLI / Gemini CLI）回答問題，") +
-                     Lang.T("用嘅係你自己帳號嘅額度。本工具唔會接觸你嘅帳號或密碼。撳右上角「登入」揀用邊個。"));
+                     Lang.T("用嘅係你自己帳號嘅額度。本工具唔會接觸你嘅帳號或密碼。撳右上角「AI 模型」揀用邊個。"));
 
     private FancyButton Btn(string text, BtnKind kind, Action click)
     {
@@ -633,6 +667,7 @@ internal sealed class AiPage : Panel
         if (prov != _provider) return;
         if (a.LoggedIn == true)
         {
+            SteamHub.Achieve(SteamHub.Ach.AiReady);   // 跟上時代步伐：AI 裝好 / 登入咗
             _status.Text = Lang.F("已登入 {0}", prov.Name) + (a.Plan is { Length: > 0 } pl ? " - " + pl : "");
             _status.ForeColor = Ui.Success;
         }
@@ -876,8 +911,17 @@ internal sealed class AiPage : Panel
         _input.Focus();
     }
 
+    /// <summary>🌐 掣：開咗「上網搵資料」就著色，提示亦講明而家開定閂。</summary>
+    private void WebBtnRefresh()
+    {
+        _webBtn.Kind = WebSearch.Enabled ? BtnKind.Primary : BtnKind.Ghost;
+        _tipAttach.SetToolTip(_webBtn, Lang.T("上網搵資料：等本地 AI 回答之前先上網搵資料") + "（" + (WebSearch.Enabled ? Lang.T("已開啟") : Lang.T("未開啟")) + "）");
+        _webBtn.Invalidate();
+    }
+
     private async Task SendAsync()
     {
+        if (_running == null) SteamHub.Achieve(SteamHub.Ach.AiChat);
         if (_running != null)
         {
             _stopped = true;
@@ -887,19 +931,20 @@ internal sealed class AiPage : Panel
         var prov = _current != null ? AiProvider.Get(_current.Provider) : _provider;
         if (prov == null)
         {
-            AppendSystem(Lang.T("未揀用邊個 AI：撳右上角「登入」揀 Claude / ChatGPT / Gemini。"));
+            AppendSystem(Lang.T("未揀用邊個 AI：撳右上角「AI 模型」揀 Claude / ChatGPT / Gemini / 本地 AI。"));
             return;
         }
         string? exe = prov.Find();
         if (exe == null)
         {
-            AppendSystem(Lang.F("搵唔到 {0}。撳右上角「登入」睇安裝方法，安裝完撳「重新偵測」。", prov.ToolName));
+            AppendSystem(Lang.F("搵唔到 {0}。撳右上角「AI 模型」睇安裝方法，安裝完撳「重新偵測」。", prov.ToolName));
             return;
         }
         string q = _input.Text.Trim();
         bool hasFiles = _attach.Files.Count > 0;
         if (q.Length == 0 && !hasFiles) return;
-        if (hasFiles && prov.Key == "local" && _attach.Files.Any(AiFiles.IsImage))
+        // 本地 AI 睇唔到圖：講明，然後帶用家去下載圖片識別；佢唔要先照舊提一句
+        if (hasFiles && prov.Key == "local" && _attach.Files.Any(AiFiles.IsImage) && !LocalAi.OfferVision(FindForm()))
             AppendSystem(Lang.T("本地 AI 睇唔到圖片；想 AI 睇圖請用 Claude / ChatGPT / Gemini。"));
         if (q.Length == 0) q = Lang.T("請睇吓附件。");
         _input.Clear();
@@ -1001,7 +1046,7 @@ internal sealed class AiPage : Panel
         {
             string hint = ans.Text.Contains("login", StringComparison.OrdinalIgnoreCase) ||
                           ans.Text.Contains("auth", StringComparison.OrdinalIgnoreCase)
-                ? Lang.T("\n（未登入或者登入過期：撳右上角「登入」）")
+                ? Lang.T("\n（未登入或者登入過期：撳右上角「AI 模型」）")
                 : "";
             AppendMessage(Lang.T("錯誤"), ans.Text + hint, Ui.Danger);
             _ = RefreshStatusAsync();
@@ -1054,7 +1099,7 @@ internal sealed class ProviderPicker : Form
     public ProviderPicker(AiProvider? active)
     {
         _active = active;
-        Text = Lang.T("帳號");
+        Text = Lang.T("AI 模型");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = MinimizeBox = false;
@@ -1062,8 +1107,8 @@ internal sealed class ProviderPicker : Form
         BackColor = Ui.Card;
         ForeColor = Ui.Text;
         AutoScaleMode = AutoScaleMode.None;
-        int rowH = Ui.S(64);
-        ClientSize = new Size(Ui.S(440), Ui.S(52) + rowH * AiProvider.All.Length + Ui.S(12));
+        int rowH = Ui.S(76);
+        ClientSize = new Size(Ui.S(460), Ui.S(52) + rowH * (AiProvider.All.Length + 3) + Ui.S(12));
         Controls.Add(new Label
         {
             Text = Lang.T("揀要用嘅 AI（用你自己部電腦安裝咗嘅工具同帳號）"),
@@ -1073,9 +1118,66 @@ internal sealed class ProviderPicker : Form
         int y = Ui.S(48);
         foreach (var p in AiProvider.All)
         {
-            Controls.Add(new Row(this, p, new Rectangle(Ui.S(12), y, Ui.S(416), rowH - Ui.S(8))));
+            Controls.Add(new Row(this, p, new Rectangle(Ui.S(12), y, Ui.S(436), rowH - Ui.S(8))));
             y += rowH;
         }
+        // 🎨 AI 製圖（本地、免費）：同 AI 助手分開，喺「🎨」掣用
+        var img = new Panel { BackColor = Ui.CardHi, Bounds = new Rectangle(Ui.S(12), y, Ui.S(436), rowH - Ui.S(8)) };
+        var imgName = new Label { Text = Lang.T("🎨 AI 製圖（本地）"), Font = Ui.F(10.5f, FontStyle.Bold), ForeColor = Ui.Text, AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(8), Ui.S(280), Ui.S(22)) };
+        var imgState = new Label { Font = Ui.F(8.75f), AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(30), img.Width - Ui.S(140), Ui.S(34)) };
+        var imgBtn = new FancyButton { Kind = BtnKind.Primary, Font = Ui.F(9.5f) };
+        imgBtn.SetBounds(img.Width - Ui.S(116), Ui.S(12), Ui.S(104), Ui.S(32));
+        void ImgRefresh()
+        {
+            var ready = LocalImage.Ready;
+            imgState.Text = ready.Length > 0 ? Lang.T("已下載") + " - " + string.Join("、", ready.Select(m => m.Label)) : Lang.T("尚未下載（免費）") + "\n" + Lang.T("喺 AI 助手撳「🎨」用");
+            imgState.ForeColor = ready.Length > 0 ? Ui.Success : Ui.TextDim;
+            imgBtn.Text = ready.Length > 0 ? Lang.T("模型") : Lang.T("下載");
+            imgBtn.Invalidate();
+        }
+        imgBtn.Click += (_, _) => { using var d = new ImageModelDialog(); d.ShowDialog(this); ImgRefresh(); };
+        img.Controls.AddRange(new Control[] { imgName, imgState, imgBtn });
+        imgBtn.BringToFront();
+        ImgRefresh();
+        Controls.Add(img);
+        y += rowH;
+        // 🎬 AI 製影片（本地、免費）：文字轉影片 / 圖轉影片，喺「🎬」掣用
+        var vid = new Panel { BackColor = Ui.CardHi, Bounds = new Rectangle(Ui.S(12), y, Ui.S(436), rowH - Ui.S(8)) };
+        var vidName = new Label { Text = Lang.T("🎬 AI 製影片（本地）"), Font = Ui.F(10.5f, FontStyle.Bold), ForeColor = Ui.Text, AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(8), Ui.S(280), Ui.S(22)) };
+        var vidState = new Label { Font = Ui.F(8.75f), AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(30), vid.Width - Ui.S(140), Ui.S(34)) };
+        var vidBtn = new FancyButton { Kind = BtnKind.Primary, Font = Ui.F(9.5f) };
+        vidBtn.SetBounds(vid.Width - Ui.S(116), Ui.S(12), Ui.S(104), Ui.S(32));
+        void VidRefresh()
+        {
+            var ready = LocalVideo.Ready;
+            vidState.Text = ready.Length > 0 ? Lang.T("已下載") + " - " + string.Join("、", ready.Select(m => m.Label))
+                : Lang.T("尚未下載（免費）") + " · " + Lang.T("文字轉影片") + " / " + Lang.T("圖轉影片") + "\n" + Lang.T("喺 AI 助手撳「🎬」用");
+            vidState.ForeColor = ready.Length > 0 ? Ui.Success : Ui.TextDim;
+            vidBtn.Text = ready.Length > 0 ? Lang.T("模型") : Lang.T("下載");
+            vidBtn.Invalidate();
+        }
+        vidBtn.Click += (_, _) => { using var d = new VideoModelDialog(); d.ShowDialog(this); VidRefresh(); };
+        vid.Controls.AddRange(new Control[] { vidName, vidState, vidBtn });
+        vidBtn.BringToFront();
+        VidRefresh();
+        Controls.Add(vid);
+        y += rowH;
+        // 🌐 上網搵資料（本地 AI）：內置公開資料來源 + 可以填自己嘅搜尋 API 金鑰
+        var web = new Panel { BackColor = Ui.CardHi, Bounds = new Rectangle(Ui.S(12), y, Ui.S(436), rowH - Ui.S(8)) };
+        var webName = new Label { Text = Lang.T("🌐 上網搵資料（本地 AI）"), Font = Ui.F(10.5f, FontStyle.Bold), ForeColor = Ui.Text, AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(8), Ui.S(280), Ui.S(22)) };
+        var webState = new Label { Font = Ui.F(8.75f), AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(30), web.Width - Ui.S(140), Ui.S(34)) };
+        var webBtn = new FancyButton { Text = Lang.T("設定"), Kind = BtnKind.Primary, Font = Ui.F(9.5f) };
+        webBtn.SetBounds(web.Width - Ui.S(116), Ui.S(12), Ui.S(104), Ui.S(32));
+        void WebRefresh()
+        {
+            webState.Text = (WebSearch.Enabled ? Lang.T("已開啟") : Lang.T("未開啟")) + "\n" + Lang.T("喺 AI 助手撳「🌐」都可以設定");
+            webState.ForeColor = WebSearch.Enabled ? Ui.Success : Ui.TextDim;
+        }
+        webBtn.Click += (_, _) => { using var d = new WebSearchDialog(); d.ShowDialog(this); WebRefresh(); };
+        web.Controls.AddRange(new Control[] { webName, webState, webBtn });
+        webBtn.BringToFront();
+        WebRefresh();
+        Controls.Add(web);
     }
 
     private sealed class Row : Panel
@@ -1101,7 +1203,7 @@ internal sealed class ProviderPicker : Form
             _state = new Label
             {
                 Text = Lang.F("{0} · 檢查緊…", p.ToolName), Font = Ui.F(8.75f), ForeColor = Ui.TextFaint,
-                AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(31), Ui.S(184), Ui.S(18))
+                AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(30), bounds.Width - Ui.S(140), Ui.S(34))
             };
             _main = new FancyButton { Text = "…", Kind = BtnKind.Primary, Font = Ui.F(9.5f), Enabled = false };
             _logout = new FancyButton { Text = Lang.T("登出"), Kind = BtnKind.Ghost, Font = Ui.F(9.5f), Visible = false };
@@ -1110,6 +1212,7 @@ internal sealed class ProviderPicker : Form
             _main.Click += (_, _) => Main();
             _logout.Click += async (_, _) => await LogoutAsync();
             Controls.AddRange(new Control[] { _name, _state, _main, _logout });
+            _main.BringToFront(); _logout.BringToFront(); // 狀態字闊咗，唔好遮住個掣
             HandleCreated += async (_, _) => await RefreshAsync();
         }
 
@@ -1135,7 +1238,8 @@ internal sealed class ProviderPicker : Form
             }
             if (_exe == null)
             {
-                _state.Text = Lang.F("未安裝 {0}", _p.ToolName);
+                // 雲端 AI：要裝官方工具，再用官方帳號登入
+                _state.Text = Lang.F("未安裝 {0}", _p.ToolName) + "\n" + Lang.F("需要安裝官方工具，並用 {0} 官方帳號登入", _p.Name);
                 _state.ForeColor = Ui.Danger;
                 _main.Text = Lang.T("安裝方法");
                 _main.Kind = BtnKind.Ghost;
@@ -1469,5 +1573,65 @@ internal sealed class RenameDialog : Form
     {
         using var d = new RenameDialog(current);
         return d.ShowDialog(owner) == DialogResult.OK ? d._box.Text : null;
+    }
+}
+
+/// <summary>第一次開程式：問用家要下載免費本地 AI，定用自己嘅 AI 服務。</summary>
+internal sealed class AiWelcomeDialog : Form
+{
+    public enum Choice { Later, Local, Own }
+    public Choice Result { get; private set; } = Choice.Later;
+
+    private static string Flag => Path.Combine(AiProvider.WorkDir, "welcome.txt");
+    /// <summary>未問過，而且未揀過 AI。</summary>
+    public static bool ShouldAsk => !File.Exists(Flag) && AiProvider.LoadCurrent() == null;
+    public static void MarkAsked() { try { Directory.CreateDirectory(AiProvider.WorkDir); File.WriteAllText(Flag, DateTime.Now.ToString("yyyy-MM-dd")); } catch { } }
+
+    public AiWelcomeDialog()
+    {
+        Text = Lang.T("設定 AI 助手");
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        StartPosition = FormStartPosition.CenterParent;
+        MaximizeBox = MinimizeBox = false;
+        ShowInTaskbar = false;
+        BackColor = Ui.Card;
+        ForeColor = Ui.Text;
+        AutoScaleMode = AutoScaleMode.None;
+        Font = Ui.F(9.75f);
+        int w = Ui.S(520), rowH = Ui.S(78);
+        ClientSize = new Size(w, Ui.S(92) + rowH * 3 + Ui.S(8));
+        Controls.Add(new Label
+        {
+            Text = Lang.T("歡迎使用！AI 助手可以同你傾偈、答問題、幫你寫腳本，仲可以用講嘅開程式同網頁。你想點用？"),
+            ForeColor = Ui.Text, Font = Ui.F(10f), AutoSize = false, Bounds = new Rectangle(Ui.S(16), Ui.S(14), w - Ui.S(32), Ui.S(44))
+        });
+        Controls.Add(new Label
+        {
+            Text = Lang.T("之後隨時可以喺「AI 助手 → AI 模型」更改。"),
+            ForeColor = Ui.TextFaint, Font = Ui.F(8.75f), AutoSize = false, Bounds = new Rectangle(Ui.S(16), Ui.S(60), w - Ui.S(32), Ui.S(20))
+        });
+        var rec = LocalAi.Recommended;
+        int y = Ui.S(88);
+        void Row(string title, string sub, string btn, BtnKind kind, Choice c)
+        {
+            var panel = new Panel { BackColor = Ui.CardHi, Bounds = new Rectangle(Ui.S(12), y, w - Ui.S(24), rowH - Ui.S(8)) };
+            var t = new Label { Text = title, Font = Ui.F(10.5f, FontStyle.Bold), ForeColor = Ui.Text, AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(8), panel.Width - Ui.S(150), Ui.S(22)) };
+            var d = new Label { Text = sub, Font = Ui.F(8.75f), ForeColor = Ui.TextDim, AutoSize = false, Bounds = new Rectangle(Ui.S(12), Ui.S(30), panel.Width - Ui.S(150), Ui.S(36)) };
+            var b = new FancyButton { Text = btn, Kind = kind, Font = Ui.F(9.5f) };
+            b.SetBounds(panel.Width - Ui.S(128), Ui.S(17), Ui.S(116), Ui.S(34));
+            b.Click += (_, _) => { Result = c; Close(); };
+            panel.Controls.AddRange(new Control[] { t, d, b });
+            Controls.Add(panel);
+            y += rowH;
+        }
+        Row(Lang.T("免費本地 AI"),
+            Lang.F("喺你部機自己行，唔使帳號、唔使錢，下載完唔使上網。建議：{0}（{1}）", rec.Label, rec.Size),
+            Lang.T("下載"), BtnKind.Primary, Choice.Local);
+        Row(Lang.T("用我自己嘅 AI"),
+            Lang.T("Claude、ChatGPT 或者 Gemini：用你電腦嘅官方工具同自己帳號，答得更聰明。"),
+            Lang.T("設定"), BtnKind.Primary, Choice.Own);
+        Row(Lang.T("暫時唔使"),
+            Lang.T("唔用 AI 都可以用晒其他功能。"),
+            Lang.T("稍後"), BtnKind.Ghost, Choice.Later);
     }
 }

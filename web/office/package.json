@@ -1,0 +1,33 @@
+{
+  "name": "rabi-office",
+  "private": true,
+  "description": "文書工具嘅網頁部分（文件編輯器）。npm install 之後行 build.sh，輸出去 lib/office。",
+  "dependencies": {
+    "@eigenpal/docx-editor-react": "1.9.0",
+    "@univerjs/preset-sheets-conditional-formatting": "^1.4.0",
+    "@univerjs/preset-sheets-core": "^1.4.0",
+    "@univerjs/preset-sheets-data-validation": "^1.4.0",
+    "@univerjs/preset-sheets-filter": "^1.4.0",
+    "@univerjs/preset-sheets-find-replace": "^1.4.0",
+    "@univerjs/preset-sheets-hyper-link": "^1.4.0",
+    "@univerjs/preset-sheets-note": "^1.4.0",
+    "@univerjs/preset-sheets-sort": "^1.4.0",
+    "@univerjs/presets": "^1.4.0",
+    "chart.js": "^4.4.9",
+    "esbuild": "^0.25.0",
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.1",
+    "pptx-browser": "^4.1.5",
+    "prosemirror-commands": "^1.5.2",
+    "prosemirror-dropcursor": "^1.8.2",
+    "prosemirror-history": "^1.4.0",
+    "prosemirror-keymap": "^1.2.2",
+    "prosemirror-model": "^1.19.4",
+    "prosemirror-state": "^1.4.3",
+    "prosemirror-tables": "^1.8.5",
+    "prosemirror-transform": "^1.12.0",
+    "prosemirror-view": "^1.41.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

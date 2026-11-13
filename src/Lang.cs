@@ -76,7 +76,7 @@ public static partial class Lang
         return null;
     }
 
-    /// <summary>系統語言：繁中（台 / 港 / 澳）、簡中（中國 / 新加坡）、日韓俄西葡德法，其他一律英文。</summary>
+    /// <summary>系統語言：繁中（台 / 港 / 澳）、簡中（中國 / 新加坡）、日韓俄西葡德法；唔支援或者偵測唔到一律英文。第一次開揀語言視窗都用佢做預設。</summary>
     private static Language FromSystem()
     {
         try
@@ -119,6 +119,17 @@ public static partial class Lang
             File.WriteAllLines(SettingsFile, lines);
         }
         catch (Exception ex) { AppPaths.LogError("儲存語言", ex); }
+    }
+
+    /// <summary>用家揀過語言未（第一次開程式要彈揀語言視窗）。</summary>
+    public static bool Chosen => Load() != null;
+
+    /// <summary>即時轉語言並儲存（第一次開程式揀語言用；介面未建立之前叫）。</summary>
+    public static void Choose(Language l)
+    {
+        Save(l);
+        _current = l;
+        Branded.Clear();
     }
 
     /// <summary>翻譯一句（搵唔到就用英文，再搵唔到就照原文）。</summary>

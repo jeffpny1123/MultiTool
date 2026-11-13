@@ -1,4 +1,5 @@
-// 股票走勢圖（canvas）：面積 / 線 / K 線 / 空心 K 線 / 美國線，MA20 / MA50，成交量，昨收線，買入價線
+// 股票走勢圖（canvas）：面積 / 線 / K 線 / 空心 K 線 / 美國線，MA20 / MA50 / MA200，成交量，RSI，昨收線，買入價線
+// 畫線：水平線、趨勢線（用時間 + 價錢記低，轉時段都喺返原位）；右鍵條線就刪除
 // 滾輪放大縮細；撳住拖可以上下睇（放大咗仲可以左右睇）；滑鼠指住 K 線先顯示詳細數據
 'use strict';
 
@@ -6,7 +7,12 @@ class StockChart {
   constructor(canvas, tip) {
     this.cv = canvas; this.tip = tip; this.ctx = canvas.getContext('2d');
     this.d = null;            // {candles:[{t,o,h,l,c,v}], prevClose, intraday, iv, range}
-    this.o = { style: 'area', volume: true, ma20: false, ma50: false, cost: null, L: {} };
+    this.o = { style: 'area', volume: true, ma20: false, ma50: false, ma200: false, rsi: false, cost: null, L: {} };
+    this.lines = [];          // 畫咗嘅線：{k:'h', p} 水平線；{k:'t', t1, p1, t2, p2} 趨勢線
+    this.tool = null;         // 'h' / 't'：撳圖畫線
+    this.pending = null;      // 畫緊嘅趨勢線
+    this.onLines = null;      // 畫線改咗就通知（儲存）
+    this.onTool = null;       // 畫完一條就通知（工具列掣還原）
     this.zs = 0; this.zn = 0; // 顯示由第 zs 條開始、共 zn 條（0 = 全部）
     this.yShift = 0;          // 上下拖咗幾多（以成個價格範圍做單位，正數 = 睇上面）
     this.hover = -1; this.mouse = null; this.drag = null;
@@ -15,12 +21,18 @@ class StockChart {
     canvas.addEventListener('wheel', e => this.wheel(e), { passive: false });
     canvas.addEventListener('mousedown', e => this.down(e));
     window.addEventListener('mousemove', e => this.move(e));
-    window.addEventListener('mouseup', () => { if (this.drag) { this.drag = null; this.cv.classList.remove('grab'); } });
+    window.addEventListener('mouseup', () => {
+      if (this.pending) this.finishTrend();
+      if (this.drag) { this.drag = null; this.cv.classList.remove('grab'); }
+    });
+    canvas.addEventListener('contextmenu', e => { e.preventDefault(); this.removeAt(e.offsetX, e.offsetY); });
     canvas.addEventListener('mouseleave', () => { if (!this.drag) { this.mouse = null; this.hover = -1; this.hideTip(); this.draw(); } });
   }
 
   get moved() { return this.zoomed || Math.abs(this.yShift) > 1e-9; }
-  get zoomed() { return this.d && this.zn > 0 && this.zn < this.d.candles.length; }
+  // d.start：前面嗰啲係只用嚟計 MA 嘅舊數據，預設唔顯示（拖返左邊先見到）
+  get base() { return this.d ? Math.min(this.d.start || 0, Math.max(0, this.d.candles.length - 1)) : 0; }
+  get zoomed() { return this.d && this.zn > 0 && this.zn < this.d.candles.length - this.base; }
 
   setData(d) { this.d = d; this.zs = 0; this.zn = 0; this.yShift = 0; this.hover = -1; this.hideTip(); this.view(); this.draw(); }
   reset() { this.zs = 0; this.zn = 0; this.yShift = 0; this.view(); this.draw(); }
@@ -50,7 +62,8 @@ class StockChart {
 
   range() {
     const n = this.d ? this.d.candles.length : 0;
-    if (this.zn <= 0 || this.zn >= n) return [0, n];
+    const b = this.base;
+    if (this.zn <= 0 || this.zn >= n - b) return [b, n - b];
     this.zs = Math.max(0, Math.min(this.zs, n - this.zn));
     return [this.zs, this.zn];
   }
@@ -59,8 +72,61 @@ class StockChart {
   layout() {
     const W = this.cv.clientWidth, H = this.cv.clientHeight;
     const L = 4, R = W - 66, T = 8, B = H - 22;
-    const volH = this.o.volume ? Math.round((B - T) * 0.18) : 0;
-    return { W, H, L, R, T, B, pB: B - volH - (volH ? 6 : 0), volT: B - volH };
+    // 由上至下：價格、成交量、RSI
+    const rsiH = this.o.rsi ? Math.round((B - T) * 0.2) : 0;
+    const rsiT = B - rsiH, volB = rsiH ? rsiT - 8 : B;
+    const volH = this.o.volume ? Math.round((B - T) * 0.15) : 0;
+    const volT = volB - volH;
+    return { W, H, L, R, T, B, pB: volH ? volT - 6 : volB, volT, volB, rsiT };
+  }
+
+  // ---------- 時間 ⇄ 位置（畫線用：用時間記低，換時段都對得返）----------
+  tIndex(t) {
+    const k = this.d.candles, n = k.length;
+    if (n < 2) return 0;
+    if (t <= k[0].t) return (t - k[0].t) / Math.max(1, k[1].t - k[0].t);
+    if (t >= k[n - 1].t) return n - 1 + (t - k[n - 1].t) / Math.max(1, k[n - 1].t - k[n - 2].t);
+    let a = 0, b = n - 1;
+    while (b - a > 1) { const m = (a + b) >> 1; if (k[m].t <= t) a = m; else b = m; }
+    return a + (t - k[a].t) / Math.max(1, k[b].t - k[a].t);
+  }
+  iTime(fi) {
+    const k = this.d.candles, n = k.length;
+    if (n < 2) return k[0].t;
+    if (fi <= 0) return k[0].t + fi * (k[1].t - k[0].t);
+    if (fi >= n - 1) return k[n - 1].t + (fi - n + 1) * (k[n - 1].t - k[n - 2].t);
+    const a = Math.floor(fi); return k[a].t + (fi - a) * (k[a + 1].t - k[a].t);
+  }
+  /** 滑鼠位置 → {t, p}（喺價格區先有） */
+  at(x, y) {
+    const G = this._geo; if (!G || y < G.g.T || y > G.g.pB || x < G.g.L || x > G.g.R) return null;
+    const fi = (x - G.g.L) / G.per + G.s - 0.5;
+    return { t: this.iTime(fi), p: G.lo + (G.g.pB - y) / (G.g.pB - G.g.T) * (G.hi - G.lo) };
+  }
+  finishTrend() {
+    const pd = this.pending; this.pending = null;
+    const G = this._geo;
+    if (pd && G && Math.hypot((this.tIndex(pd.t2) - this.tIndex(pd.t1)) * G.per, (pd.p2 - pd.p1) / (G.hi - G.lo) * (G.g.pB - G.g.T)) > 6) {
+      this.lines.push(pd); if (this.onLines) this.onLines(this.lines);
+    }
+    this.setTool(null); this.draw();
+  }
+  setTool(t) { this.tool = t; this.pending = null; this.cv.classList.toggle('drawing', !!t); if (this.onTool) this.onTool(t); }
+  /** 右鍵：刪除最近嘅畫線（8 px 之內） */
+  removeAt(x, y) {
+    const G = this._geo; if (!G || !this.lines.length) return;
+    let best = -1, bd = 8;
+    this.lines.forEach((ln, i) => {
+      let dist;
+      if (ln.k === 'h') dist = Math.abs(G.Y(ln.p) - y);
+      else {
+        const x1 = G.X(this.tIndex(ln.t1)), y1 = G.Y(ln.p1), x2 = G.X(this.tIndex(ln.t2)), y2 = G.Y(ln.p2);
+        const L2 = (x2 - x1) ** 2 + (y2 - y1) ** 2, u = L2 ? Math.max(0, Math.min(1, ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / L2)) : 0;
+        dist = Math.hypot(x - (x1 + u * (x2 - x1)), y - (y1 + u * (y2 - y1)));
+      }
+      if (dist < bd) { bd = dist; best = i; }
+    });
+    if (best >= 0) { this.lines.splice(best, 1); if (this.onLines) this.onLines(this.lines); this.draw(); }
   }
 
   // ---------- 滑鼠 ----------
@@ -73,13 +139,20 @@ class StockChart {
     let nc = Math.round(c * (e.deltaY > 0 ? 1.25 : 0.8));
     nc = Math.max(Math.min(10, n), Math.min(n, nc));
     if (nc === c && e.deltaY < 0 && c > 10) nc = c - 1;
-    if (nc >= n) { this.zs = 0; this.zn = 0; }
+    if (nc >= n - this.base) { this.zs = 0; this.zn = 0; }
     else { this.zn = nc; this.zs = Math.round(anchor - fx * nc); }
     this.range(); this.view(); this.move(e, true);
   }
 
   down(e) {
     if (e.button !== 0 || !this.d) return;
+    // 畫線模式：水平線撳一下就得；趨勢線撳住拖
+    if (this.tool) {
+      const a = this.at(e.offsetX, e.offsetY); if (!a) return;
+      if (this.tool === 'h') { this.lines.push({ k: 'h', p: a.p }); if (this.onLines) this.onLines(this.lines); this.setTool(null); this.draw(); }
+      else this.pending = { k: 't', t1: a.t, p1: a.p, t2: a.t, p2: a.p };
+      return;
+    }
     const [s] = this.range();
     this.drag = { x: e.clientX, y: e.clientY, zs: s, ys: this.yShift };
     this.cv.classList.add('grab'); this.hideTip();
@@ -88,6 +161,11 @@ class StockChart {
   move(e, force) {
     if (!this.d) return;
     const g = this.layout(), rect = this.cv.getBoundingClientRect();
+    if (this.pending) {
+      const a = this.at(Math.max(g.L, Math.min(g.R, e.clientX - rect.left)), Math.max(g.T, Math.min(g.pB, e.clientY - rect.top)));
+      if (a) { this.pending.t2 = a.t; this.pending.p2 = a.p; this.draw(); }
+      return;
+    }
     if (this.drag) {
       const [, c] = this.range();
       if (this.zoomed) {
@@ -123,6 +201,8 @@ class StockChart {
     let lo = Infinity, hi = -Infinity;
     for (const k of vis) { const a = lineStyle ? k.c : k.l, b = lineStyle ? k.c : k.h; if (a < lo) lo = a; if (b > hi) hi = b; }
     if (d.intraday && d.range === '1d' && d.prevClose > 0 && !this.zoomed) { lo = Math.min(lo, d.prevClose); hi = Math.max(hi, d.prevClose); }
+    // 買入價唔係離得太遠就一齊顯示（唔使自己拖去搵）
+    if (o.cost > 0 && hi > lo && o.cost > lo - (hi - lo) && o.cost < hi + (hi - lo)) { lo = Math.min(lo, o.cost); hi = Math.max(hi, o.cost); }
     if (!(hi > lo)) { hi = lo * 1.01 + 1e-6; lo = lo * 0.99 - 1e-6; }
     const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
     const span = hi - lo; lo += this.yShift * span; hi += this.yShift * span;
@@ -155,10 +235,10 @@ class StockChart {
       if (vmax > 0) {
         ctx.globalAlpha = 0.45;
         for (let i = s; i < s + c; i++) {
-          const k = d.candles[i], h = k.v / vmax * (g.B - g.volT);
+          const k = d.candles[i], h = k.v / vmax * (g.volB - g.volT);
           const up = i > 0 ? k.c >= d.candles[i - 1].c : k.c >= k.o;
           ctx.fillStyle = up ? col.up : col.down;
-          ctx.fillRect(X(i) - Math.max(1, per * 0.35), g.B - h, Math.max(1, per * 0.7), h);
+          ctx.fillRect(X(i) - Math.max(1, per * 0.35), g.volB - h, Math.max(1, per * 0.7), h);
         }
         ctx.globalAlpha = 1;
       }
@@ -209,16 +289,69 @@ class StockChart {
     };
     if (o.ma20) ma(20, '#f5a623');
     if (o.ma50) ma(50, '#a66cff');
+    if (o.ma200) ma(200, '#2fc4c9');
+    // 畫線
+    const DRAW = '#ff7ab6'; // 畫線用粉紅色，唔好同 MA20（橙色）撞
+    this._geo = { s, c, per, lo, hi, g, X, Y };
+    const seg = (ln, dash) => {
+      const x1 = X(this.tIndex(ln.t1)), y1 = Y(ln.p1), x2 = X(this.tIndex(ln.t2)), y2 = Y(ln.p2);
+      ctx.setLineDash(dash ? [5, 4] : []); ctx.strokeStyle = DRAW; ctx.lineWidth = 1.8; line(ctx, x1, y1, x2, y2); ctx.setLineDash([]);
+      ctx.fillStyle = DRAW; for (const [px, py] of [[x1, y1], [x2, y2]]) { ctx.beginPath(); ctx.arc(px, py, 3, 0, 7); ctx.fill(); }
+    };
+    for (const ln of this.lines) {
+      if (ln.k === 'h') { const y = Math.round(Y(ln.p)) + 0.5; ctx.strokeStyle = DRAW; ctx.lineWidth = 1.5; line(ctx, g.L, y, g.R, y); }
+      else seg(ln, false);
+    }
+    if (this.pending) seg(this.pending, true);
+    ctx.lineWidth = 1;
     ctx.restore();
+    for (const ln of this.lines) if (ln.k === 'h') { const y = Y(ln.p); if (y >= g.T && y <= g.pB) tag(ctx, g.R + 2, y, fmt(ln.p), DRAW, '#000'); }
+
+    // RSI（14，Wilder）：30 / 70 線
+    this._rsi = null;
+    if (o.rsi) {
+      const n = 14, k = d.candles, r = new Array(k.length).fill(NaN);
+      let ag = 0, al = 0;
+      for (let i = 1; i < k.length; i++) {
+        const ch = k[i].c - k[i - 1].c, gn = Math.max(0, ch), ls = Math.max(0, -ch);
+        if (i <= n) { ag += gn / n; al += ls / n; if (i < n) continue; }
+        else { ag = (ag * (n - 1) + gn) / n; al = (al * (n - 1) + ls) / n; }
+        r[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+      }
+      this._rsi = r;
+      const RT = g.rsiT, RB = g.B, RY = v => RB - v / 100 * (RB - RT);
+      ctx.strokeStyle = col.grid; ctx.lineWidth = 1; line(ctx, g.L, RT - 4 + 0.5, g.R, RT - 4 + 0.5);
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = col.dim; ctx.globalAlpha = 0.6;
+      for (const v of [30, 70]) { const y = Math.round(RY(v)) + 0.5; line(ctx, g.L, y, g.R, y); }
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.fillStyle = col.dim; ctx.textBaseline = 'middle'; ctx.fillText('70', g.R + 6, RY(70)); ctx.fillText('30', g.R + 6, RY(30));
+      ctx.save(); ctx.beginPath(); ctx.rect(g.L, RT, g.R - g.L, RB - RT); ctx.clip();
+      ctx.beginPath(); let st = false;
+      for (let i = s; i < s + c; i++) { if (isNaN(r[i])) continue; const x = X(i), y = RY(r[i]); st ? ctx.lineTo(x, y) : ctx.moveTo(x, y); st = true; }
+      ctx.strokeStyle = '#c084fc'; ctx.lineWidth = 1.4; ctx.stroke(); ctx.lineWidth = 1;
+      ctx.restore();
+      const lastR = r[s + c - 1];
+      ctx.fillStyle = '#c084fc'; ctx.textBaseline = 'top'; ctx.fillText('RSI 14' + (isNaN(lastR) ? '' : '  ' + lastR.toFixed(1)), g.L + 4, RT + 2);
+    }
 
     // 昨收、買入價（虛線 + 右邊標籤）
-    const hline = (v, color, label) => {
+    const hline = (v, color, label, strong) => {
       const y = Math.round(Y(v)) + 0.5; if (y < g.T || y > g.pB) return;
-      ctx.setLineDash([4, 4]); ctx.strokeStyle = color; ctx.lineWidth = 1; line(ctx, g.L, y, g.R, y); ctx.setLineDash([]);
-      tag(ctx, g.R + 2, y, fmt(v), color, '#fff'); ctx.fillStyle = color; ctx.textBaseline = 'bottom'; ctx.fillText(label, g.L + 4, y - 2);
+      ctx.setLineDash(strong ? [7, 4] : [4, 4]); ctx.strokeStyle = color; ctx.lineWidth = strong ? 2 : 1; line(ctx, g.L, y, g.R, y); ctx.setLineDash([]); ctx.lineWidth = 1;
+      tag(ctx, g.R + 2, y, fmt(v), color, '#fff');
+      if (strong) tag(ctx, g.L + 4, y, label + ' ' + fmt(v), color, '#fff'); // 買入價：左邊加個實心標籤，一眼睇到
+      else { ctx.fillStyle = color; ctx.textBaseline = 'bottom'; ctx.fillText(label, g.L + 4, y - 2); }
     };
     if (d.intraday && d.range === '1d' && d.prevClose > 0) hline(d.prevClose, col.dim, Lx.prevClose || '');
-    if (o.cost > 0) hline(o.cost, col.acc, Lx.costLine || '');
+    if (o.cost > 0) {
+      // 買入價：成本線同最新價之間塗淡色（賺 = 升色、蝕 = 跌色）
+      const yc = Y(o.cost), yp = Y(lastC);
+      ctx.save(); ctx.beginPath(); ctx.rect(g.L, g.T, g.R - g.L, g.pB - g.T); ctx.clip();
+      ctx.fillStyle = alpha(lastC >= o.cost ? col.up : col.down, 0.08);
+      ctx.fillRect(g.L, Math.min(yc, yp), g.R - g.L, Math.abs(yc - yp));
+      ctx.restore();
+      hline(o.cost, col.acc, Lx.costLine || '', true);
+    }
     // 最新價
     tag(ctx, g.R + 2, Y(lastC), fmt(lastC), trend, '#fff');
 
@@ -235,8 +368,8 @@ class StockChart {
       if (m.y <= g.pB) tag(ctx, g.R + 2, m.y, fmt(lo + (g.pB - m.y) / (g.pB - g.T) * (hi - lo)), col.dim, col.bg);
       // 有冇指中：K 線就要喺最高至最低之間；線圖就要近條線
       const top = lineStyle ? Y(k.c) - 10 : Y(k.h) - 4, bot = lineStyle ? Y(k.c) + 10 : Y(k.l) + 4;
-      const inVol = o.volume && m.y >= g.volT;
-      if ((m.y >= top && m.y <= bot) || inVol) {
+      const inVol = (o.volume && m.y >= g.volT && m.y <= g.volB) || (o.rsi && m.y >= g.rsiT);
+      if (!this.tool && ((m.y >= top && m.y <= bot) || inVol)) {
         this.hover = i;
         if (lineStyle) { ctx.fillStyle = trend; ctx.beginPath(); ctx.arc(X(i), Y(k.c), 3.5, 0, 7); ctx.fill(); }
         this.showTip(k, i, m, g);
@@ -251,7 +384,7 @@ class StockChart {
     this.tip.innerHTML = `<b>${fullTime(k.t, d.intraday)}</b><table>` +
       row(L.open, fmt(k.o)) + row(L.high, fmt(k.h)) + row(L.low, fmt(k.l)) + row(L.close, fmt(k.c)) +
       row(L.change, (ch >= 0 ? '+' : '') + fmt(ch) + ' (' + (ch >= 0 ? '+' : '') + pc.toFixed(2) + '%)', cls) +
-      (k.v ? row(L.volume, vol(k.v)) : '') + '</table>';
+      (k.v ? row(L.volume, vol(k.v)) : '') + (this._rsi && !isNaN(this._rsi[i]) ? row('RSI 14', this._rsi[i].toFixed(1)) : '') + '</table>';
     const t = this.tip; t.style.display = 'block';
     let x = m.x + 16, y = m.y + 16;
     if (x + t.offsetWidth > g.W - 4) x = m.x - t.offsetWidth - 16;

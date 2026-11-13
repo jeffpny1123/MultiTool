@@ -126,6 +126,7 @@ internal static class Updater
     /// <summary>檢查更新。silent = 開程式時自動檢查（已經係最新就唔出聲）。連唔到、搵唔到或者更新失敗都會關閉程式。</summary>
     public static async Task CheckAsync(Form owner, bool silent)
     {
+        if (Program.IsSteam) return; // Steam 版由 Steam 負責更新
         if (_busy) return;
         _busy = true;
         try
@@ -243,7 +244,7 @@ internal static class Updater
     public static bool TryApply(string[] argv)
     {
         int i = Array.IndexOf(argv, "--apply-update");
-        if (i < 0) return false;
+        if (i < 0 || Program.IsSteam) return false;
         string self = Environment.ProcessPath ?? "";
         try
         {

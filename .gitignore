@@ -18,3 +18,7 @@ __pycache__/
 
 # 本機打包輸出（派俾人嘅說明檔喺 release/）
 Build/
+
+# 文書工具網頁部分：npm 套件同建立時嘅暫存檔
+web/office/node_modules/
+web/office/meta.json

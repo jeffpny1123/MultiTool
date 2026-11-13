@@ -414,7 +414,7 @@ internal sealed class VoiceChat : Form
             string? exe = prov?.Find();
             if (prov == null || exe == null)
             {
-                Status(Lang.T("未揀 AI：喺「AI 助手」撳右上角「帳號」揀"), Ui.Danger);
+                Status(Lang.T("未揀 AI：喺「AI 助手」撳右上角「AI 模型」揀"), Ui.Danger);
                 _closeAt = DateTime.Now.AddSeconds(5);
                 return;
             }
@@ -497,7 +497,7 @@ internal sealed class AiSettingsDialog : Form
 
     public AiSettingsDialog()
     {
-        Text = Lang.T("語音設定");
+        Text = Lang.T("語音設定") + Lang.T("（測試中）");
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = MinimizeBox = false;
@@ -514,7 +514,7 @@ internal sealed class AiSettingsDialog : Form
 
         Controls.Add(new Label
         {
-            Text = Lang.T("語音對話"), Font = Ui.F(11f, FontStyle.Bold), ForeColor = Ui.Text, AutoSize = false,
+            Text = Lang.T("語音對話") + Lang.T("（測試中）"), Font = Ui.F(11f, FontStyle.Bold), ForeColor = Ui.Text, AutoSize = false,
             Bounds = new Rectangle(x0, y, Ui.S(130), Ui.S(26))
         });
         var enable = new CheckBox

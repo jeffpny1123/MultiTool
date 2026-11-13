@@ -451,6 +451,7 @@ internal sealed class RecordSession
     public async Task StartAsync()
     {
         var rect = TargetRect(_o, out var err) ?? throw new InvalidOperationException(err);
+        SteamHub.Achieve(SteamHub.Ach.RecordVideo);   // 創作者：錄影
         // 只可以喺一個螢幕入面錄：揀包含中心點嗰個，超出部分截走
         var screens = Screen.AllScreens;
         var center = new Point(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);

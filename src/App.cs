@@ -19,13 +19,22 @@ internal static class Program
         string old = Path.Combine(parent, "MultiTool");
         return Directory.Exists(old) ? old : Path.Combine(parent, FileName);
     }
-    public const string Version = "v0.2.8";
+#if STEAM
+    /// <summary>Steam 版：由 Steam 更新、資料放 AppData、接 Steam 工作坊 / 成就。</summary>
+    public const bool IsSteam = true;
+#else
+    public const bool IsSteam = false;
+#endif
+    public const string Version = "v0.2.9";
     /// <summary>
     /// 內部版本編號：每次發佈都要加大（同顯示嘅版本號無關）。自動更新用佢判斷新舊，
     /// 咁顯示嘅版本號以後點改（例如轉做 0.x）都唔會影響更新。發佈時 publish_release.py 會寫入 Release 說明。
     /// </summary>
-    public const int Build = 256;
+    public const int Build = 257;
+    /// <summary>開發者名：只用喺檔案內容資訊同發佈，介面唔顯示。</summary>
     public const string Author = "白兔糖v3v";
+    /// <summary>介面顯示嘅聯絡電郵（設定頁「聯絡 Jeff」）。</summary>
+    public const string ContactEmail = "jeffjob1123@gmail.com";
     /// <summary>程式啟動時間；開頭幾秒當係「啟動緊」，重嘢（例如插件嘅 WebView2）遲啲先做。</summary>
     public static readonly DateTime Started = DateTime.Now;
     public static bool StartupDone => (DateTime.Now - Started).TotalSeconds > 6;
@@ -51,7 +60,7 @@ internal static class Program
         // 自動更新：新版自己換走舊 exe 再重開（唔開介面、唔理單一實例）
         if (Updater.TryApply(argv)) return;
         // 右鍵影片 / 相片 →「開啟檔案」→ 影片剪輯：--edit 檔案
-        var edit = Video.EdShell.EditArgs(argv);
+        var edit = Video.EdShell.EditArgs(argv) ?? Tools.DocShell.Args(argv);   // 或者 --pdf / --doc 檔案：用 PDF 修改器 / 文書工具開
         // 只准開一個：已經開咗就叫嗰個彈出嚟（或者交檔案俾佢開），自己即刻走
         // --restart（換語言 / 主題 / 還原備份 / 管理員重開）：等舊嗰個閂咗先開
         if (!AcquireSingle(argv.Contains("--restart") ? 15000 : 0))
@@ -61,11 +70,21 @@ internal static class Program
             return;
         }
         PendingEdit = edit;
+        // Steam 版：要開住 Steam 同擁有呢個 App 先用到
+        if (IsSteam && !SteamHub.Start()) return;
+        // 第一次開：先揀語言（預設跟系統語言，唔支援就英文）
+        if (!Lang.Chosen) LanguagePickDialog.Run();
         Updater.CleanupLeftover();
         AutoStart.Migrate();
         bool startup = argv.Any(a => a == "--startup");
+        // 由檔案總管開 PDF：主視窗最細化（或者收入系統匣），淨係彈 PDF 視窗
+        ForDoc = edit != null && edit[0] == Tools.DocShell.PdfMsg;
         Application.Run(new MainForm(startup && edit == null));
+        SteamHub.Shutdown();
     }
+
+    /// <summary>今次係由檔案總管開文件（例如 PDF）而啟動：主視窗收入系統匣，淨係彈文件視窗。</summary>
+    public static bool ForDoc;
 
     /// <summary>啟動時要用影片剪輯開嘅檔案。</summary>
     public static string[]? PendingEdit;
@@ -96,6 +115,52 @@ internal sealed class MainForm : Form
     private readonly System.Collections.Generic.List<(NavItem Nav, Func<Control> Build, Control? Page)> _pages = new();
     private readonly System.Collections.Generic.List<(string Key, string? Ext)> _pageKeys = new(); // 同 _pages 一一對應
     private int _current = -1;
+
+    // ---- 側欄摺疊：摺起淨係顯示圖示；喺文書工具開住文件時自動摺起 ----
+    private int SideWide => Ui.S(190);
+    private int SideNarrow => Ui.S(60);
+    private bool _userCollapsed;     // 用家自己揀（記喺 data\sidebar.txt）
+    private bool _docEditing;        // 文書工具（主視窗嗰頁）開住文件
+    private bool _autoOff;           // 自動摺起之後用家撳返展開：今次開檔唔再自動摺
+    private Label? _foldBtn;
+    private readonly ToolTip _navTip = new();
+    private Action? _placeSide;
+    private static string SideFile => System.IO.Path.Combine(AppPaths.Data, "sidebar.txt");
+    private bool Collapsed => _userCollapsed || (_docEditing && !_autoOff && _current >= 0 && _pageKeys[_current].Key == "office");
+
+    /// <summary>文書工具（主視窗嗰頁）開咗 / 閂咗文件。</summary>
+    internal void SetDocEditing(bool on)
+    {
+        _docEditing = on;
+        if (!on) _autoOff = false;
+        ApplySidebar();
+    }
+
+    private void ToggleSidebar()
+    {
+        if (Collapsed && !_userCollapsed) _autoOff = true;        // 自動摺起嗰陣撳展開
+        else
+        {
+            _userCollapsed = !_userCollapsed;
+            try { System.IO.File.WriteAllText(SideFile, _userCollapsed ? "1" : "0"); } catch { }
+        }
+        ApplySidebar();
+    }
+
+    private void ApplySidebar()
+    {
+        bool c = Collapsed;
+        int w = c ? SideNarrow : SideWide;
+        if (_sidebar.Width == w && _foldBtn?.Tag as string == (c ? "1" : "0")) return;
+        SuspendLayout();
+        foreach (var pg in _pages) pg.Nav.Compact = c;
+        _navTip.Active = c;
+        if (_foldBtn != null) { _foldBtn.Text = c ? "»" : "«"; _foldBtn.Tag = c ? "1" : "0"; _navTip.SetToolTip(_foldBtn, c ? Lang.T("展開側欄") : Lang.T("摺起側欄")); }
+        _sidebar.Width = w;
+        if (_titleBar != null) _titleBar.SidebarW = w;
+        _placeSide?.Invoke();
+        ResumeLayout(true);
+    }
 
     private readonly bool _startup;
     private NotifyIcon? _tray;
@@ -150,16 +215,16 @@ internal sealed class MainForm : Form
         Size sizeAtBegin = Size.Empty;
         ResizeBegin += (_, _) => { sizeAtBegin = Size; LiveResize.Active = true; };
         // 腳本庫分享（有開先會行）
-        Shown += (_, _) => Scripts.ShareService.Start();
         Shown += (_, _) =>
         {
             Video.EdShell.Sync();
+            Tools.DocShell.Sync();
             Video.EdShell.Listen(files => BeginInvoke(() =>
             {
                 if (files.Length == 1 && files[0] == Video.EdShell.ShowMsg) RestoreFromTray();
-                else OpenInEditor(files);
+                else if (!Tools.DocShell.Handle(files)) OpenInEditor(files);
             }));
-            if (Program.PendingEdit is { } pe) { Program.PendingEdit = null; BeginInvoke(() => OpenInEditor(pe)); }
+            if (Program.PendingEdit is { } pe) { Program.PendingEdit = null; BeginInvoke(() => { if (!Tools.DocShell.Handle(pe)) OpenInEditor(pe); }); }
             // 啟用咗嘅插件（改介面）：等程式開好先行
             _ = StartModsAsync();
             // 工作坊工具有 "background": true（例如股票到價提醒）：開程式就喺背景載入，唔使撳開個頁
@@ -178,11 +243,12 @@ internal sealed class MainForm : Form
                 }
                 catch { }
             }
+            // 第一次開：問要下載免費本地 AI，定用自己嘅 AI 服務
+            if (Ai.AiWelcomeDialog.ShouldAsk) _ = AskAiAsync();
             // NAS 管理：有紀錄就開程式時預先載入頁面（頁面會自動連線）
             if (Extensions.IsInstalled(Extensions.Nas) && Tools.NasStore.Load().Count > 0)
                 BeginInvoke(() => EnsurePage(_pageKeys.FindIndex(k => k.Key == "nas")));
         };
-        FormClosed += (_, _) => Scripts.ShareService.Stop();
         ResizeEnd += (_, _) =>
         {
             if (Size == sizeAtBegin) LiveResize.Active = false; // 淨係搬視窗：唔使重新排
@@ -191,7 +257,8 @@ internal sealed class MainForm : Form
         try { Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath ?? "") ?? Icon; } catch { }
 
         _sidebar.Dock = DockStyle.Left;
-        _sidebar.Width = Ui.S(190);
+        try { _userCollapsed = System.IO.File.Exists(SideFile) && System.IO.File.ReadAllText(SideFile).Trim() == "1"; } catch { }
+        _sidebar.Width = SideWide;
         _sidebar.BackColor = Ui.Panel;
         _sidebar.Padding = new Padding(0, Ui.S(18), 0, Ui.S(12));
         _content.Dock = DockStyle.Fill;
@@ -203,15 +270,21 @@ internal sealed class MainForm : Form
         ver.Location = new Point(Ui.S(22), Ui.S(34));
         _sidebar.Controls.Add(title);
         _sidebar.Controls.Add(ver);
+        // 撳左上角程式名 / 版本號 = 返首頁（側欄唔再有「首頁」一格）
+        foreach (var c in new Control[] { title, ver })
+        {
+            c.Cursor = Cursors.Hand;
+            c.Click += (_, _) => ShowKey("home");
+        }
+        title.MouseEnter += (_, _) => title.ForeColor = Ui.Accent;
+        title.MouseLeave += (_, _) => title.ForeColor = Ui.Text;
+        new ToolTip().SetToolTip(title, Lang.T("首頁"));
         // 程式名同版本號：插件唔准改
         Plugins.ModEngine.Protect(title);
         Plugins.ModEngine.Protect(ver);
         Plugins.ModEngine.Protect(this, "Text");
 
-        // 左下角：開發者
-        var by = Ui.Text_(Lang.T("開發者：") + Program.Author, Ui.TextFaint, Ui.F(9f), new Padding(0));
-        _sidebar.Controls.Add(by);
-        // 左下角：切換語言（喺「開發者」上面）
+        // 左下角：切換語言（介面唔再顯示開發者名）
         var lang = new Label
         {
             Text = "🌐 " + Lang.DisplayName(Lang.Current) + " ▾", AutoSize = true, ForeColor = Ui.TextDim, Font = Ui.F(9f),
@@ -259,20 +332,37 @@ internal sealed class MainForm : Form
         theme.MouseEnter += (_, _) => theme.ForeColor = Ui.Text;
         theme.MouseLeave += (_, _) => theme.ForeColor = Ui.TextDim;
         _sidebar.Controls.Add(theme);
+        // 摺疊掣（版本號右邊；摺起咗就喺頂中間）
+        _foldBtn = new Label
+        {
+            Text = "«", AutoSize = false, Size = new Size(Ui.S(26), Ui.S(24)), TextAlign = ContentAlignment.MiddleCenter, ForeColor = Ui.TextDim,
+            Font = Ui.F(11f), Cursor = Cursors.Hand, BackColor = Ui.Panel, Tag = "0"
+        };
+        _foldBtn.Click += (_, _) => ToggleSidebar();
+        _foldBtn.MouseEnter += (_, _) => _foldBtn.ForeColor = Ui.Text;
+        _foldBtn.MouseLeave += (_, _) => _foldBtn.ForeColor = Ui.TextDim;
+        _navTip.SetToolTip(_foldBtn, Lang.T("摺起側欄"));
+        _navTip.Active = false;
+        _sidebar.Controls.Add(_foldBtn);
+        _foldBtn.BringToFront();
         void PlaceBy()
         {
-            by.Location = new Point(Ui.S(22), _sidebar.ClientSize.Height - by.PreferredHeight - Ui.S(16));
-            lang.Location = new Point(Ui.S(20), by.Top - lang.PreferredHeight - Ui.S(8));
+            bool c = _sidebar.Width < SideWide;
+            title.Visible = ver.Visible = lang.Visible = theme.Visible = !c;
+            _foldBtn.Location = c ? new Point((_sidebar.Width - _foldBtn.Width) / 2, Ui.S(18)) : new Point(_sidebar.Width - _foldBtn.Width - Ui.S(10), Ui.S(30));
+            lang.Location = new Point(Ui.S(20), _sidebar.ClientSize.Height - lang.PreferredHeight - Ui.S(16));
             theme.Location = new Point(Ui.S(20), lang.Top - theme.PreferredHeight - Ui.S(8));
         }
         _sidebar.Controls.Add(_navHost);
         _navHost.MouseWheel += (_, e) => ScrollNav(e.Delta);
         void PlaceNavHost()
         {
-            _navHost.SetBounds(0, Ui.S(70), _sidebar.Width, Math.Max(Ui.S(40), theme.Top - Ui.S(10) - Ui.S(70)));
+            int bottom = _sidebar.Width < SideWide ? _sidebar.ClientSize.Height - Ui.S(12) : theme.Top - Ui.S(10);
+            _navHost.SetBounds(0, Ui.S(70), _sidebar.Width, Math.Max(Ui.S(40), bottom - Ui.S(70)));
             LayoutNav();
         }
         _sidebar.Resize += (_, _) => { PlaceBy(); PlaceNavHost(); };
+        _placeSide = () => { PlaceBy(); PlaceNavHost(); };
         PlaceBy();
         PlaceNavHost();
 
@@ -292,9 +382,20 @@ internal sealed class MainForm : Form
         AddPage(Lang.T("遊戲伺服器"), Tools.GameServerPage.Build, "gameserver", Extensions.GameServer);
         AddPage(Lang.T("遠端桌面（測試）"), Tools.RemotePage.Build, "remote", Extensions.Remote);
         AddPage(Lang.T("效能監控"), Tools.PerfHub.Build, "perf", Extensions.Perf);
-        AddPage(Lang.T("磁碟空間及健康"), Tools.DiskPage.Build, "disk", Extensions.Disk);
+        AddPage(Lang.T("磁碟及軟件管理"), Tools.DiskHub.Build, "disk", Extensions.Disk);
+        AddPage(Lang.T("圖片處理"), Tools.ImagePage.Build, "image", Extensions.Image);
+        AddPage(Lang.T("二維碼"), Tools.QrPage.Build, "qr", Extensions.Qr);
+        AddPage(Lang.T("畫面翻譯"), Tools.ScreenTranslatePage.Build, "translate", Extensions.Translate);
+        // 畫面翻譯嘅快捷鍵一開程式就生效（唔使先開過嗰一頁）；開始咗之後轉去第二頁、第二個視窗都會繼續翻譯
+        Tools.ScreenTranslate.Load();
+        HotkeyHub.Get("translate.toggle").Action = Tools.ScreenTranslate.Toggle;
+        AddPage(Lang.T("記帳"), Tools.LedgerPage.Build, "ledger", Extensions.Ledger);
+        AddPage(Lang.T("單位及匯率換算"), Tools.UnitPage.Build, "unit", Extensions.Unit);
         AddPage(Lang.T("檔案修復"), Tools.FileRepairPage.Build, "repair", Extensions.Repair);
         AddPage(Lang.T("NAS 管理"), Tools.NasPage.Build, "nas", Extensions.Nas);
+        AddPage(Lang.T("雲端伺服器"), Tools.CloudPage.Build, "cloud", Extensions.Cloud);
+        AddPage(Lang.T("Flash 小遊戲"), Tools.FlashGamesPage.Build, "flashgames", Extensions.Flash);
+        AddPage(Lang.T("文書工具"), Tools.OfficePage.Build, "office", Extensions.Office);
         // 加咗去工具欄嘅插件
         foreach (var id in Plugins.PluginStore.Pinned.ToList()) AddPluginPage(id);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");
@@ -310,6 +411,7 @@ internal sealed class MainForm : Form
         Extensions.Changed += () => BeginInvoke(() =>
         {
             Video.EdShell.Sync();
+            Tools.DocShell.Sync();
             SyncPluginPages();
             LayoutNav();
             // 啱啱安裝咗：即刻整好個頁（佢嘅快捷鍵唔使打開過都用得）
@@ -320,6 +422,7 @@ internal sealed class MainForm : Form
         Controls.Add(_content);
         Controls.Add(_sidebar);
         Controls.Add(_titleBar = new TitleBar(this, _sidebar.Width)); // 自己畫嘅標題列（最後加 = 最先 dock，橫跨成個頂）
+        ApplySidebar();   // 上次摺起咗就照摺
         // 開頭就整晒所有（已安裝嘅）頁（咁各頁嘅快捷鍵唔使打開過都用得）
         for (int i = _pages.Count - 1; i >= 0; i--) if (PageVisible(i)) Show(i);
         // 插件主題有背景圖：鋪喺成個視窗底
@@ -441,8 +544,20 @@ internal sealed class MainForm : Form
         Activate();
     }
 
+    private bool _docHidden;   // 因為開文件而收埋咗（用家未開過主視窗）
+
+    /// <summary>
+    /// 最後一個文件視窗閂咗：如果工具箱係為咗開文件先啟動、主視窗一直冇開過，而用家冇開「最少化至系統匣」，就結束程式
+    /// （唔好留低一個用家唔知嘅背景程式）。有開系統匣設定就照留喺右下角。
+    /// </summary>
+    public static void DocWindowsClosed()
+    {
+        if (Application.OpenForms.OfType<MainForm>().FirstOrDefault() is { } m && m._docHidden && !AppSettings.Tray) m.ExitApp();
+    }
+
     private void RestoreFromTray()
     {
+        _docHidden = false;
         Show();
         if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
         Activate();
@@ -496,8 +611,21 @@ internal sealed class MainForm : Form
             if (AppSettings.Tray) HideToTray(tip: false);
             else WindowState = FormWindowState.Minimized;
         }
+        // 由檔案總管開 PDF 而啟動：工具箱直接收入系統匣（右下角），淨係開 PDF 視窗
+        else if (Program.ForDoc)
+        {
+            HideToTray(tip: false);
+            _docHidden = true;
+        }
         // 開程式自動檢查更新（冇網 / 冇新版就唔出聲）
         _ = Updater.CheckAsync(this, silent: true);
+        // Steam 版：裝返訂閱咗嘅工作坊作品
+        if (SteamHub.Ready)
+        {
+            BeginInvoke(SteamHub.SyncSubscribed);
+            foreach (var id in new[] { Extensions.Scripts, Extensions.GameServer, Extensions.Perf, Extensions.Convert })
+                if (Extensions.IsInstalled(id)) SteamHub.ToolInstalled(id);
+        }
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -577,6 +705,8 @@ internal sealed class MainForm : Form
     {
         var nav = new NavItem(name);
         (nav.Glyph, nav.Hue) = Extensions.Look(ext ?? key);
+        nav.Compact = _sidebar.Width < SideWide;
+        _navTip.SetToolTip(nav, name);   // 摺起咗先會顯示（_navTip.Active）
         int index = _pages.Count;
         nav.SetBounds(0, index * Ui.S(44), _sidebar.Width, Ui.S(40));
         nav.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
@@ -673,16 +803,17 @@ internal sealed class MainForm : Form
         catch (Exception ex) { AppPaths.LogError("儲存側欄排序", ex); }
     }
 
-    // 首頁固定喺最頂；工具庫、設定固定喺最底（唔可以拖 / 改次序）
-    private static readonly string[] FixedTopKeys = { "home" };
+    // 首頁唔喺側欄顯示（撳左上角程式名返首頁）；工具庫、設定固定喺最底（唔可以拖 / 改次序）
+    private static readonly string[] FixedTopKeys = { };
     private static readonly string[] FixedBottomKeys = { "extensions", "settings" };
-    private bool IsFixed(int i) => FixedTopKeys.Contains(_pageKeys[i].Key) || FixedBottomKeys.Contains(_pageKeys[i].Key);
+    private static readonly string[] HiddenNavKeys = { "home" };
+    private bool IsFixed(int i) => HiddenNavKeys.Contains(_pageKeys[i].Key) || FixedTopKeys.Contains(_pageKeys[i].Key) || FixedBottomKeys.Contains(_pageKeys[i].Key);
     private int FixedTop => FixedTopKeys.Count(k => _pageKeys.Any(p => p.Key == k));
 
     /// <summary>可以排次序嘅項目（已安裝、唔係固定位置）。</summary>
     private System.Collections.Generic.List<int> VisibleOrder() => _order.Where(i => PageVisible(i) && !IsFixed(i)).ToList();
 
-    /// <summary>側欄實際顯示次序：首頁 → 可排序嘅工具 → 工具庫 → 設定。</summary>
+    /// <summary>側欄實際顯示次序：可排序嘅工具 → 工具庫 → 設定（首頁唔顯示）。</summary>
     private System.Collections.Generic.List<int> DisplayOrder()
     {
         int Find(string k) => _pageKeys.FindIndex(p => p.Key == k);
@@ -765,6 +896,22 @@ internal sealed class MainForm : Form
         if (key.StartsWith("plugin:"))
             return Extensions.IsInstalled(Extensions.Plugins) && Plugins.PluginStore.IsPinned(key[7..]);
         return _pageKeys[i].Ext is not { } e || Extensions.IsInstalled(e);
+    }
+
+    /// <summary>第一次開程式：等主視窗出咗先問點用 AI。</summary>
+    private async System.Threading.Tasks.Task AskAiAsync()
+    {
+        await System.Threading.Tasks.Task.Delay(1500);
+        if (IsDisposed || !Visible || WindowState == FormWindowState.Minimized || !Ai.AiWelcomeDialog.ShouldAsk) return;
+        Ai.AiWelcomeDialog.Choice c;
+        using (var dlg = new Ai.AiWelcomeDialog()) { dlg.ShowDialog(this); c = dlg.Result; }
+        Ai.AiWelcomeDialog.MarkAsked();
+        if (c == Ai.AiWelcomeDialog.Choice.Later) return;
+        ShowKey("ai");
+        await System.Threading.Tasks.Task.Delay(100);
+        if (Ai.AiPage.Instance is not { } page) return;
+        if (c == Ai.AiWelcomeDialog.Choice.Local) page.OpenLocalSetup();
+        else page.OpenAccounts();
     }
 
     // ---------- 插件頁（插件工房「加到左側工具欄」）----------
@@ -874,6 +1021,7 @@ internal sealed class MainForm : Form
             if (_pages[i].Page != null) _pages[i].Page!.Visible = i == index;
         }
         _current = index;
+        ApplySidebar();   // 入 / 離開文書工具：開住文件就自動摺起
         try { PageShown?.Invoke(_pageKeys[index].Key); } catch (Exception ex) { AppPaths.LogError("插件 page 事件", ex); }
     }
 
@@ -1005,13 +1153,13 @@ internal sealed class MainForm : Form
         stack.AddRow(backup);
 
 
-        var card = new CardPanel { Title = Program.AppName + " " + Program.Version, Hint = Lang.T("開發者：") + Program.Author + Lang.T("。設定同圖片全部存喺 exe 隔籬嘅 data 資料夾。") };
+        var card = new CardPanel { Title = Program.AppName + " " + Program.Version, Hint = Program.IsSteam ? Lang.T("設定同圖片全部存喺 AppData 入面嘅 data 資料夾，Steam 雲端會同步你嘅腳本。") : Lang.T("設定同圖片全部存喺 exe 隔籬嘅 data 資料夾。") };
         Plugins.ModEngine.Protect(card); // 程式名同版本號：插件唔准改
         var row = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, WrapContents = false };
         var update = new FancyButton { Text = Lang.T("檢查更新"), Kind = BtnKind.Primary };
         update.Size = update.GetPreferredSize(Size.Empty);
         update.Click += (_, _) => _ = Updater.CheckAsync(this, silent: false);
-        row.Controls.Add(update);
+        if (!Program.IsSteam) row.Controls.Add(update);
         var gh = new FancyButton { Text = "GitHub", Kind = BtnKind.Default };
         gh.Size = gh.GetPreferredSize(Size.Empty);
         gh.Click += (_, _) =>
@@ -1019,7 +1167,7 @@ internal sealed class MainForm : Form
             try { Process.Start(new ProcessStartInfo(Updater.RepoUrl) { UseShellExecute = true }); }
             catch (Exception ex) { MessageBox.Show(ex.Message, Program.AppName); }
         };
-        row.Controls.Add(gh);
+        if (!Program.IsSteam) row.Controls.Add(gh);
         var open = new FancyButton { Text = Lang.T("開啟 data 資料夾"), Kind = BtnKind.Default };
         open.Size = open.GetPreferredSize(Size.Empty);
         open.Click += (_, _) =>
@@ -1032,14 +1180,34 @@ internal sealed class MainForm : Form
             catch (Exception ex) { MessageBox.Show(ex.Message, Program.AppName); }
         };
         row.Controls.Add(open);
-        card.SetContent(row);
+        // 聯絡開發者（Jeff 指定：寫 Jeff + 工作電郵）
+        var mail = new FancyButton { Text = Lang.T("✉ 聯絡 Jeff"), Kind = BtnKind.Default };
+        mail.Size = mail.GetPreferredSize(Size.Empty);
+        mail.Click += (_, _) =>
+        {
+            try { Process.Start(new ProcessStartInfo("mailto:" + Program.ContactEmail + "?subject=Rabi%20Toolkit") { UseShellExecute = true }); }
+            catch
+            {
+                try { Clipboard.SetText(Program.ContactEmail); Tools.Toast.Show(Lang.F("已複製電郵：{0}", Program.ContactEmail), Ui.Success, 2500); } catch { }
+            }
+        };
+        new ToolTip().SetToolTip(mail, Program.ContactEmail);
+        // 回報問題：寫低發生咩事，連埋系統資料同錯誤紀錄寄俾開發者
+        var report = new FancyButton { Text = Lang.T("🐞 回報問題 / 功能建議"), Kind = BtnKind.Primary };
+        report.Size = report.GetPreferredSize(Size.Empty);
+        report.Click += (_, _) => { using var d = new ReportDialog(); d.ShowDialog(this); };
+        row.Controls.Add(report);
+        row.Controls.Add(mail);
+        card.SetContent(new WrapText(Lang.F("問題、建議或者錯誤回報：Jeff（{0}）", Program.ContactEmail), row));
         stack.AddRow(card);
 
         var lic = new CardPanel { Title = Lang.T("授權") };
-        lic.SetContent(new WrapText(
-            "© " + Program.Author + Lang.T("。本軟件按 PolyForm Noncommercial License 1.0.0 授權：") +
-            Lang.T("可以免費使用、修改同分享，但禁止轉售或任何商業用途。\n") +
-            "https://polyformproject.org/licenses/noncommercial/1.0.0"));
+        // 介面唔顯示開發者名；Steam 版係收費商業軟件，唔再寫 PolyForm（免費分享 / 禁止商業用途）
+        lic.SetContent(new WrapText(Program.IsSteam
+            ? "© Rabi Toolkit. " + Lang.T("版權所有。使用本軟件受 Steam 訂戶協議約束。")
+            : "© Rabi Toolkit" + Lang.T("。本軟件按 PolyForm Noncommercial License 1.0.0 授權：") +
+              Lang.T("可以免費使用、修改同分享，但禁止轉售或任何商業用途。\n") +
+              "https://polyformproject.org/licenses/noncommercial/1.0.0"));
         stack.AddRow(lic);
         return stack;
     }
@@ -1084,15 +1252,25 @@ internal static class AutoStart
     private const string Name = Program.FileName, OldName = "MultiTool";
     private static string Exe => Environment.ProcessPath ?? Application.ExecutablePath;
 
-    /// <summary>舊版用「MultiTool」做登錄名：改做新名，順便更新 exe 路徑。</summary>
+    /// <summary>舊版用「MultiTool」做登錄名：改做新名，順便更新 exe 路徑；exe 搬咗位都會跟住改。</summary>
     public static void Migrate()
     {
         try
         {
             using var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(Key, true);
-            if (k?.GetValue(OldName) is not string) return;
-            k.DeleteValue(OldName, false);
-            k.SetValue(Name, $"\"{Exe}\" --startup");
+            if (k == null) return;
+            if (k.GetValue(OldName) is string)
+            {
+                k.DeleteValue(OldName, false);
+                k.SetValue(Name, $"\"{Exe}\" --startup");
+                return;
+            }
+            // exe 搬咗位（例如 Build\Normal）：舊路徑已經冇檔案就改做而家嘅位置
+            if (k.GetValue(Name) is string v && !v.Contains(Exe, StringComparison.OrdinalIgnoreCase))
+            {
+                string old = v.Trim().StartsWith("\"") ? v.Trim()[1..].Split('"')[0] : v.Split(" --")[0].Trim();
+                if (!File.Exists(old)) k.SetValue(Name, $"\"{Exe}\" --startup");
+            }
         }
         catch { }
     }
@@ -1169,7 +1347,9 @@ internal sealed class WrapText : Control
 internal sealed class TitleBar : Control
 {
     private readonly Form _form;
-    private readonly int _sidebarW;
+    private int _sidebarW;
+    /// <summary>側欄而家幾闊（摺起 / 展開會變）。</summary>
+    public int SidebarW { get => _sidebarW; set { _sidebarW = value; Invalidate(); } }
     private int _hover = -1, _down = -1; // 0 最小化, 1 最大化, 2 關閉
 
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ReleaseCapture();
@@ -1324,5 +1504,54 @@ internal sealed class NavHost : Panel
         using var p = Ui.Round(new RectangleF(Width - Ui.S(5f), y, Ui.S(3f), h), Ui.S(1.5f));
         using var b = new SolidBrush(Ui.BorderHi);
         e.Graphics.FillPath(b, p);
+    }
+}
+
+/// <summary>第一次開程式：揀介面語言（每種語言用自己嘅文字顯示）。</summary>
+internal sealed class LanguagePickDialog : Form
+{
+    private Language _pick = Lang.Current;
+
+    public static void Run()
+    {
+        using var d = new LanguagePickDialog();
+        d.ShowDialog();
+        Lang.Choose(d._pick);   // 撳 ✕ 閂都當揀咗預設，下次唔再問
+    }
+
+    private LanguagePickDialog()
+    {
+        Text = "Rabi Toolkit";
+        try { Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath ?? "") ?? Icon; } catch { }
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        StartPosition = FormStartPosition.CenterScreen;
+        MaximizeBox = MinimizeBox = false;
+        BackColor = Ui.Bg;
+        ForeColor = Ui.Text;
+        AutoScaleMode = AutoScaleMode.None;
+        int cols = 2, bw = Ui.S(200), bh = Ui.S(44), gap = Ui.S(10), pad = Ui.S(24);
+        var head = new Label
+        {
+            Text = "🌐 Language · 語言 · 语言 · 言語 · 언어",
+            AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Ui.Text, Font = Ui.F(12f, FontStyle.Bold),
+            Bounds = new Rectangle(pad, Ui.S(18), cols * bw + gap, Ui.S(32))
+        };
+        Controls.Add(head);
+        int y0 = Ui.S(62);
+        for (int i = 0; i < Lang.All.Length; i++)
+        {
+            var l = Lang.All[i];
+            var b = new FancyButton
+            {
+                Text = Lang.DisplayName(l), Font = Ui.F(11f),
+                Kind = l == _pick ? BtnKind.Primary : BtnKind.Default,
+                Bounds = new Rectangle(pad + i % cols * (bw + gap), y0 + i / cols * (bh + gap), bw, bh)
+            };
+            b.Click += (_, _) => { _pick = l; DialogResult = DialogResult.OK; Close(); };
+            Controls.Add(b);
+            if (l == _pick) AcceptButton = b;
+        }
+        int rows = (Lang.All.Length + cols - 1) / cols;
+        ClientSize = new Size(pad * 2 + cols * bw + gap, y0 + rows * (bh + gap) + Ui.S(14));
     }
 }

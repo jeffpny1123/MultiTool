@@ -34,39 +34,42 @@ internal static class Extensions
     public const string Plugins = "plugins";
     public const string Repair = "repair";
     public const string Nas = "nas";
+    public const string Cloud = "cloud";
+    public const string Flash = "flashgames";
+    public const string Pdf = "pdf";   // 舊：PDF 修改器（已併入文書工具）
+    public const string Office = "office";
+    public const string Image = "image";
+    public const string Qr = "qr";
+    public const string Translate = "translate";
+    public const string Ledger = "ledger";
+    public const string Unit = "unit";
 
     /// <summary>工具庫分類（一個工具可以屬幾類）。</summary>
-    public static readonly string[] Categories = { "game", "media", "work", "system", "net" };
+    public static readonly string[] Categories = { "game", "doc", "media", "system", "net" };
 
     public static string CategoryName(string c) => c switch
     {
         "game" => Lang.T("遊戲"),
         "media" => Lang.T("媒體"),
-        "work" => Lang.T("效率"),
+        "doc" => Lang.T("文書"),
         "system" => Lang.T("系統"),
         "net" => Lang.T("網絡"),
         _ => c
     };
 
+    /// <summary>每個工具只屬一類，分類先清楚。</summary>
     public static string[] CategoriesOf(string id) => id switch
     {
-        Scripts => new[] { "work", "game" },
-        Recorder => new[] { "media", "game" },
-        Editor => new[] { "media" },
-        Replay => new[] { "media", "game" },
-        Remap => new[] { "game" },
-        Window => new[] { "work", "game" },
-        Clipboard => new[] { "work" },
-        Ocr => new[] { "work" },
-        Convert => new[] { "media", "work" },
-        GameServer => new[] { "game", "net" },
-        Remote => new[] { "net", "system" },
-        Perf => new[] { "system", "game" },
-        Disk => new[] { "system" },
-        Mail => new[] { "work", "net" },
-        Plugins => new[] { "work" },
-        Repair => new[] { "work", "system", "media" },
-        Nas => new[] { "net", "system", "work" },
+        // 遊戲
+        Scripts or Remap or GameServer or Flash or Replay => new[] { "game" },
+        // 文書
+        Office or Mail or Ocr or Translate or Qr or Ledger or Unit or Clipboard => new[] { "doc" },
+        // 媒體
+        Recorder or Editor or Convert or Image => new[] { "media" },
+        // 系統
+        Perf or Disk or Window or Repair or Plugins => new[] { "system" },
+        // 網絡
+        Cloud or Nas or Remote => new[] { "net" },
         _ => Array.Empty<string>()
     };
 
@@ -94,7 +97,14 @@ internal static class Extensions
     /// 新推出嘅工具：淨係最新嗰批（Since 最大嘅版本）先顯示 NEW，再新一批出咗舊嘅就冇。
     /// 以後加新工具記得喺 All 入面填 Since: "vX.Y"。
     /// </summary>
-    public static bool IsNew(Info e) => !string.IsNullOrEmpty(e.Since) && Num(e.Since) == LatestSince;
+    public static bool IsNew(Info e) => ShowNew && !string.IsNullOrEmpty(e.Since) && Num(e.Since) == LatestSince;
+
+    /// <summary>NEW 標籤暫時唔顯示（一次過加咗太多新工具，成版都係 NEW）；想用返就改做 true。</summary>
+    private const bool ShowNew = false;
+
+    /// <summary>熱門工具：工具庫右上角顯示 HOT，排最前（照呢個次序）。</summary>
+    private static readonly string[] Hot = { Office, Scripts, GameServer, Mail, Recorder };
+    public static bool IsHot(Info e) => Array.IndexOf(Hot, e.Id) >= 0;
 
     private static int Num(string v)
     {
@@ -143,7 +153,7 @@ internal static class Extensions
             Lang.T("好似 Gmail 咁收信、睇信、搜尋、寫信、回覆、轉寄同附件，支援 Gmail 同 Outlook / Hotmail 多個帳戶，有新郵件通知，仲可以叫 AI 摘要、整理收件匣同草擬回覆。"), false,
             Remove: () => MultiTool.Mail.MailWatch.Stop(), Since: "v2.5"),
         new(Plugins, Lang.T("工作坊"),
-            Lang.T("用 HTML + JavaScript 寫你自己嘅工具：連網上 API、彈通知、儲存資料、叫 AI 幫手；亦可以寫插件改 MultiTool 原有嘅介面（例如換背景、改顏色、加掣）。有程式碼編輯器、即時試行，唔識寫 code 可以叫 AI 幫你寫；工具同插件都可以匯出俾其他人用。"), false,
+            Lang.T("用 HTML + JavaScript 寫你自己嘅工具：連網上 API、彈通知、儲存資料、叫 AI 幫手；亦可以寫插件改 MultiTool 原有嘅介面（例如換背景、改顏色、加掣）。有程式碼編輯器、即時試行，唔識寫 code 可以叫 AI 幫你寫；工具同插件都可以匯出俾其他人用。"), true, // 預設安裝：Steam 工作坊訂閱嘅插件要有佢先用到
             Remove: () =>
             {
                 foreach (var id in MultiTool.Plugins.PluginRuntime.Running.Keys.ToList()) MultiTool.Plugins.PluginRuntime.Stop(id);
@@ -156,20 +166,44 @@ internal static class Extensions
         new(Nas, Lang.T("NAS 管理"),
             Lang.T("連接自己嘅 Synology NAS：好似 Google Drive 咁瀏覽同管理檔案，拖放上載、下載、建立分享連結，睇 CPU、RAM、硬碟狀態，遙距開機、重新啟動同關機。支援兩步驗證。"), false,
             Since: "v0.2.7"),
-        new(Disk, Lang.T("磁碟空間及健康"),
-            Lang.T("睇每個磁碟剩幾多位、硬碟健康（溫度、SSD 壽命、讀寫錯誤），掃描邊個資料夾最食位，一撳掉入資源回收筒。"), false),
+        new(Cloud, Lang.T("雲端伺服器"),
+            Lang.T("向 Vultr 租一部雲端伺服器（費用按用量由 Vultr 直接收），一鍵開 Minecraft、Palworld、Valheim、Terraria 伺服器同 Discord bot，幾樣可以同時行，24 小時唔使開住自己部電腦。效能唔夠隨時升級。"), false,
+            Since: "v0.2.9"),
+        new(Flash, Lang.T("Flash 小遊戲"),
+            Lang.T("加入 .swf 檔就可以直接玩以前嘅 Flash 小遊戲。用開源 Flash 模擬器 Ruffle（第一次用自動下載，約 10 MB），唔使裝 Flash Player，安全啲。"), false,
+            Since: "v0.2.9"),
+        new(Office, Lang.T("文書工具"),
+            Lang.T("一個工具處理文書檔案，開乜檔就用對應嘅編輯器。文件（.docx）：字型、樣式、表格、圖片、頁首頁尾、列印。PDF：加文字、簽名、圖片、螢光筆、塗白，製作同填寫表單，旋轉、刪除、排頁同合併。試算表同簡報之後加入。檔案只喺你部電腦處理；有連接 AI 就可以問內容或者叫 AI 幫手改。"), true,
+            Since: "v0.2.9"),
+        new(Disk, Lang.T("磁碟及軟件管理"),
+            Lang.T("睇每個磁碟剩幾多位同硬碟健康，搵出邊個資料夾最食位、邊啲檔案重複咗；管理開機自動行嘅程式，睇晒已安裝嘅軟件同解除安裝。"), false),
+        new(Image, Lang.T("圖片處理"),
+            Lang.T("一次過處理好多張圖：縮細、壓縮、轉格式、自動調整光暗、銳化、加水印、改名、清除相片入面嘅位置資料。原圖唔會被改。"), false,
+            Since: "v0.2.9"),
+        new(Qr, Lang.T("二維碼"),
+            Lang.T("產生二維碼（文字、網址、Wi-Fi、聯絡人），或者框住畫面、揀圖片讀取二維碼。全部喺你部機做，唔使上網。"), false,
+            Since: "v0.2.9"),
+        new(Translate, Lang.T("畫面翻譯"),
+            Lang.T("喺畫面上面畫一個框，框入面嘅字一變就即時翻譯，遊戲、影片、網頁都得。用 Windows 內置文字辨識加你揀咗嘅 AI（本地 AI 都得）。"), false,
+            Remove: () => Tools.ScreenTranslate.Stop(), Since: "v0.2.9"),
+        new(Ledger, Lang.T("記帳"),
+            Lang.T("記低每日收支，按月睇總數同每類用咗幾多，可以匯出 CSV。資料只存喺你部電腦。"), false,
+            Since: "v0.2.9"),
+        new(Unit, Lang.T("單位及匯率換算"),
+            Lang.T("長度、重量、溫度、面積、容量、速度等單位互換（離線）；匯率用免費公開嘅每日數據，唔使 AI、唔使帳戶。"), false,
+            Since: "v0.2.9"),
     };
 
     /// <summary>工具庫 / 首頁排序：新工具最前，跟住常用嘅，我的腳本第一，測試版最後。</summary>
     private static readonly string[] Order =
-        { Scripts, Nas, Repair, Mail, Plugins, Recorder, Editor, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
+        { Scripts, Office, Image, Translate, Qr, Ledger, Unit, Cloud, Flash, Nas, Repair, Mail, Plugins, Recorder, Editor, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
 
     private static readonly bool Sorted = SortAll();
 
     private static bool SortAll()
     {
-        // 新工具（NEW）放最前，之後照 Order
-        var list = All.OrderByDescending(IsNew).ThenBy(e => Rank(e.Id)).ToList();
+        // 熱門（HOT）最前（照 Hot 嘅次序），跟住新工具（NEW），之後照 Order
+        var list = All.OrderBy(e => { int h = Array.IndexOf(Hot, e.Id); return h < 0 ? Hot.Length : h; }).ThenByDescending(IsNew).ThenBy(e => Rank(e.Id)).ToList();
         All.Clear();
         All.AddRange(list);
         return true;
@@ -195,6 +229,7 @@ internal static class Extensions
                 }
                 else foreach (var e in All.Where(e => e.DefaultOn)) _installed.Add(e.Id); // 第一次：用預設
                 if (_installed.Remove(Doc)) _installed.Add(Convert); // 舊版「文件轉檔」併咗入格式轉換
+                if (_installed.Remove(Pdf)) _installed.Add(Office);  // 「PDF 修改器」併咗入文書工具
             }
             catch { }
             return _installed;
@@ -219,10 +254,18 @@ internal static class Extensions
         Remote => ("⇆", Ui.Accent),
         Perf => ("▤", Ui.Success),
         Disk => ("◔", Ui.Accent2),
+        Image => ("🖼", Ui.Hex(0x3BA776)),
+        Qr => ("▩", Ui.Hex(0x5B6EE1)),
+        Translate => ("文", Ui.Hex(0xE08A2E)),
+        Ledger => ("＄", Ui.Hex(0x2FA36B)),
+        Unit => ("⇌", Ui.Hex(0x8A63D2)),
         Mail => ("✉", Ui.Hex(0xEA4335)),
         Plugins => ("◈", Ui.Accent2),
         Repair => ("✚", Ui.Success),
         Nas => ("🗄", Ui.Hex(0x4A90D9)),
+        Cloud => ("☁", Ui.Hex(0x007BFC)),
+        Flash => ("🎮", Ui.Hex(0xE8473C)),
+        Office => ("📝", Ui.Hex(0x2F6FED)),
         Doc => ("▦", Ui.Accent),
         "ai" => ("✦", Ui.Accent2),
         "home" => ("⌂", Ui.Accent),
@@ -234,7 +277,12 @@ internal static class Extensions
 
     public static void Set(string id, bool on)
     {
-        if (on) Installed.Add(id); else Installed.Remove(id);
+        if (on && Installed.Add(id))
+        {
+            SteamHub.Achieve(SteamHub.Ach.FirstTool);   // 新世界：第一次喺工具庫安裝工具
+            SteamHub.ToolInstalled(id);
+        }
+        if (!on) Installed.Remove(id);
         try
         {
             Directory.CreateDirectory(AppPaths.Data);
@@ -453,16 +501,18 @@ internal sealed class ExtensionsPage : Panel
             int tx = (int)ir.Right + Ui.S(12);
             var tf = Ui.F(11.5f, FontStyle.Bold);
             int nameRight = Width - p;
-            if (Extensions.IsNew(_e))
+            bool hot = Extensions.IsHot(_e);
+            if (hot || Extensions.IsNew(_e))
             {
-                // 右上角 NEW 標籤
+                // 右上角標籤：HOT（橙色）或者 NEW（紅色）
+                string tag = hot ? "HOT" : "NEW";
                 var nf = Ui.F(7.75f, FontStyle.Bold);
-                var ns = TextRenderer.MeasureText("NEW", nf);
+                var ns = TextRenderer.MeasureText(tag, nf);
                 var nr = new RectangleF(Width - p - ns.Width - Ui.S(12), p - Ui.S(4), ns.Width + Ui.S(12), ns.Height + Ui.S(4));
                 using (var np = Ui.Round(nr, nr.Height / 2f))
-                using (var nb = new SolidBrush(Ui.Danger))
+                using (var nb = new SolidBrush(hot ? Ui.Hex(0xF2762E) : Ui.Danger))
                     g.FillPath(nb, np);
-                TextRenderer.DrawText(g, "NEW", nf, Rectangle.Round(nr), Color.White,
+                TextRenderer.DrawText(g, tag, nf, Rectangle.Round(nr), Color.White,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 nameRight = (int)nr.Left - Ui.S(6);
             }

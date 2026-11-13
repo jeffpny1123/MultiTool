@@ -13,7 +13,32 @@ namespace MultiTool
 /// <summary>所有設定 / 圖片都放喺 exe 隔籬嘅 data 資料夾。</summary>
 public static class AppPaths
 {
-    public static string Data => Path.Combine(AppContext.BaseDirectory, "data");
+    /// <summary>
+    /// data 資料夾：GitHub 版放喺 exe 隔籬；Steam 版放喺 %LOCALAPPDATA%\RabiToolkit\data
+    /// （Steam 安裝資料夾解除安裝 / 驗證檔案時可能會清走，而且 Steam Cloud 要固定位置）。
+    /// </summary>
+    public static string Data => _data ??= FindData();
+    private static string? _data;
+    private static string FindData()
+    {
+        string exeData = Path.Combine(AppContext.BaseDirectory, "data");
+        if (!MultiTool.Program.IsSteam) return exeData;
+        string d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), MultiTool.Program.FileName, "data");
+        try
+        {
+            // 第一次開：將 Steam 包入面嘅預設 data（範本）複製過去
+            if (!Directory.Exists(d) && Directory.Exists(exeData))
+                foreach (var f in Directory.GetFiles(exeData, "*", SearchOption.AllDirectories))
+                {
+                    string dest = Path.Combine(d, Path.GetRelativePath(exeData, f));
+                    Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                    File.Copy(f, dest, false);
+                }
+            Directory.CreateDirectory(d);
+        }
+        catch { }
+        return d;
+    }
     public static string Scripts => Path.Combine(Data, "scripts");
     public static string ErrorLog => Path.Combine(Data, "error.log");
 
@@ -41,7 +66,7 @@ namespace UI
             try
             {
                 if (ThemeStore.Active is { } t) return t.Light; // 插件主題：跟佢嘅基底
-                var f = Path.Combine(AppContext.BaseDirectory, "data", "theme.txt");
+                var f = Path.Combine(AppPaths.Data, "theme.txt");
                 return File.Exists(f) && File.ReadAllText(f).Trim() == "light";
             }
             catch { return false; }
@@ -51,8 +76,8 @@ namespace UI
         {
             try
             {
-                Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "data"));
-                File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "data", "theme.txt"), light ? "light" : "dark");
+                Directory.CreateDirectory(AppPaths.Data);
+                File.WriteAllText(Path.Combine(AppPaths.Data, "theme.txt"), light ? "light" : "dark");
             }
             catch { }
         }
@@ -946,6 +971,9 @@ namespace UI
         /// <summary>名左邊嘅細圖示（同工具庫一樣）。</summary>
         public string Glyph = "";
         public Color Hue = Ui.Accent;
+        private bool _compact;
+        /// <summary>側欄摺起咗：淨係畫圖示（冇圖示就畫第一個字）。</summary>
+        public bool Compact { get => _compact; set { if (_compact != value) { _compact = value; Invalidate(); } } }
 
         public NavItem(string text)
         {
@@ -980,6 +1008,18 @@ namespace UI
                 using var path = Ui.Round(bar, Ui.S(1.5f));
                 using var b = Ui.AccentBrush(new RectangleF(bar.X, bar.Y, Ui.S(3f), bar.Height));
                 g.FillPath(b, path);
+            }
+            if (_compact)
+            {
+                float cs = Math.Min(Ui.S(26f), r.Height - Ui.S(4f));
+                var cr = new RectangleF(r.X + (r.Width - cs) / 2f, r.Y + (r.Height - cs) / 2f, cs, cs);
+                using (var ip = Ui.Round(cr, Ui.S(6f)))
+                using (var ib = new SolidBrush(Ui.Mix(_active ? Ui.CardHi : Ui.Panel, Hue, _active ? 0.32f : 0.2f)))
+                    g.FillPath(ib, ip);
+                string gl = Glyph.Length > 0 ? Glyph : (Text.Length > 0 ? Text.Substring(0, char.IsSurrogate(Text[0]) && Text.Length > 1 ? 2 : 1) : "");
+                TextRenderer.DrawText(g, gl, Ui.F(cs >= Ui.S(22f) ? 9.5f : 8.5f, FontStyle.Bold), Rectangle.Round(cr), Ui.OnTint(Hue),
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                return;
             }
             int tx = (int)r.X + Ui.S(16);
             if (Glyph.Length > 0)
