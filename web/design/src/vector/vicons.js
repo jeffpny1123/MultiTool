@@ -1,0 +1,31 @@
+// 向量繪圖自己畫嘅圖示（24×24，線條）。
+const S = d => '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+const F = d => '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round">' + d + '</svg>';
+export const VICON = {
+  v_select: F('<path d="M6 3.5l12 8.2-5.3 1 3.1 6-2.4 1.2-3.1-6.1L6 17.4z"/>'),
+  v_direct: S('<path d="M6 3.5l12 8.2-5.3 1 3.1 6-2.4 1.2-3.1-6.1L6 17.4z"/>'),
+  v_pen: S('<path d="M12 3l6 9-3 6H9l-3-6z"/><path d="M12 3v8"/><circle cx="12" cy="12.5" r="1.4"/><path d="M9 21h6"/>'),
+  v_text: S('<path d="M5 6V4h14v2M12 4v16M9 20h6"/>'),
+  v_line: S('<path d="M5 19L19 5"/>'),
+  v_rect: S('<rect x="4" y="5.5" width="16" height="13" rx="1"/>'),
+  v_ellipse: S('<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>'),
+  v_polygon: S('<path d="M12 3.5l7.6 4.4v8.2L12 20.5l-7.6-4.4V7.9z"/>'),
+  v_star: S('<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/>'),
+  v_pencil: S('<path d="M4 20l1.2-4.6L16 4.6a1.9 1.9 0 012.7 0l.7.7a1.9 1.9 0 010 2.7L8.6 18.8z"/><path d="M14.5 6.1l3.4 3.4"/>'),
+  v_picker: S('<path d="M14.5 4.5l5 5"/><path d="M17 7l-9.5 9.5-3.5 1 1-3.5L14.5 4.5"/>'),
+  props: S('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'),
+  alignL: S('<path d="M4 3v18"/><rect x="7" y="6" width="12" height="4" rx="1"/><rect x="7" y="14" width="7" height="4" rx="1"/>'),
+  alignCh: S('<path d="M12 3v18"/><rect x="5" y="6" width="14" height="4" rx="1"/><rect x="8" y="14" width="8" height="4" rx="1"/>'),
+  alignR: S('<path d="M20 3v18"/><rect x="5" y="6" width="12" height="4" rx="1"/><rect x="10" y="14" width="7" height="4" rx="1"/>'),
+  alignT: S('<path d="M3 4h18"/><rect x="6" y="7" width="4" height="12" rx="1"/><rect x="14" y="7" width="4" height="7" rx="1"/>'),
+  alignCv: S('<path d="M3 12h18"/><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="8" width="4" height="8" rx="1"/>'),
+  alignB: S('<path d="M3 20h18"/><rect x="6" y="5" width="4" height="12" rx="1"/><rect x="14" y="10" width="4" height="7" rx="1"/>'),
+  distH: S('<path d="M4 4v16M20 4v16"/><rect x="9.5" y="8" width="5" height="8" rx="1"/>'),
+  distV: S('<path d="M4 4h16M4 20h16"/><rect x="8" y="9.5" width="8" height="5" rx="1"/>'),
+  unite: F('<path d="M3.5 3.5h11v6h6v11h-11v-6h-6z"/>'),
+  minus: S('<path d="M3.5 3.5h11v6h-5v5h-6z" fill="currentColor"/><rect x="9.5" y="9.5" width="11" height="11" stroke-dasharray="2 2"/>'),
+  intersect: S('<rect x="3.5" y="3.5" width="11" height="11" stroke-dasharray="2 2"/><rect x="9.5" y="9.5" width="11" height="11" stroke-dasharray="2 2"/><rect x="9.5" y="9.5" width="5" height="5" fill="currentColor"/>'),
+  exclude: S('<path d="M3.5 3.5h11v6h-5v5h-6z M14.5 9.5h6v11h-11v-6h5z" fill="currentColor"/><rect x="9.5" y="9.5" width="5" height="5"/>'),
+  lock: S('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'),
+  unlock: S('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 017.5-2"/>'),
+};

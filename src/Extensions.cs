@@ -38,11 +38,13 @@ internal static class Extensions
     public const string Flash = "flashgames";
     public const string Pdf = "pdf";   // 舊：PDF 修改器（已併入文書工具）
     public const string Office = "office";
+    public const string Design = "design";
     public const string Image = "image";
     public const string Qr = "qr";
     public const string Translate = "translate";
     public const string Ledger = "ledger";
     public const string Unit = "unit";
+    public const string Cad = "cad";
 
     /// <summary>工具庫分類（一個工具可以屬幾類）。</summary>
     public static readonly string[] Categories = { "game", "doc", "media", "system", "net" };
@@ -63,9 +65,9 @@ internal static class Extensions
         // 遊戲
         Scripts or Remap or GameServer or Flash or Replay => new[] { "game" },
         // 文書
-        Office or Mail or Ocr or Translate or Qr or Ledger or Unit or Clipboard => new[] { "doc" },
+        Office or Cad or Mail or Ocr or Translate or Qr or Ledger or Unit or Clipboard => new[] { "doc" },
         // 媒體
-        Recorder or Editor or Convert or Image => new[] { "media" },
+        Recorder or Editor or Convert or Image or Design => new[] { "media" },
         // 系統
         Perf or Disk or Window or Repair or Plugins => new[] { "system" },
         // 網絡
@@ -138,7 +140,7 @@ internal static class Extensions
         new(Ocr, Lang.T("文字辨識"),
             Lang.T("框住畫面上嘅文字就抽出嚟複製，用 Windows 內置辨識，唔使上網。"), false),
         new(Convert, Lang.T("格式轉換"),
-            Lang.T("影音：影片、聲音、圖片互轉（MP4、GIF、MP3、PNG…），剪頭尾同縮細，第一次用要下載 ffmpeg（~100 MB）。文件：Excel、CSV、TSV、JSON 互轉，修正 CSV 中文亂碼。"), false,
+            Lang.T("影音：影片、聲音、圖片互轉（MP4、GIF、MP3、PNG…），剪頭尾同縮細，第一次用要下載 ffmpeg（~100 MB）。文件：試算表、CSV、TSV、JSON 互轉，修正 CSV 中文亂碼。"), false,
             Remove: () => RemoveFfmpeg(Convert)),
         new(GameServer, Lang.T("遊戲伺服器"),
             Lang.T("一撳架設 Palworld、Valheim、7 Days to Die 等 Steam 遊戲伺服器，有設定、自動備份同開端口。需要下載 SteamCMD。"), false,
@@ -161,7 +163,7 @@ internal static class Extensions
             },
             Since: "v2.5"),
         new(Repair, Lang.T("檔案修復"),
-            Lang.T("開唔到嘅影片、聲音、相片、ZIP / Word / Excel / PowerPoint、PDF 拖入嚟就自動修復，修好嘅另存一份。部分修復第一次用要下載免費開源工具（ffmpeg、qpdf、untrunc）。"), false,
+            Lang.T("開唔到嘅影片、聲音、相片、ZIP / 文件 / 試算表 / 簡報、PDF 拖入嚟就自動修復，修好嘅另存一份。部分修復第一次用要下載免費開源工具（ffmpeg、qpdf、untrunc）。"), false,
             Remove: () => { Tools.RepairTools.Delete(); RemoveFfmpeg(Repair); }, Since: "v0.252"),
         new(Nas, Lang.T("NAS 管理"),
             Lang.T("連接自己嘅 Synology NAS：好似 Google Drive 咁瀏覽同管理檔案，拖放上載、下載、建立分享連結，睇 CPU、RAM、硬碟狀態，遙距開機、重新啟動同關機。支援兩步驗證。"), false,
@@ -174,6 +176,9 @@ internal static class Extensions
             Since: "v0.2.9"),
         new(Office, Lang.T("文書工具"),
             Lang.T("一個工具處理文書檔案，開乜檔就用對應嘅編輯器。文件（.docx）：字型、樣式、表格、圖片、頁首頁尾、列印。PDF：加文字、簽名、圖片、螢光筆、塗白，製作同填寫表單，旋轉、刪除、排頁同合併。試算表同簡報之後加入。檔案只喺你部電腦處理；有連接 AI 就可以問內容或者叫 AI 幫手改。"), true,
+            Since: "v0.2.9"),
+        new(Design, Lang.T("設計工具"),
+            Lang.T("自己嘅修圖同向量繪圖工具。修圖：圖層、混合模式、選取、筆刷、擦膠、填色、裁切同旋轉，開同存 PNG、JPG、WebP。向量繪圖：鋼筆、形狀、文字、對齊同形狀運算，開同存 SVG，匯出 PDF 同 PNG。兩樣都可以存做專案。檔案只喺你部電腦處理。"), false,
             Since: "v0.2.9"),
         new(Disk, Lang.T("磁碟及軟件管理"),
             Lang.T("睇每個磁碟剩幾多位同硬碟健康，搵出邊個資料夾最食位、邊啲檔案重複咗；管理開機自動行嘅程式，睇晒已安裝嘅軟件同解除安裝。"), false),
@@ -192,11 +197,14 @@ internal static class Extensions
         new(Unit, Lang.T("單位及匯率換算"),
             Lang.T("長度、重量、溫度、面積、容量、速度等單位互換（離線）；匯率用免費公開嘅每日數據，唔使 AI、唔使帳戶。"), false,
             Since: "v0.2.9"),
+        new(Cad, Lang.T("繪圖"),
+            Lang.T("2D 製圖：直線、聚合線、圓、弧、文字同尺寸標註；圖層、物件捕捉、指令列（L、C、M、TR…）；移動、複製、旋轉、鏡射、偏移、修剪、延伸、圓角。支援開啟同儲存 DXF，可以匯出 SVG / PNG，按比例列印。"), false,
+            Since: "v0.2.9"),
     };
 
     /// <summary>工具庫 / 首頁排序：新工具最前，跟住常用嘅，我的腳本第一，測試版最後。</summary>
     private static readonly string[] Order =
-        { Scripts, Office, Image, Translate, Qr, Ledger, Unit, Cloud, Flash, Nas, Repair, Mail, Plugins, Recorder, Editor, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
+        { Scripts, Office, Cad, Design, Image, Translate, Qr, Ledger, Unit, Cloud, Flash, Nas, Repair, Mail, Plugins, Recorder, Editor, Convert, Clipboard, Perf, Window, Ocr, Replay, Remap, Disk, GameServer, Remote };
 
     private static readonly bool Sorted = SortAll();
 
@@ -259,6 +267,7 @@ internal static class Extensions
         Translate => ("文", Ui.Hex(0xE08A2E)),
         Ledger => ("＄", Ui.Hex(0x2FA36B)),
         Unit => ("⇌", Ui.Hex(0x8A63D2)),
+        Cad => ("📐", Ui.Hex(0x3A7BD5)),
         Mail => ("✉", Ui.Hex(0xEA4335)),
         Plugins => ("◈", Ui.Accent2),
         Repair => ("✚", Ui.Success),
@@ -266,6 +275,7 @@ internal static class Extensions
         Cloud => ("☁", Ui.Hex(0x007BFC)),
         Flash => ("🎮", Ui.Hex(0xE8473C)),
         Office => ("📝", Ui.Hex(0x2F6FED)),
+        Design => ("🎨", Ui.Hex(0xD9468F)),
         Doc => ("▦", Ui.Accent),
         "ai" => ("✦", Ui.Accent2),
         "home" => ("⌂", Ui.Accent),

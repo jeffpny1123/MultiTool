@@ -58,7 +58,7 @@ internal sealed class FileRepairPage : ToolPage
         var stop = TUi.Btn(Lang.T("■ 取消"), () => _cts?.Cancel());
         _list = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, FlowDirection = FlowDirection.TopDown, WrapContents = false };
         Card(Lang.T("檔案修復"),
-            Lang.T("將開唔到嘅檔案拖入嚟就會自動檢查同修復：影片、聲音、相片、ZIP / Word / Excel / PowerPoint、PDF。修好嘅檔案另存一份（名後面加「已修復」），唔會改原本嘅檔案。"),
+            Lang.T("將開唔到嘅檔案拖入嚟就會自動檢查同修復：影片、聲音、相片、ZIP / 文件 / 試算表 / 簡報、PDF。修好嘅檔案另存一份（名後面加「已修復」），唔會改原本嘅檔案。"),
             TUi.Col(TUi.Row(add, clear, stop), _list));
 
         _h264 = TUi.Check(Lang.T("影片一律轉做 H.264 / AAC（最兼容，但要重新壓縮，慢啲）"), false, _ => { });
@@ -82,7 +82,7 @@ internal sealed class FileRepairPage : ToolPage
             Lang.T("• 影片 / 聲音：重建索引同時間戳、副檔名錯、播放器唔支援嘅格式（轉 H.264）、中間有損壞（重新壓縮，損壞位置可能有花屏）。\n") +
             Lang.T("• 錄影中途斷電 / 當機（MP4、MOV 冇咗索引）：要揀一條同一部機、同一個設定錄嘅正常影片做參考。\n") +
             Lang.T("• 相片：JPEG / PNG 唔完整（冇咗嘅部分用灰色補）、校驗碼錯、副檔名錯；HEIC / WEBP 轉做 PNG。\n") +
-            Lang.T("• ZIP / Word / Excel / PowerPoint / EPUB：由殘骸重新砌過，救返入面完好嘅檔案。\n") +
+            Lang.T("• ZIP / 文件 / 試算表 / 簡報 / EPUB：由殘骸重新砌過，救返入面完好嘅檔案。\n") +
             Lang.T("• PDF：重建損壞嘅索引表。\n") +
             Lang.T("• 部分修復要用免費開源工具（ffmpeg、qpdf、untrunc），第一次用先會問你下載。")));
 

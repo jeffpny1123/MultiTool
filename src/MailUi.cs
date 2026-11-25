@@ -156,6 +156,7 @@ internal static class MailWatch
                                 string body = string.Join("\n", hs.OrderByDescending(h => h.Uid).Select(h => $"{(h.From.Length > 0 ? h.From : h.FromAddr)}：{h.Subject}"));
                                 Scripts.Notifier.Send(fresh.Count == 1 ? Lang.F("新郵件（{0}）", a.Email) : Lang.F("{0} 封新郵件（{1}）", fresh.Count, a.Email), body, true, false);
                             }
+                            _ = MailListen.CheckAsync(a, fresh);   // AI 監聽：逐封問 AI 關唔關事（冇監聽內容 / 冇 AI 就乜都唔做）
                             NewMail?.Invoke(a);
                         }
                         Last[a.Id] = Math.Max(prev, max);
@@ -606,7 +607,14 @@ internal sealed class MailPage : Panel
         aiSort.Margin = new Padding(0, 0, Ui.S(12), 0);
         _tip.SetToolTip(aiSort, Lang.T("叫 AI 睇清單入面最近嘅信，分做「要處理」「遲啲睇」「廣告 / 通知」"));
         _status = Ui.Text_("", Ui.TextFaint, Ui.F(9f), new Padding(0, Ui.S(9), 0, 0));
-        top.Controls.AddRange(new Control[] { sh, refresh, aiSort, _status });
+        // AI 監聽：有 AI（揀咗 + 裝咗）先出現
+        var aiListen = TUi.Btn(Lang.T("✦ AI 監聽"), () => { using var f = new MailListenForm(); f.ShowDialog(FindForm()); });
+        aiListen.Margin = new Padding(0, 0, Ui.S(12), 0);
+        _tip.SetToolTip(aiListen, Lang.T("寫低想留意嘅內容，之後每收到新郵件 AI 都會睇一次，有關就通知你"));
+        aiSort.Margin = new Padding(0, 0, Ui.S(8), 0);
+        aiListen.Visible = PdfEditLib.AiReady();
+        VisibleChanged += (_, _) => { if (Visible) aiListen.Visible = PdfEditLib.AiReady(); };
+        top.Controls.AddRange(new Control[] { sh, refresh, aiSort, aiListen, _status });
 
         // ---- 中間清單 ----
         _listHost = new Panel { Dock = DockStyle.Fill, BackColor = Ui.Bg };
@@ -1503,12 +1511,10 @@ internal sealed class MailPage : Panel
         f.Show(FindForm());
     }
 
-    private string Quote(MailMessage m)
+    private static string QuoteHead(MailMessage m)
     {
         string who = m.From.Length > 0 ? $"{m.From} <{m.FromAddr}>" : m.FromAddr;
-        string head = Lang.F("{0} 喺 {1} 寫道：", who, m.Date.ToString("yyyy-MM-dd HH:mm"));
-        var lines = Mime.PlainText(m).Replace("\r\n", "\n").Split('\n').Select(l => "> " + l);
-        return head + "\n" + string.Join("\n", lines);
+        return Lang.F("{0} 喺 {1} 寫道：", who, m.Date.ToString("yyyy-MM-dd HH:mm"));
     }
 
     private ComposeForm.Draft? ReplyDraft(bool all)
@@ -1530,7 +1536,8 @@ internal sealed class MailPage : Panel
         string subj = Regex.IsMatch(m.Subject, @"^\s*(re|回覆|答复)\s*[:：]", RegexOptions.IgnoreCase) ? m.Subject : "Re: " + m.Subject;
         return new ComposeForm.Draft
         {
-            Account = acct, To = to, Cc = cc, Subject = subj, Quote = Quote(m), InReplyTo = m.MessageId,
+            // 回覆預設唔附上之前嘅紀錄（同一個主旨、In-Reply-To 照寫，對方郵箱照樣會排埋一串）；要附可以喺寫信視窗剔
+            Account = acct, To = to, Cc = cc, Subject = subj, QuoteHead = QuoteHead(m), QuoteText = Mime.PlainText(m), QuoteHtml = m.Html, InReplyTo = m.MessageId,
             References = (m.References + " " + m.MessageId).Trim(), ReplyOf = _open, Context = Mime.PlainText(m)
         };
     }
@@ -1564,7 +1571,7 @@ internal sealed class MailPage : Panel
                       Lang.T("日期：") + m.Date.ToString("yyyy-MM-dd HH:mm") + "\n" +
                       Lang.T("主旨：") + m.Subject + "\n" + Lang.T("致：") + m.To + "\n\n";
         string subj = Regex.IsMatch(m.Subject, @"^\s*(fwd?|轉寄|转发)\s*[:：]", RegexOptions.IgnoreCase) ? m.Subject : "Fwd: " + m.Subject;
-        Compose(new ComposeForm.Draft { Account = acct, Subject = subj, Quote = head + Mime.PlainText(m), Attachments = files, Context = Mime.PlainText(m) });
+        Compose(new ComposeForm.Draft { Account = acct, Subject = subj, QuoteHead = head.TrimEnd(), QuoteText = Mime.PlainText(m), QuoteHtml = m.Html, Forward = true, Attachments = files, Context = Mime.PlainText(m) });
     }
 
     // ================= AI =================
@@ -1642,7 +1649,11 @@ internal sealed class ComposeForm : Form
     internal sealed class Draft
     {
         public MailAccount? Account;
-        public string To = "", Cc = "", Bcc = "", Subject = "", Body = "", Quote = "", InReplyTo = "", References = "", Context = "";
+        public string To = "", Cc = "", Bcc = "", Subject = "", Body = "", InReplyTo = "", References = "", Context = "";
+        /// <summary>原信（回覆 / 轉寄先有）：唔放喺編輯器入面，寄嗰陣先加喺內文下面。</summary>
+        public string QuoteHead = "", QuoteText = "", QuoteHtml = "";
+        /// <summary>轉寄：一定附上原信（剔格預設剔咗）；回覆預設唔附。</summary>
+        public bool Forward;
         public List<string> Attachments = new();
         public MailHeader? ReplyOf;
     }
@@ -1651,13 +1662,17 @@ internal sealed class ComposeForm : Form
     private MailAccount _from;
     private readonly FancyButton _fromBtn, _send;
     private readonly TextBox _to = new(), _cc = new(), _bcc = new(), _subj = new();
-    private readonly TextBox _body;
+    private readonly TextBox _body;                 // 冇 WebView2 先用（純文字）
+    private readonly Panel _bodyWrap;
+    private object? _web;                           // ComposeWeb（用 object：未準備好 DLL 之前唔好掂到 WebView2 型別）
+    private CheckBox? _quoteBox;
     private readonly Panel _ccRow, _bccRow;
     private readonly FlowLayoutPanel _files;
     private readonly List<string> _attach;
     private readonly string _initial;
     private bool _sent;
     private CancellationTokenSource? _cts;
+    private readonly ToolTip _tipCompose = new();
 
     public ComposeForm(Draft d)
     {
@@ -1722,11 +1737,28 @@ internal sealed class ComposeForm : Form
             Multiline = true, AcceptsReturn = true, AcceptsTab = false, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, Dock = DockStyle.Fill,
             BackColor = Ui.Input, ForeColor = Ui.Text, Font = Ui.F(10.5f), WordWrap = true
         };
-        string body = d.Body;
-        if (d.Quote.Length > 0) body = body + "\r\n\r\n" + d.Quote;
-        _body.Text = body.Replace("\r\n", "\n").Replace("\n", "\r\n");
-        _initial = d.Quote.Length > 0 ? ("\r\n\r\n" + d.Quote).Replace("\r\n", "\n").Replace("\n", "\r\n") : "";
-        var bodyWrap = new Panel { Dock = DockStyle.Fill, BackColor = Ui.Input, Padding = new Padding(Ui.S(10), Ui.S(8), Ui.S(4), Ui.S(8)) };
+        _body.Text = d.Body.Replace("\r\n", "\n").Replace("\n", "\r\n");
+        _initial = "";
+        // 冇 WebView2：貼截圖（Ctrl+V / Shift+Insert）變附件
+        _body.KeyDown += (_, e) =>
+        {
+            if (!((e.Control && e.KeyCode == Keys.V) || (e.Shift && e.KeyCode == Keys.Insert))) return;
+            try
+            {
+                if (Clipboard.ContainsImage() && !Clipboard.ContainsText() && Clipboard.GetImage() is { } img)
+                {
+                    e.SuppressKeyPress = true;
+                    string dir = Path.Combine(MailStore.Dir, "tmp", Guid.NewGuid().ToString("N")[..8]);
+                    Directory.CreateDirectory(dir);
+                    string f = Path.Combine(dir, Lang.T("圖片") + "-" + DateTime.Now.ToString("HHmmss") + ".png");
+                    using (img) img.Save(f, System.Drawing.Imaging.ImageFormat.Png);
+                    _attach.Add(f);
+                    RefreshFiles();
+                }
+            }
+            catch (Exception ex) { AppPaths.LogError("貼圖", ex); }
+        };
+        var bodyWrap = _bodyWrap = new Panel { Dock = DockStyle.Fill, BackColor = Ui.Input, Padding = new Padding(Ui.S(10), Ui.S(8), Ui.S(4), Ui.S(8)) };
         bodyWrap.Controls.Add(_body);
         var bodyOuter = new Panel { Dock = DockStyle.Fill, BackColor = Ui.Bg, Padding = new Padding(0, Ui.S(8), 0, Ui.S(8)) };
         bodyOuter.Controls.Add(bodyWrap);
@@ -1739,6 +1771,18 @@ internal sealed class ComposeForm : Form
         var discard = TUi.Btn(Lang.T("捨棄"), Close);
         foreach (var b in new[] { _send, attach, ai, discard }) b.Margin = new Padding(0, 0, Ui.S(8), 0);
         bottom.Controls.AddRange(new Control[] { _send, attach, ai, discard });
+        _tipCompose.SetToolTip(attach, Lang.T("圖片可以直接 Ctrl+V 貼入內文，或者拖入內文"));
+        // 回覆 / 轉寄：附唔附上原信（唔會顯示喺內文，寄嗰陣先加喺下面）
+        if (d.QuoteText.Length > 0)
+        {
+            _quoteBox = new CheckBox
+            {
+                Text = d.Forward ? Lang.T("附上轉寄嘅郵件") : Lang.T("附上原文"), Checked = d.Forward, AutoSize = true, ForeColor = Ui.TextDim, Font = Ui.F(9.25f),
+                Margin = new Padding(Ui.S(4), Ui.S(7), 0, 0), FlatStyle = FlatStyle.Flat
+            };
+            _tipCompose.SetToolTip(_quoteBox, Lang.T("剔咗就會將原本嗰封信嘅內容加喺你寫嘅嘢下面"));
+            bottom.Controls.Add(_quoteBox);
+        }
 
         Controls.Add(bodyOuter);
         Controls.Add(_files);
@@ -1757,16 +1801,17 @@ internal sealed class ComposeForm : Form
         };
         KeyPreview = true;
         KeyDown += (_, e) => { if (e.Control && e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; _ = SendAsync(); } };
-        Shown += (_, _) =>
+        Shown += async (_, _) =>
         {
             if (_to.Text.Length == 0) _to.Focus();
             else { _body.Focus(); _body.Select(0, 0); }
+            await StartWebAsync();
         };
         FormClosing += (_, e) =>
         {
             if (_sent) return;
             if (_cts != null) { e.Cancel = true; return; } // 寄緊
-            bool dirty = _body.Text != _initial || (_d.ReplyOf == null && (_to.Text.Length > 0 || _subj.Text.Length > 0)) || _attach.Count != _d.Attachments.Count;
+            bool dirty = (_web != null ? WebDirty() || _d.Body.Length > 0 : _body.Text != _initial) || (_d.ReplyOf == null && (_to.Text.Length > 0 || _subj.Text.Length > 0)) || _attach.Count != _d.Attachments.Count;
             if (dirty && MessageBox.Show(this, Lang.T("捨棄呢封信？"), Program.AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 e.Cancel = true;
         };
@@ -1805,7 +1850,8 @@ internal sealed class ComposeForm : Form
         if (rcpts.Count == 0) { MessageBox.Show(this, Lang.T("請填收件人電郵地址。"), Program.AppName); _to.Focus(); return; }
         if (_subj.Text.Trim().Length == 0 &&
             MessageBox.Show(this, Lang.T("冇主旨，照寄？"), Program.AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        long total = 0;
+        var (text, html, inline) = await ReadBodyAsync();
+        long total = inline.Sum(x => (long)x.Data.Length);
         foreach (var f in _attach)
         {
             if (!File.Exists(f)) { MessageBox.Show(this, Lang.F("搵唔到附件：{0}", f), Program.AppName); return; }
@@ -1821,7 +1867,7 @@ internal sealed class ComposeForm : Form
         _send.Text = Lang.T("寄緊…");
         try
         {
-            var o = new Mime.Outgoing(a.Name, a.Email, _to.Text, _cc.Text, _bcc.Text, _subj.Text.Trim(), _body.Text, _attach.ToList(), _d.InReplyTo, _d.References);
+            var o = new Mime.Outgoing(a.Name, a.Email, _to.Text, _cc.Text, _bcc.Text, _subj.Text.Trim(), text, _attach.ToList(), _d.InReplyTo, _d.References, html, inline);
             var msg = await Task.Run(() => Mime.Build(o));
             await Smtp.SendAsync(a, rcpts, msg, cts.Token);
             // 一般 IMAP：自己放一份入寄件備份（Gmail / Outlook 會自動放）
@@ -1872,19 +1918,34 @@ internal sealed class ComposeForm : Form
     {
         var how = AskText.Show(this, Lang.T("AI 幫我寫"), Lang.T("想寫咩？例如「同老闆請星期五假」；已經寫咗啲嘢就會幫你改好佢"), "", true);
         if (how == null) return;
-        // 引用原信嗰段唔郁，淨係換上面自己寫嘅部分
-        string quote = _d.Quote.Replace("\r\n", "\n").Replace("\n", "\r\n");
-        string text = _body.Text;
-        int qi = quote.Length > 0 ? text.IndexOf(quote, StringComparison.Ordinal) : -1;
-        string mine = qi >= 0 ? text[..qi].TrimEnd() : text;
-        string rest = qi >= 0 ? text[qi..] : "";
+        if (_web != null)
+        {
+            // 編輯器：淨係換文字，貼咗嘅圖片留返（放喺文字下面）
+            var (html0, text0) = await WebGetAsync();
+            string mine = text0.Replace(ComposeEditor.ImageLabel, "").Trim();
+            WebReadOnly(true);
+            await WebSetTextAsync(Lang.T("AI 寫緊…"), true);
+            try
+            {
+                string ans = await AiDraftAsync(how, _subj.Text, _d.Context, mine, _from.Name);
+                await WebSetTextAsync(ans, true);
+                WebMarkDirty();
+            }
+            catch (Exception ex)
+            {
+                await WebSetHtmlAsync(html0);
+                MessageBox.Show(this, Lang.T("AI 出錯：") + ex.Message, Program.AppName);
+            }
+            finally { WebReadOnly(false); }
+            return;
+        }
         var old = _body.Text;
         _body.ReadOnly = true;
-        _body.Text = Lang.T("AI 寫緊…") + (rest.Length > 0 ? "\r\n\r\n" + rest : "");
+        _body.Text = Lang.T("AI 寫緊…");
         try
         {
-            string ans = await AiDraftAsync(how, _subj.Text, _d.Context, mine, _from.Name);
-            _body.Text = ans.Replace("\r\n", "\n").Replace("\n", "\r\n") + (rest.Length > 0 ? "\r\n\r\n" + rest : "");
+            string ans = await AiDraftAsync(how, _subj.Text, _d.Context, old, _from.Name);
+            _body.Text = ans.Replace("\r\n", "\n").Replace("\n", "\r\n");
         }
         catch (Exception ex)
         {
@@ -1892,6 +1953,105 @@ internal sealed class ComposeForm : Form
             MessageBox.Show(this, Lang.T("AI 出錯：") + ex.Message, Program.AppName);
         }
         finally { _body.ReadOnly = false; }
+    }
+
+    // ---------------- 內文編輯器（WebView2，可以貼圖） ----------------
+
+    /// <summary>開 WebView2 編輯器；開唔到就繼續用普通文字格。</summary>
+    private async Task StartWebAsync()
+    {
+        try
+        {
+            if (!WebView2Lib.Prepare()) return;
+            var host = new Panel { Dock = DockStyle.Fill, BackColor = Ui.Input };
+            _bodyWrap.Controls.Add(host);
+            host.BringToFront();
+            _web = await CreateWeb(host);
+            // 開緊嗰陣已經打咗字：搬過去
+            string typed = _body.Text;
+            if (typed.Length > 0) await WebSetTextAsync(typed, false);
+            _body.Visible = false;
+            if (_to.Text.Length > 0 || ActiveControl == _body) WebFocus();
+        }
+        catch (Exception ex)
+        {
+            AppPaths.LogError("寫信編輯器", ex);
+            _web = null;
+            foreach (Control c in _bodyWrap.Controls.Cast<Control>().ToList()) if (c != _body) { _bodyWrap.Controls.Remove(c); c.Dispose(); }
+            _body.Visible = true;
+        }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private async Task<object> CreateWeb(Panel host)
+    {
+        var w = await ComposeWeb.CreateAsync(host, Lang.T("寫內容…（圖片可以直接 Ctrl+V 貼上或者拖入嚟）"));
+        w.Send += () => BeginInvoke(() => _ = SendAsync());
+        w.Files += fs => BeginInvoke(() => { _attach.AddRange(fs); RefreshFiles(); });
+        return w;
+    }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private Task<(string Html, string Text)> WebGetAsync() => ((ComposeWeb)_web!).GetAsync();
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private Task WebSetTextAsync(string t, bool keep) => ((ComposeWeb)_web!).SetTextAsync(t, keep);
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private Task WebSetHtmlAsync(string h) => ((ComposeWeb)_web!).SetHtmlAsync(h);
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void WebReadOnly(bool ro) => ((ComposeWeb)_web!).SetReadOnly(ro);
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void WebFocus() => ((ComposeWeb)_web!).FocusEditor();
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private bool WebDirty() => ((ComposeWeb)_web!).Dirty;
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void WebMarkDirty() => ((ComposeWeb)_web!).Dirty = true;
+
+    /// <summary>寄出用嘅內文：純文字、HTML（冇編輯器就 null）、內嵌圖片；剔咗「附上原文」就加埋原信。</summary>
+    private async Task<(string Text, string? Html, List<Mime.InlineImage> Inline)> ReadBodyAsync()
+    {
+        bool quote = _quoteBox?.Checked == true && _d.QuoteText.Length > 0;
+        string qText = "", qHtml = "";
+        if (quote)
+        {
+            string orig = _d.QuoteText.Replace("\r\n", "\n");
+            qText = _d.Forward ? _d.QuoteHead + "\n\n" + orig
+                               : _d.QuoteHead + "\n" + string.Join("\n", orig.Split('\n').Select(l => "> " + l));
+            // 用 Gmail 自己嘅引用格式（gmail_quote）：Gmail 會將之前嘅紀錄收埋做「…」，其他郵件程式都會顯示做引用
+            string origHtml = QuoteBody(_d.QuoteHtml);
+            if (origHtml.Trim().Length == 0) origHtml = ComposeEditor.TextHtml(orig);
+            string head = "<div dir=\"ltr\" class=\"gmail_attr\">" + ComposeEditor.TextHtml(_d.QuoteHead) + "<br></div>";
+            qHtml = "<br><div class=\"gmail_quote\">" + head +
+                    (_d.Forward ? "<br>" + origHtml
+                                : "<blockquote class=\"gmail_quote\" style=\"margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex\">" + origHtml + "</blockquote>") +
+                    "</div>";
+        }
+        string domain = _from.Email.Contains('@') ? _from.Email[(_from.Email.IndexOf('@') + 1)..] : "localhost";
+        if (_web == null)
+        {
+            string t = _body.Text.Replace("\r\n", "\n");
+            if (!quote) return (t, null, new List<Mime.InlineImage>());
+            return (t + "\n\n" + qText, ComposeEditor.Document(ComposeEditor.TextHtml(t), qHtml), new List<Mime.InlineImage>());
+        }
+        var (html, text) = await WebGetAsync();
+        var (inner, imgs) = ComposeEditor.ToMail(html, domain);
+        text = text.Replace("\r\n", "\n").TrimEnd();
+        // 冇圖、冇格式、冇引用：照舊寄純文字（最多郵件程式睇得到）
+        bool plain = !quote && imgs.Count == 0 && !Regex.IsMatch(html, @"<(b|strong|i|em|u|img|a|ul|ol|table)\b", RegexOptions.IgnoreCase);
+        if (plain) return (text, null, imgs);
+        return (quote ? text + "\n\n" + qText : text, ComposeEditor.Document(inner, qHtml), imgs);
+    }
+
+    /// <summary>原信 HTML 嘅 &lt;body&gt; 內容（拎走 script / style 同 cid 內嵌圖：嗰啲圖唔會跟住寄出，留低會顯示做爛圖）。</summary>
+    private static string QuoteBody(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return "";
+        const RegexOptions o = RegexOptions.IgnoreCase | RegexOptions.Singleline;
+        var m = Regex.Match(html, @"<body\b[^>]*>(.*)</body>", o);
+        string b = m.Success ? m.Groups[1].Value : Regex.Replace(html, @"<head\b.*?</head>", "", o);
+        b = Regex.Replace(b, @"<(script|style|iframe|object|embed|form)\b.*?</\1\s*>", "", o);
+        b = Regex.Replace(b, @"<(script|iframe|object|embed|meta|link|base)\b[^>]*>", "", o);
+        b = Regex.Replace(b, @"\son\w+\s*=\s*(""[^""]*""|'[^']*'|[^\s>]+)", "", o);
+        b = Regex.Replace(b, @"<img\b[^>]*\bsrc\s*=\s*[""']?\s*cid:[^>]*>", "", o);
+        return b;
     }
 }
 

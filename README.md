@@ -103,6 +103,10 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   郵件以 Microsoft Edge WebView2 顯示並停用指令碼；**預設封鎖遠端圖片**（寄件人無法得知你何時開啟郵件），可按**顯示圖片**或一律允許某寄件人。
 - **AI**: summarize an email, sort the inbox into Action needed / Later / Ads, draft a reply, or write an email for you.
   **AI**：摘要郵件、將收件匣分為需要處理／稍後再看／廣告、草擬回覆，或代為撰寫郵件。
+- **AI watch** (✦ AI 監聽): the AI reads each new email and notifies you (Windows notification, and Discord if set up in Settings → Notifications) when it matches a topic you set.
+  **AI 監聽**：AI 閱讀每封新郵件，與你設定的主題相關時通知你（Windows 通知；已在「設定 → 通知」設定 Discord 則一併通知）。
+- Replies don't include earlier messages unless you tick **Include original** (added in Gmail's quote style); paste images straight into the message with Ctrl+V.
+  回覆預設不附上之前的紀錄，勾選**附上原文**才會以 Gmail 引用格式加入；圖片可按 Ctrl+V 直接貼入內文。
 
 **Workshop 工作坊** — make your own tools, install it from the Tool library / 製作自己的工具，於工具庫安裝
 
@@ -284,6 +288,19 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - **AI** (shown when an AI is connected): ask about the document (summary, key points, questions) or tell the AI to rotate / delete / move pages, add text or add fillable fields; changes can be undone.
   **AI**（已連接 AI 時顯示）：查詢文件內容（摘要、重點、提問），或讓 AI 旋轉／刪除／移動頁面、加入文字或可填寫欄位；改動可復原。
 
+**Rabi Design 設計工具** — install it from the Tool library / 於工具庫安裝
+
+- **Photo editor** — layers with blend modes and opacity; rectangle, ellipse, lasso and magic-wand selections (add / subtract / intersect); brush (with pen pressure) and eraser with size, hardness and opacity; fill, color picker, move (whole layer or the selected pixels); cut / copy / paste (also from other programs); image size, canvas size, crop, rotate and flip; undo history. Opens PNG, JPG, WebP, BMP and GIF; saves PNG, JPG, WebP or a Rabi Design project (`.rdesign`) that keeps the layers. The first time a file is overwritten a backup is kept in `data\design\backup`.
+  **修圖** — 圖層（混合模式、不透明度）；矩形、橢圓、套索及魔術棒選取（加入／減去／交集）；筆刷（支援手寫筆壓力）及橡皮擦，可調大小、硬度及不透明度；填色、滴管、移動（整個圖層或選取部分）；剪下／複製／貼上（亦可貼上其他程式的圖片）；圖片尺寸、畫布尺寸、裁切、旋轉及翻轉；復原紀錄。可開啟 PNG、JPG、WebP、BMP 及 GIF；儲存為 PNG、JPG、WebP，或保留圖層的設計工具專案（`.rdesign`）。首次覆寫檔案前，會把原檔備份到 `data\design\backup`。
+- **Photo tools, adjustments and filters** — polygonal lasso, crop tool, pencil, clone stamp, gradient, editable text layers and shape tools (rectangle, ellipse, line); Free Transform (scale, rotate, flip); Adjustments: Brightness/Contrast, Levels, Curves, Exposure, Vibrance, Hue/Saturation, Color Balance, Black & White, Photo Filter, Invert, Posterize, Threshold, Desaturate and Auto Tone / Contrast / Color; Filters: Gaussian and Motion Blur, Unsharp Mask, Sharpen, Add Noise, Median, Mosaic, Emboss, Find Edges and High Pass, all with live preview; Fill and Stroke; Select → Reselect, Feather, Expand, Contract, Border, Smooth; Layer via Copy / Cut, Merge Visible, Stamp Visible, Arrange; grid. Keyboard shortcuts follow the ones common photo editors use (V M L W C I B S E G T U H Z tool keys with Shift to cycle, [ ] brush size, Shift+[ ] hardness, number keys for opacity, Ctrl+T, Ctrl+L, Ctrl+M, Ctrl+U, Ctrl+B, Ctrl+I, Ctrl+J, Ctrl+E, Ctrl+Shift+E, Ctrl+Alt+Shift+E, Ctrl+Alt+Z, Ctrl+Alt+F, Shift+F5, Shift+F6, Alt+[ ], hold Space / Ctrl for a temporary Hand / Move tool, Alt+click with painting tools to pick a color).
+  **修圖工具、調整及濾鏡** — 多邊形套索、裁切工具、鉛筆、仿製印章、漸層、可再修改的文字圖層及形狀工具（矩形、橢圓、直線）；任意變形（縮放、旋轉、翻轉）；調整：亮度／對比、色階、曲線、曝光度、自然飽和度、色相／飽和度、色彩平衡、黑白、相片濾鏡、負片、色調分離、臨界值、去色及自動色調／對比／顏色；濾鏡：高斯及動態模糊、遮色片銳利化、銳利化、增加雜訊、中間值、馬賽克、浮雕、找出邊緣及高反差保留，全部可即時預覽；填滿及筆畫；重新選取、羽化、擴張、縮減、邊框、平滑；拷貝／剪下的圖層、合併可見圖層、蓋印可見圖層、排列順序；格點。快捷鍵跟從常見修圖軟件的習慣。
+- **Workspace** — tools on the left (related tools grouped, hold or right-click for the rest), options bar on top, document tab, and Color, Swatches, Navigator, History and Layers panels on the right. Drag any panel tab to regroup it, dock it on either side or float it over the canvas; collapse a side to icons; Tab hides all panels; Window → Reset layout. The layout is remembered.
+  **工作區** — 左邊工具列（同類工具收埋一組，撳住或右鍵揀其他）、頂部工具選項列、文件分頁，右邊有顏色、色板、導覽、步驟紀錄及圖層面板。拖曳面板分頁即可重新分組、停駐到左右兩邊或浮動於畫布上；可把一邊收合為圖示；Tab 隱藏所有面板；「視窗 → 還原預設版面」。版面會自動記住。
+- **Vector drawing** — selection (move, Alt-drag to duplicate, scale and rotate handles), direct selection of anchors and handles, pen, pencil (smoothed), type, line, rectangle (rounded corners), ellipse, polygon, star, eyedropper; fill and stroke with stroke width, caps, corners and dashes; Properties, Align / Distribute, Shape operations (unite, minus front, intersect, exclude), Objects list (show, lock, rename, reorder), Color, Swatches and History panels; group / ungroup, arrange, flip and rotate, paste in front / back, artboard size. Opens and saves SVG and `.rdesign` projects; exports PDF (vector; drawings with Chinese or other non-Latin text are embedded as a high-resolution image) and PNG.
+  **向量繪圖** — 選取（移動、Alt 拖曳複製、縮放及旋轉把手）、直接選取錨點及把手、鋼筆、鉛筆（自動平滑）、文字、直線、矩形（圓角）、橢圓、多邊形、星形、滴管；填色及筆畫（粗細、端點、轉角、虛線）；內容、對齊／分佈、形狀運算（聯集、減去前方、交集、排除）、物件清單（顯示、鎖定、改名、排序）、顏色、色板及步驟紀錄面板；群組／解散、排列、翻轉及旋轉、原地貼上、畫板尺寸。開啟及儲存 SVG 及 `.rdesign` 專案；匯出 PDF（向量；含中文等文字時改以高解像度圖片嵌入）及 PNG。
+- Everything is processed on your PC; the editor page cannot access the network. Command line: `RabiToolkit.exe --design [file]`.
+  所有處理均在你的電腦進行；編輯器頁面無法連接網絡。命令列：`RabiToolkit.exe --design [檔案]`。
+
 **NAS Manager NAS 管理** — for Synology NAS, install it from the Tool library / 適用於 Synology NAS，於工具庫安裝
 
 - Browse your NAS like Google Drive (grid or list view, remembered): drag-and-drop upload, download, new folder, rename, delete and share links. Shared folders are the top level.
@@ -302,7 +319,7 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 - **Startup programs**: disable or re-enable programs that start with Windows (the same mechanism as Task Manager; nothing is deleted). **Installed software**: search, sort by size, and open a program's own uninstaller.
   **開機程式**：停用或重新啟用開機自動執行的程式（與工作管理員相同的機制，不會刪除任何項目）。**已安裝軟件**：搜尋、按大小排序，並開啟該軟件自己的解除安裝程式。
 
-**Image Tools 圖片處理** · **QR Codes 二維碼** · **Screen Translator 畫面翻譯** · **Expense Tracker 記帳** · **Unit & Currency Converter 單位及匯率換算**
+**Image Tools 圖片處理** · **QR Codes 二維碼** · **Screen Translator 畫面翻譯** · **Expense Tracker 記帳** · **Unit & Currency Converter 單位及匯率換算** · **Drafting 繪圖**
 
 - **Image Tools**: batch resize, compress, convert (JPG / PNG / BMP / GIF / TIFF), auto levels, brightness / contrast / saturation, sharpen, text watermark, rename and strip photo metadata. Originals are never changed.
   **圖片處理**：批次縮小、壓縮、轉換格式（JPG／PNG／BMP／GIF／TIFF）、自動調整光暗、亮度／對比／飽和度、銳化、文字水印、重新命名及清除相片資料。原圖不會被修改。
@@ -314,6 +331,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **記帳**：每日收支、每月總結、各類別支出、匯出 CSV。資料只儲存在你的電腦。
 - **Unit & Currency Converter**: offline unit conversion; daily exchange rates from public data (no AI, no account), cached for offline use.
   **單位及匯率換算**：離線單位換算；匯率使用公開的每日數據（無須 AI、無須帳戶），並會快取供離線使用。
+- **Drafting** (first version): 2D drafting with lines, polylines, circles, arcs, text and dimensions; layers, object snap and a command line (L, C, M, TR…); move, copy, rotate, mirror, offset, trim, extend and fillet. Opens and saves DXF, exports SVG / PNG and prints to scale. Written from scratch, no third-party libraries.
+  **繪圖**（初版）：2D 製圖，支援直線、聚合線、圓、弧、文字及尺寸標註；圖層、物件捕捉及指令列（L、C、M、TR…）；移動、複製、旋轉、鏡射、偏移、修剪、延伸、圓角。可開啟及儲存 DXF，匯出 SVG／PNG，按比例列印。全部自行編寫，沒有使用第三方程式庫。
 
 **Remote Desktop (beta) 遠端桌面（測試版）** — built in, no extra program / 內置，無須額外程式
 
@@ -361,6 +380,8 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
 | Gemini | [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
 | Local AI 本地 AI | Free, one-click download inside Rabi Toolkit (llama.cpp + Qwen3.5 2B / 4B) 免費，於 Rabi Toolkit 內一鍵下載（llama.cpp + Qwen3.5 2B／4B） |
 
+- **Model** (“Model: … ▾” at the top): choose Opus / Sonnet / Haiku / Fable for Claude or Pro / Flash for Gemini, or type a custom model name.
+  **模型**（上方「模型：… ▾」）：Claude 可選 Opus／Sonnet／Haiku／Fable，Gemini 可選 Pro／Flash，或輸入自訂模型名稱。
 - **Sign in / out** from the **Account** dialog; the top-right corner shows the current status (e.g. `已登入 Claude - Pro`). Rabi Toolkit never handles your account, password or token — sign-in is done by each official tool in your browser, and usage counts towards your own plan.
   在「帳號」視窗中**登入／登出**，右上角顯示目前狀態（例如 `已登入 Claude - Pro`）。Rabi Toolkit 不會接觸你的帳戶、密碼或權杖——登入由各官方工具於瀏覽器完成，用量計入你自己的方案。
 - **Chat history** is saved automatically (`data/ai/chats/`) and listed on the left; reopen a chat to continue it, or rename / delete it with a right-click.
@@ -396,6 +417,16 @@ Interface languages / 介面語言：Traditional Chinese, Simplified Chinese, En
   **新增：文書工具**（工具庫，新用戶預設安裝）——一個工具處理文件（.docx）、試算表（.xlsx，可建立真正的圖表）、簡報（.pptx）及 PDF；開啟甚麼檔案就顯示對應的編輯器。PDF 修改器已併入其中。檔案只在你的電腦上處理。
 - **New tools** (Tool library): **Cloud Server** (rent a Vultr server and start game servers or Discord bots in one click), **Flash Games** (play `.swf` files with Ruffle), **Image Tools** (batch resize, convert, enhance, watermark, rename, strip photo data), **QR Codes** (create and read, offline), **Screen Translator** (draw a box and translate the text inside as it changes), **Expense Tracker** (pie / bar charts, CSV export) and **Unit & Currency Converter**.
   **新增工具**（工具庫）：**雲端伺服器**（租用 Vultr 伺服器，一鍵開設遊戲伺服器或 Discord bot）、**Flash 小遊戲**（以 Ruffle 遊玩 `.swf`）、**圖片處理**（批次縮小、轉換格式、修飾、加水印、重新命名、清除相片資料）、**二維碼**（產生及讀取，離線）、**畫面翻譯**（畫一個框，框內文字一變就翻譯）、**記帳**（圓形圖／棒形圖、匯出 CSV）及**單位及匯率換算**。
+- **New: Drafting (first version)** (Tool library) — 2D drafting with DXF open / save, SVG / PNG export and printing to scale.
+  **新增：繪圖（初版）**（工具庫）——2D 製圖，可開啟／儲存 DXF、匯出 SVG／PNG 及按比例列印。
+- **New: Design** (Tool library) — our own photo editor and vector drawing tool: layers, selections, brushes, clone stamp, gradients, editable text, shapes, Free Transform, adjustments and filters with live preview, plus a vector editor with pen, shapes, text, align and shape operations. Opens and saves PNG, JPG, WebP, SVG and layered projects, exports PDF.
+  **新增：設計工具**（工具庫）——自家的修圖及向量繪圖工具：圖層、選取、筆刷、仿製印章、漸層、可再修改的文字、形狀、任意變形、可即時預覽的調整及濾鏡，以及具備鋼筆、形狀、文字、對齊及形狀運算的向量繪圖。可開啟及儲存 PNG、JPG、WebP、SVG 及保留圖層的專案，匯出 PDF。
+- **New: Email AI watch and composing** — the AI reads new emails and notifies you (Windows, and Discord if set up) when one matches a topic you set; replies no longer include earlier messages by default (tick “Include original”), and images can be pasted into the message with Ctrl+V.
+  **新增：電子郵件 AI 監聽及撰寫改進**——AI 閱讀新郵件，與你設定的主題相關時通知你（Windows，已設定 Discord 則一併通知）；回覆預設不再附上之前的紀錄（可勾選「附上原文」），圖片可按 Ctrl+V 直接貼入內文。
+- **New: Choose the AI model** (AI Assistant) — Opus / Sonnet / Haiku / Fable for Claude, Pro / Flash for Gemini, or a custom model.
+  **新增：選擇 AI 模型**（AI 助手）——Claude 可選 Opus／Sonnet／Haiku／Fable，Gemini 可選 Pro／Flash，或自訂模型。
+- **New: custom local AI models** — paste a Hugging Face model URL or a direct .gguf link to add your own model (GGUF only).
+  **新增：本地 AI 自訂模型**——貼上 Hugging Face 模型網址或 .gguf 直接連結即可加入自己的模型（只支援 GGUF）。
 - **Changed: Disk Space & Health is now Disk & App Manager** — adds duplicate file search, startup program management and an installed software list with uninstall.
   **變更：「磁碟空間及健康」改名為「磁碟及軟件管理」**——新增重複檔案搜尋、開機程式管理，以及可解除安裝的已安裝軟件清單。
 - **New: AI Assistant** — the local AI can now see attached images (models marked “Sees images” download with their image add-on), look things up online from free public sources before answering (off by default; you can also enter your own search API key), and make short videos on your PC (text to video / image to video, free Wan models). Qwen3.5 2B is back as the lightest model. Models your PC can't run are marked in red and show a warning before download.
@@ -743,9 +774,9 @@ Scripts, screenshots and settings are stored in the `data/` folder next to the e
 
 | Path 路徑 | Purpose 用途 |
 |---|---|
-| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiFiles.cs` chat attachments 對話附件；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 螢幕錄影；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Manager, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗管理、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Nas.cs`, `NasBrowser.cs`, `NasUi.cs` NAS Manager NAS 管理；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs`, `PerfExtra.cs` Performance Monitor, Ping, Game Mode 效能監控、Ping 監看、遊戲模式；`ScriptsExtra.cs` script variables, text recognition, notifications, schedule 腳本變數、文字辨識、通知、定時；`Backup.cs` backup & restore 備份及還原；`VideoEditor.cs`, `VideoEditorUi.cs` Video Editor 影片剪輯；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔；`FileRepair.cs`, `FileRepairUi.cs` File Repair 檔案修復；`Mail.cs`, `MailUi.cs`, `MailWeb.cs` Email 電子郵件；`Plugins.cs`, `PluginsUi.cs`, `PluginMods.cs` Workshop and plugins 工作坊及插件；`Themes.cs` themes and background image 主題及背景圖 |
+| `src/` | Source code 原始碼：`App.cs` main window, home page, title bar 主視窗、首頁及標題列；`UI.cs` dark theme and controls 深色主題及控件；`Common.cs` input, screen capture, image matching, hotkeys 輸入、截圖、圖像比對及快捷鍵；`Scripts.cs` script model, editor and runner 腳本資料、編輯器及執行器；`ScriptMonitor.cs` monitor mode 監視模式；`Ai.cs` AI platforms and AI Assistant page AI 平台及 AI 助手頁面；`AiFiles.cs` chat attachments 對話附件；`AiAssist.cs` script AI helper 腳本 AI 助手；`LocalAi.cs` local AI 本地 AI；`PcActions.cs` time / open apps & websites 報時及開啟程式與網頁；`Voice.cs`, `VoiceEngine.cs`, `Whisper.cs` voice chat and speech recognition 語音對話及語音辨識；`Lang.cs`, `LangTable.cs` interface languages 介面語言；`Updater.cs` auto update 自動更新；`Extensions.cs` Tool library 工具庫；`Video.cs` screen recorder 螢幕錄影；`ClickFx.cs` click effect 點擊效果；`P2P.cs` Script library 腳本庫；`Home.cs` home page 首頁；`Hotkeys.cs` hotkey table 快捷鍵表；`Replay.cs` Instant Replay 精彩重播；`Tools.cs` Key Remap, Window Manager, Clipboard, Text Recognition, Converter 遊戲改鍵、視窗管理、剪貼簿、文字辨識、轉檔；`GameServer.cs` Game Servers 遊戲伺服器；`Nas.cs`, `NasBrowser.cs`, `NasUi.cs` NAS Manager NAS 管理；`RemoteDesk.cs` Remote Desktop 遠端桌面；`PerfMon.cs`, `PerfExtra.cs` Performance Monitor, Ping, Game Mode 效能監控、Ping 監看、遊戲模式；`ScriptsExtra.cs` script variables, text recognition, notifications, schedule 腳本變數、文字辨識、通知、定時；`Backup.cs` backup & restore 備份及還原；`VideoEditor.cs`, `VideoEditorUi.cs` Video Editor 影片剪輯；`DiskTools.cs` Disk Space & Health 磁碟空間及健康；`DocConvert.cs` document converter 文件轉檔；`FileRepair.cs`, `FileRepairUi.cs` File Repair 檔案修復；`Mail.cs`, `MailUi.cs`, `MailWeb.cs` Email 電子郵件；`Design.cs` Rabi Design 設計工具；`Plugins.cs`, `PluginsUi.cs`, `PluginMods.cs` Workshop and plugins 工作坊及插件；`Themes.cs` themes and background image 主題及背景圖 |
 | `tools/` | Packaging tools 打包工具（`make_exe.py`, `bundle.py`） |
-| `lib/` | Files embedded into `MultiTool.dll` as resources 嵌入 `MultiTool.dll` 的檔案：`webview2/` (Microsoft Edge WebView2 SDK), `codemirror/` (CodeMirror 5), `pdfedit/` (PDF Editor page with pdf.js and pdf-lib) and `office/` (Documents page, built from `web/office/` by `web/office/build.sh`), packed into `pdfedit.zip` / `office.zip` by `tools/pack_pdfedit.py`, `steamworks/` (Steamworks.NET, Steam version only) |
+| `lib/` | Files embedded into `MultiTool.dll` as resources 嵌入 `MultiTool.dll` 的檔案：`webview2/` (Microsoft Edge WebView2 SDK), `codemirror/` (CodeMirror 5), `pdfedit/` (PDF Editor page with pdf.js and pdf-lib) and `office/` (Documents page, built from `web/office/` by `web/office/build.sh`), `design/` (Rabi Design page with paper.js, jsPDF and svg2pdf.js, built from `web/design/` by `web/design/build.sh`), packed into `pdfedit.zip` / `office.zip` / `design.zip` by `tools/pack_pdfedit.py`, `steamworks/` (Steamworks.NET, Steam version only) |
 | `workshop/` | Source of the free Workshop plugins 免費工作坊插件的原始碼（`video-download/`, `stocks/`; `dist/*.mtplugin` are attached to each release 每個版本附上）|
 | `archive/` | Old built-in code no longer compiled 已不再編譯的舊內置程式碼 |
 | `template/` | Example script shipped to users 隨附的範例腳本（Auto Click） |
@@ -765,7 +796,7 @@ python tools/pack_pdfedit.py
 csc -nostdlib -noconfig -target:winexe -langversion:13 -nullable:enable -unsafe -optimize+ -out:MultiTool.dll -r:ref/*.dll ^
     -r:lib/webview2/Microsoft.Web.WebView2.Core.dll -resource:lib/webview2/Microsoft.Web.WebView2.Core.dll,wv2.core ^
     -resource:lib/webview2/WebView2Loader.dll,wv2.loader -resource:lib/webview2/WebView2Loader.x86.dll,wv2.loader.x86 ^
-    -resource:lib/codemirror/cm.js,cm.js -resource:lib/codemirror/cm.css,cm.css -resource:lib/pdfedit.zip,pdfedit.zip -resource:assets/pdf.ico,icon.pdf -resource:lib/office.zip,office.zip -resource:assets/docx.ico,icon.docx -resource:assets/xlsx.ico,icon.xlsx -resource:assets/pptx.ico,icon.pptx ^
+    -resource:lib/codemirror/cm.js,cm.js -resource:lib/codemirror/cm.css,cm.css -resource:lib/pdfedit.zip,pdfedit.zip -resource:assets/pdf.ico,icon.pdf -resource:lib/office.zip,office.zip -resource:lib/design.zip,design.zip -resource:assets/docx.ico,icon.docx -resource:assets/xlsx.ico,icon.xlsx -resource:assets/pptx.ico,icon.pptx ^
     -resource:lib/lang/ja.json,lang.ja.json -resource:lib/lang/ko.json,lang.ko.json -resource:lib/lang/ru.json,lang.ru.json ^
     -resource:lib/lang/es.json,lang.es.json -resource:lib/lang/pt-BR.json,lang.pt-BR.json -resource:lib/lang/de.json,lang.de.json ^
     -resource:lib/lang/fr.json,lang.fr.json src/*.cs
@@ -824,12 +855,13 @@ Bundled in the executable / 已包含於執行檔內：
 
 Downloaded by the user on demand, not bundled in the executable / 由用戶按需下載，並未包含於執行檔內：
 
+- [paper.js](http://paperjs.org/), [jsPDF](https://github.com/parallax/jsPDF), [svg2pdf.js](https://github.com/yWorks/svg2pdf.js) and [JSZip](https://stuk.github.io/jszip/) — MIT License (JSZip used under its MIT option), used by Design for vector drawing, PDF export and project files (full list in `lib/design/THIRD-PARTY-LICENSES.txt`) / 設計工具用於向量繪圖、匯出 PDF 及專案檔（完整清單見 `lib/design/THIRD-PARTY-LICENSES.txt`）
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and [OpenAI Whisper](https://github.com/openai/whisper) models — MIT License
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) — MIT License
 - [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) — MIT License, downloaded when you install an AI image or AI video model / 安裝 AI 製圖或 AI 製影片模型時下載
 - [Wan 2.1 / 2.2 video models](https://github.com/Wan-Video) — Apache License 2.0, downloaded from Hugging Face when you choose one / 選用時由 Hugging Face 下載
 - [Ruffle](https://ruffle.rs/) — MIT / Apache License 2.0, downloaded the first time Flash Games is used / 首次使用 Flash 小遊戲時下載
-- Web lookup for the local AI queries these public services at run time (only when you turn it on): Wikipedia, GDELT, Hacker News, AniList, Bangumi, AnimeChan, PokéAPI, Steam, CheapShark, TVmaze, MusicBrainz / 本地 AI 的上網搜尋功能（開啟後才會使用）於執行時查詢上述公開服務
+- Web lookup for the local AI queries these public services at run time (only when you turn it on): Wikipedia, GDELT, Hacker News, Bangumi, AnimeChan, PokéAPI, Steam, CheapShark, TVmaze, MusicBrainz / 本地 AI 的上網搜尋功能（開啟後才會使用）於執行時查詢上述公開服務
 - [FFmpeg](https://ffmpeg.org/) (essentials build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)) — GPL, used by the recorder, Instant Replay, Video Editor, Converter, File Repair and the Video Downloader plugin as a separate program / GPL 授權，螢幕錄影、精彩重播、影片剪輯、格式轉換、檔案修復及影片下載插件以獨立程式方式調用
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) — Unlicense, downloaded by the Video Downloader Workshop plugin / 由影片下載工作坊插件下載
 - [qpdf](https://github.com/qpdf/qpdf) — Apache License 2.0, downloaded by File Repair for PDFs / 由檔案修復下載，用於 PDF
@@ -837,6 +869,7 @@ Downloaded by the user on demand, not bundled in the executable / 由用戶按�
 - [Yahoo Finance](https://finance.yahoo.com/) — public quote data used by the Stocks Workshop plugin, subject to Yahoo's terms / 股票工作坊插件使用的公開報價數據，受 Yahoo 條款約束
 - [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD) — Valve's command-line Steam client, downloaded by Game Servers; dedicated servers are downloaded from Steam under each game's own terms / Valve 官方命令列 Steam 用戶端，由遊戲伺服器下載；各專用伺服器從 Steam 下載，受各遊戲條款約束
 - [Qwen3.5](https://huggingface.co/Qwen) models (GGUF by [unsloth](https://huggingface.co/unsloth)) — see each model's license / 請參閱各模型的授權
+- Custom local AI models: you can paste a Hugging Face URL or a direct .gguf link to add your own model. These come from third parties and are not checked by this project; check each model's license yourself / 自訂本地 AI 模型：可貼上 Hugging Face 網址或 .gguf 直接連結自行加入；這些模型由第三方提供，本專案並未檢查，請自行查閱各模型的授權
 
 ---
 

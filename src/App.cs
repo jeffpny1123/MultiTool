@@ -396,6 +396,8 @@ internal sealed class MainForm : Form
         AddPage(Lang.T("雲端伺服器"), Tools.CloudPage.Build, "cloud", Extensions.Cloud);
         AddPage(Lang.T("Flash 小遊戲"), Tools.FlashGamesPage.Build, "flashgames", Extensions.Flash);
         AddPage(Lang.T("文書工具"), Tools.OfficePage.Build, "office", Extensions.Office);
+        AddPage(Lang.T("繪圖"), Tools.OfficePage.BuildCad, "cad", Extensions.Cad);
+        AddPage(Lang.T("設計工具"), Tools.DesignPage.Build, "design", Extensions.Design);
         // 加咗去工具欄嘅插件
         foreach (var id in Plugins.PluginStore.Pinned.ToList()) AddPluginPage(id);
         AddPage(Lang.T("AI 助手"), Ai.AiPage.Build, "ai");

@@ -22,3 +22,8 @@ Build/
 # 文書工具網頁部分：npm 套件同建立時嘅暫存檔
 web/office/node_modules/
 web/office/meta.json
+
+# 設計工具網頁部分：npm 套件同建立時嘅暫存檔
+web/design/node_modules/
+web/design/meta.json
+web/office/meta-*.json

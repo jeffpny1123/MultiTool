@@ -34,10 +34,10 @@ internal static class OfficeLib
     public static readonly string[] Exts = { ".docx", ".xlsx", ".pptx", ".pdf" };
     public static bool IsPdf(string path) => path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
     /// <summary>邊種檔案用邊頁開：home（首頁 + 文件）/ sheet / slides / pdf。</summary>
-    public static string PageOf(string path) => Path.GetExtension(path).ToLowerInvariant() switch { ".pdf" => "pdf", ".xlsx" => "sheet", ".pptx" => "slides", _ => "home" };
-    public static string PageUrl(string page) => "https://" + Host + "/" + page switch { "pdf" => "pdf/editor.html", "sheet" => "sheet.html", "slides" => "slides.html", _ => "index.html" };
+    public static string PageOf(string path) => Path.GetExtension(path).ToLowerInvariant() switch { ".pdf" => "pdf", ".xlsx" => "sheet", ".pptx" => "slides", ".dxf" => "cad", _ => "home" };
+    public static string PageUrl(string page) => "https://" + Host + "/" + page switch { "pdf" => "pdf/editor.html", "sheet" => "sheet.html", "slides" => "slides.html", "cad" => "cad.html", _ => "index.html" };
     /// <summary>每頁儲存用嘅副檔名（冇點）。</summary>
-    public static string ExtOf(string page) => page switch { "sheet" => "xlsx", "slides" => "pptx", "pdf" => "pdf", _ => "docx" };
+    public static string ExtOf(string page) => page switch { "sheet" => "xlsx", "slides" => "pptx", "pdf" => "pdf", "cad" => "dxf", _ => "docx" };
     public static bool Supported(string path) => Array.IndexOf(Exts, Path.GetExtension(path).ToLowerInvariant()) >= 0;
 
     /// <summary>解壓嵌入嘅編輯器檔案（zip 大細變咗 = 新版本，重新解壓）。</summary>
@@ -135,6 +135,7 @@ internal static class OfficeLib
             ["aiyou"] = Lang.T("你"), ["ainame"] = "AI", ["aithinking"] = Lang.T("AI 諗緊…"),
             ["aidone"] = Lang.T("已套用 {0} 項改動（可以撳「復原」還原）"), ["ainone"] = Lang.T("AI 想改嘅位置搵唔到，冇改到嘢。"), ["aifail"] = Lang.T("AI 回覆失敗："),
         };
+        CadStrings.Add(l);
         string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
         var cfg = new
         {
@@ -160,6 +161,9 @@ internal static class OfficeLib
         "pptx" => Lang.T("簡報") + " (*.pptx)|*.pptx",
         "pdf" => "PDF (*.pdf)|*.pdf",
         "csv" => "CSV (*.csv)|*.csv",
+        "dxf" => Lang.T("圖面") + " (*.dxf)|*.dxf",
+        "svg" => "SVG (*.svg)|*.svg",
+        "png" => "PNG (*.png)|*.png",
         _ => Lang.T("支援嘅檔案") + " (*.docx;*.xlsx;*.pptx;*.pdf)|*.docx;*.xlsx;*.pptx;*.pdf|" + Lang.T("文件") + " (*.docx)|*.docx|" + Lang.T("試算表") + " (*.xlsx)|*.xlsx|" + Lang.T("簡報") + " (*.pptx)|*.pptx|PDF (*.pdf)|*.pdf"
     };
 }
@@ -181,12 +185,13 @@ internal sealed class OfficeWeb
     /// <summary>開咗檔案（俾獨立視窗改標題）。</summary>
     public Action<string>? Opened;
 
-    public static async Task<OfficeWeb> CreateAsync(Control host, string? openPath = null)
+    private bool _cad;   // 繪圖工具（獨立一個工具，同文書工具分開）：只開 .dxf，冇首頁
+    public static async Task<OfficeWeb> CreateAsync(Control host, string? openPath = null, bool cad = false)
     {
         string data = Path.Combine(AppPaths.Data, "webview", "office");
         Directory.CreateDirectory(data);
         var env = await CoreWebView2Environment.CreateAsync(null, data);
-        var w = new OfficeWeb { _host = host, _pending = openPath, _ctl = await env.CreateCoreWebView2ControllerAsync(host.Handle) };
+        var w = new OfficeWeb { _host = host, _pending = openPath, _cad = cad, _ctl = await env.CreateCoreWebView2ControllerAsync(host.Handle) };
         w._ctl.DefaultBackgroundColor = Ui.Bg;
         try { w._ctl.AllowExternalDrop = true; } catch { }
         w._ctl.Bounds = host.ClientRectangle;
@@ -281,9 +286,10 @@ internal sealed class OfficeWeb
             }
             catch (Exception ex) { AppPaths.LogError("文書工具訊息", ex); }
         };
-        wv.ProcessFailed += (_, _) => { try { host.BeginInvoke(() => wv.Navigate(origin + "index.html")); } catch { } };
+        wv.ProcessFailed += (_, _) => { try { host.BeginInvoke(() => wv.Navigate(origin + (cad ? "cad.html#new-solo" : "index.html"))); } catch { } };
         // 一開始就係開 PDF：直接入 PDF 嗰頁，唔使經首頁轉
-        wv.Navigate(OfficeLib.PageUrl(openPath != null ? OfficeLib.PageOf(openPath) : "home"));
+        if (cad) wv.Navigate(OfficeLib.PageUrl("cad") + (openPath != null ? "#solo" : "#new-solo"));
+        else wv.Navigate(OfficeLib.PageUrl(openPath != null ? OfficeLib.PageOf(openPath) : "home"));
         return w;
     }
 
@@ -308,7 +314,7 @@ internal sealed class OfficeWeb
                 if (_page != "pdf")
                 {
                     _curPath = (string?)m["token"] is { } tk && _files.TryGetValue(tk, out var op) ? op : null;
-                    if (_curPath != null) { OfficeRecent.Add(_curPath); PostRecent(); }
+                    if (_curPath != null && !_cad) { OfficeRecent.Add(_curPath); PostRecent(); }
                 }
                 Opened?.Invoke((string?)m["name"] ?? "");
                 break;
@@ -381,6 +387,7 @@ internal sealed class OfficeWeb
             case "ai":
                 if (_page == "pdf") _ = AskPdfAsync((string?)m["q"] ?? "", (string?)m["text"] ?? "", (int?)m["pages"] ?? 0);
                 else if (_page == "sheet") _ = AskOtherAsync(SheetPrompt, (string?)m["q"] ?? "", (string?)m["text"] ?? "", (string?)m["info"] ?? "");
+                else if (_page == "cad") _ = AskOtherAsync(CadPrompt, (string?)m["q"] ?? "", (string?)m["text"] ?? "", (string?)m["info"] ?? "");
                 else if (_page == "slides") _ = AskOtherAsync(SlidesPrompt, (string?)m["q"] ?? "", (string?)m["text"] ?? "", (string?)m["info"] ?? "");
                 else _ = AskAsync((string?)m["q"] ?? "", (string?)m["text"] ?? "", (int?)m["paras"] ?? 0);
                 break;
@@ -445,7 +452,8 @@ internal sealed class OfficeWeb
                 Post(new JsonObject { ["t"] = "toast", ["text"] = Lang.F("搵唔到檔案：{0}", path) });
                 return;
             }
-            if (!OfficeLib.Supported(path))
+            // 繪圖工具只開 .dxf；文書工具唔開 .dxf
+            if (_cad ? !path.EndsWith(".dxf", StringComparison.OrdinalIgnoreCase) : !OfficeLib.Supported(path))
             {
                 Post(new JsonObject { ["t"] = "toast", ["text"] = Lang.T("呢種檔案暫時未支援。") });
                 return;
@@ -497,7 +505,7 @@ internal sealed class OfficeWeb
             File.Move(tmp, target, true);
             _curPath = target;
             _lastDir = Path.GetDirectoryName(target) ?? "";
-            OfficeRecent.Add(target); PostRecent();
+            if (!_cad) { OfficeRecent.Add(target); PostRecent(); }
             Post(new JsonObject { ["t"] = "saved", ["ok"] = true, ["name"] = Path.GetFileName(target) });
             Opened?.Invoke(Path.GetFileName(target));
         }
@@ -513,7 +521,7 @@ internal sealed class OfficeWeb
     {
         foreach (char c in Path.GetInvalidFileNameChars()) _saveName = _saveName.Replace(c, '_');
         string ext = Path.GetExtension(_saveName).TrimStart('.').ToLowerInvariant();
-        if (ext != "csv" && ext != "pdf") { Post(new JsonObject { ["t"] = "saved", ["ok"] = false }); return; }
+        if (ext != "csv" && ext != "pdf" && !(_cad && (ext == "svg" || ext == "png"))) { Post(new JsonObject { ["t"] = "saved", ["ok"] = false }); return; }
         using var d = new SaveFileDialog
         {
             Filter = OfficeLib.Filter(ext), FileName = _saveName, DefaultExt = ext, AddExtension = true, OverwritePrompt = true,
@@ -682,6 +690,20 @@ internal sealed class OfficeWeb
         "  {\"op\":\"chart\",\"type\":\"column\",\"range\":\"A1:C6\",\"title\":\"圖表標題\"}   // 加圖表；type = column（直條圖）/ bar（橫條圖）/ line（折線圖）/ area（區域圖）/ pie（圓形圖）；range 第一列係系列名、第一欄係分類，其餘係數字；圓形圖只用第一個數字欄\n" +
         "  {\"op\":\"deleteChart\",\"chart\":1}                                  // 刪除圖表（編號見下面「# charts」）\n" +
         "動作會按你寫嘅次序做，所以插入 / 刪除列欄之後嘅儲存格位置要用新位置。用戶叫你整圖表而資料未喺試算表入面，就先用 fill 填好資料再加 chart。你加唔到圖片，亦整唔到其他種類嘅圖表（散佈圖、組合圖、堆疊圖）；用戶要求呢啲就老實講做唔到。\n\n";
+    private const string CadPrompt =
+        "你係繪圖工具（2D 製圖）入面嘅助手。用戶開住一張圖面（.dxf），下面係圖面入面嘅物件（格式「#編號 種類 座標 [圖層]」）。座標單位係毫米，X 向右、Y 向上，角度係度數、逆時針為正。\n" +
+        "如果用戶只係發問（圖面有乜、尺寸、建議），直接用文字答，唔好輸出 JSON。\n" +
+        "如果用戶叫你畫嘢或者修改圖面，先用一句講你做咗乜，然後喺最尾加一個 ```json 區塊，入面係動作陣列，只可以用以下動作：\n" +
+        "  {\"op\":\"line\",\"x1\":0,\"y1\":0,\"x2\":100,\"y2\":0}\n" +
+        "  {\"op\":\"rect\",\"x\":0,\"y\":0,\"w\":100,\"h\":50}                       // x、y = 左下角\n" +
+        "  {\"op\":\"circle\",\"cx\":50,\"cy\":25,\"r\":10}\n" +
+        "  {\"op\":\"arc\",\"cx\":0,\"cy\":0,\"r\":20,\"start\":0,\"end\":90}             // 由 start 逆時針去 end\n" +
+        "  {\"op\":\"polyline\",\"points\":[[0,0],[10,0],[10,10]],\"closed\":false}\n" +
+        "  {\"op\":\"text\",\"x\":10,\"y\":10,\"text\":\"客廳\",\"height\":5,\"rotation\":0}\n" +
+        "  {\"op\":\"dim\",\"x1\":0,\"y1\":0,\"x2\":100,\"y2\":0,\"offset\":-15}           // 尺寸標註；offset = 標註線離開兩點連線嘅距離（正 = 連線方向嘅左邊）\n" +
+        "  {\"op\":\"layer\",\"name\":\"牆\",\"color\":1}                              // 加圖層；color 係索引色 1-255（1 紅 2 黃 3 綠 4 青 5 藍 6 洋紅 7 白/黑）\n" +
+        "  {\"op\":\"move\",\"ids\":[3,4],\"dx\":10,\"dy\":0}    {\"op\":\"erase\",\"ids\":[5]}\n" +
+        "每個畫圖動作都可以加 \"layer\":\"圖層名\"（要係已有或者前面用 layer 動作加咗嘅圖層）。座標要自己計好，確保圖形接得啱。你做唔到修剪、圓角、填充圖案同 3D；用戶要求呢啲就老實講做唔到。\n\n";
     private const string SlidesPrompt =
         "你係文書工具入面嘅簡報助手。用戶開住一份簡報（.pptx），下面係每張投影片嘅物件（格式「[物件編號] 種類: 文字」；title = 標題，body = 內文，sp = 圖形 / 文字方塊，pic = 圖片）。\n" +
         "如果用戶只係發問（摘要、建議、講稿），直接用文字答，唔好輸出 JSON。\n" +
@@ -755,9 +777,14 @@ internal sealed class OfficePage : Panel
         return p;
     }
 
-    public OfficePage(string? openPath)
+    private readonly bool _cad;
+    /// <summary>繪圖工具嗰頁（同一套瀏覽器外殼，只係入面開繪圖頁）。</summary>
+    public static Control BuildCad() => new OfficePage(null, true);
+
+    public OfficePage(string? openPath, bool cad = false)
     {
         _open = openPath;
+        _cad = cad;
         BackColor = Ui.Bg;
         Dock = DockStyle.Fill;
         Controls.Add(_host);
@@ -773,7 +800,7 @@ internal sealed class OfficePage : Panel
         {
             if (!Mail.WebView2Lib.Prepare()) { _msg.Text = Lang.T("要用 Microsoft Edge WebView2 Runtime 先用到（Windows 10 / 11 通常已經有）。"); return; }
             if (!OfficeLib.Prepare()) { _msg.Text = Lang.T("載入失敗：") + "office"; return; }
-            if (!PdfEditLib.Prepare()) { _msg.Text = Lang.T("載入失敗：") + "pdfedit"; return; }
+            if (!_cad && !PdfEditLib.Prepare()) { _msg.Text = Lang.T("載入失敗：") + "pdfedit"; return; }
             _web = await CreateWeb();
             _msg.Visible = false;
         }
@@ -789,7 +816,7 @@ internal sealed class OfficePage : Panel
     [MethodImpl(MethodImplOptions.NoInlining)]
     private async Task<object> CreateWeb()
     {
-        var w = await OfficeWeb.CreateAsync(_host, _open);
+        var w = await OfficeWeb.CreateAsync(_host, _open, _cad);
         _open = null;
         w.Opened = n => Opened?.Invoke(n);
         return w;

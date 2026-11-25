@@ -1147,9 +1147,15 @@ internal static class Mime
     }
 
     public sealed record Outgoing(string FromName, string FromAddr, string To, string Cc, string Bcc, string Subject, string Body,
-        List<string> Attachments, string InReplyTo = "", string References = "");
+        List<string> Attachments, string InReplyTo = "", string References = "", string? Html = null, List<InlineImage>? Inline = null);
 
-    /// <summary>砌一封信（UTF-8 純文字 + 附件）。</summary>
+    /// <summary>內嵌喺 HTML 入面嘅圖片（&lt;img src="cid:…"&gt;）。</summary>
+    public sealed record InlineImage(string Cid, string Type, byte[] Data);
+
+    /// <summary>
+    /// 砌一封信：純文字；有 HTML 就 multipart/alternative（純文字 + HTML），HTML 有內嵌圖片就再包一層 multipart/related；
+    /// 有附件就最外面 multipart/mixed。
+    /// </summary>
     public static byte[] Build(Outgoing o)
     {
         var sb = new StringBuilder();
@@ -1166,13 +1172,37 @@ internal static class Mime
         if (o.References.Length > 0) sb.Append("References: ").Append(o.References).Append("\r\n");
         sb.Append("MIME-Version: 1.0\r\n");
         string bodyB64 = Wrap(Convert.ToBase64String(Encoding.UTF8.GetBytes(o.Body.Replace("\r\n", "\n").Replace("\n", "\r\n"))));
+        // 內文部分（由 Content-Type 開始嘅完整一段）
+        string textPart = "Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" + bodyB64;
+        string bodyPart = textPart;
+        if (o.Html != null)
+        {
+            string htmlPart = "Content-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" + Wrap(Convert.ToBase64String(Encoding.UTF8.GetBytes(o.Html)));
+            if (o.Inline is { Count: > 0 })
+            {
+                string rb = "=_mt_r_" + Guid.NewGuid().ToString("N");
+                var r = new StringBuilder($"Content-Type: multipart/related; type=\"text/html\"; boundary=\"{rb}\"\r\n\r\n--{rb}\r\n").Append(htmlPart);
+                int n = 0;
+                foreach (var img in o.Inline)
+                {
+                    string ext = img.Type switch { "image/jpeg" => ".jpg", "image/gif" => ".gif", "image/webp" => ".webp", "image/bmp" => ".bmp", _ => ".png" };
+                    string name = "image" + (++n) + ext;
+                    r.Append($"--{rb}\r\nContent-Type: {img.Type}; name=\"{name}\"\r\nContent-Transfer-Encoding: base64\r\nContent-ID: <{img.Cid}>\r\n");
+                    r.Append($"Content-Disposition: inline; filename=\"{name}\"\r\n\r\n").Append(Wrap(Convert.ToBase64String(img.Data)));
+                }
+                r.Append($"--{rb}--\r\n");
+                htmlPart = r.ToString();
+            }
+            string ab = "=_mt_a_" + Guid.NewGuid().ToString("N");
+            bodyPart = $"Content-Type: multipart/alternative; boundary=\"{ab}\"\r\n\r\n--{ab}\r\n" + textPart + $"--{ab}\r\n" + htmlPart + $"--{ab}--\r\n";
+        }
         if (o.Attachments.Count == 0)
         {
-            sb.Append("Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n").Append(bodyB64);
+            sb.Append(bodyPart);
             return Encoding.ASCII.GetBytes(sb.ToString());
         }
         sb.Append($"Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\n");
-        sb.Append($"--{boundary}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n").Append(bodyB64);
+        sb.Append($"--{boundary}\r\n").Append(bodyPart);
         foreach (var f in o.Attachments)
         {
             string name = Path.GetFileName(f);

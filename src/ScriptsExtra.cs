@@ -330,7 +330,7 @@ internal static class Notifier
         {
             string content = $"**{title}**" + (message.Length > 0 ? "\n" + message : "");
             if (content.Length > 1900) content = content[..1900] + "…";
-            var json = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string> { ["content"] = content, ["username"] = "MultiTool" });
+            var json = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string> { ["content"] = content, ["username"] = Program.AppName });
             using var body = new StringContent(json, Encoding.UTF8, "application/json");
             using var resp = await Http.PostAsync(url, body);
             if (resp.IsSuccessStatusCode) return null;

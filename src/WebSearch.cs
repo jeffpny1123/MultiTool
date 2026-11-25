@@ -134,7 +134,6 @@ internal static class WebSearch
         new("wikipedia", "Wikipedia", "general knowledge, people, places, history, concepts; search terms in the user's own language", Wikipedia),
         new("news", "GDELT", "recent world news and current events; 2-4 ENGLISH keywords", Gdelt),
         new("hackernews", "Hacker News", "technology and programming news and discussion; ENGLISH keywords", HackerNews),
-        new("anilist", "AniList", "anime and manga facts (episodes, airing dates, score, genres); romaji or English title", AniList),
         new("bangumi", "Bangumi", "anime, manga, games with Chinese/Japanese information; Chinese or Japanese title", Bangumi),
         new("quote", "AnimeChan", "a quote from an anime; ENGLISH anime title", AnimeChan),
         new("pokemon", "PokéAPI", "Pokémon data (types, stats, abilities); ENGLISH Pokémon name", Pokemon),
@@ -187,23 +186,6 @@ internal static class WebSearch
         var root = await GetAsync($"https://hn.algolia.com/api/v1/search?query={E(q)}&tags=story&hitsPerPage=5", ct);
         return root.A("hits").Select(h => new Hit(h.S("title"), "https://news.ycombinator.com/item?id=" + h.S("objectID"),
             Join(Cut(h.S("created_at"), 10).TrimEnd('…'), h.S("points") + " points", h.S("num_comments") + " comments", h.S("url")))).Where(h => h.Title.Length > 0).ToList();
-    }
-
-    private static async Task<List<Hit>> AniList(string q, CancellationToken ct)
-    {
-        const string gql = "query($s:String){Page(perPage:3){media(search:$s){title{romaji english native} type format status episodes chapters season seasonYear averageScore genres siteUrl description(asHtml:false) startDate{year month day} nextAiringEpisode{episode airingAt}}}}";
-        var root = await PostAsync("https://graphql.anilist.co", new { query = gql, variables = new { s = q } }, ct);
-        return root.A("data", "Page", "media").Select(m =>
-        {
-            string next = "";
-            if (m.P("nextAiringEpisode") is { ValueKind: JsonValueKind.Object } n && long.TryParse(n.S("airingAt"), out long at))
-                next = "next episode " + n.S("episode") + " airs " + DateTimeOffset.FromUnixTimeSeconds(at).ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-            string title = string.Join(" / ", new[] { m.S("title", "native"), m.S("title", "romaji"), m.S("title", "english") }.Where(t => t.Length > 0).Distinct());
-            return new Hit(title, m.S("siteUrl"), Join(
-                m.S("type") + " " + m.S("format"), "status: " + m.S("status"), "episodes: " + m.S("episodes"), "chapters: " + m.S("chapters"),
-                "season: " + (m.S("season") + " " + m.S("seasonYear")).Trim(), "start: " + string.Join("-", new[] { m.S("startDate", "year"), m.S("startDate", "month"), m.S("startDate", "day") }.Where(x => x.Length > 0)),
-                "score: " + m.S("averageScore"), "genres: " + string.Join(", ", m.A("genres").Select(g => g.GetString())), next, Cut(Plain(m.S("description")), 400)));
-        }).ToList();
     }
 
     private static async Task<List<Hit>> Bangumi(string q, CancellationToken ct)

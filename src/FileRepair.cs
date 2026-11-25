@@ -153,7 +153,7 @@ internal static class FileRepair
                     await PdfAsync(path, outDir, o, r, progress, ct);
                     break;
                 default:
-                    r.Error = Lang.T("認唔到呢種檔案。支援：影片、聲音、相片、ZIP / Word / Excel / PowerPoint、PDF。");
+                    r.Error = Lang.T("認唔到呢種檔案。支援：影片、聲音、相片、ZIP / 文件 / 試算表 / 簡報、PDF。");
                     break;
             }
         }
@@ -743,7 +743,7 @@ internal static class FileRepair
         if (damaged > 0)
             r.Notes.Add(Lang.F("其中 {0} 個唔完整：{1}", damaged, string.Join("、", entries.Values.Where(e => e.Damaged).Select(e => e.Name).Take(6)) + (damaged > 6 ? "…" : "")));
         string? miss = OfficeMissing(outFile, ext);
-        if (miss != null) r.Notes.Add(Lang.F("缺少 {0}：Office 可能仍然開唔到，可以試吓用 Office 嘅「開啟並修復」。", miss));
+        if (miss != null) r.Notes.Add(Lang.F("缺少 {0}：文書軟件可能仍然開唔到，可以試吓用佢嘅「開啟並修復」功能。", miss));
     }
 
     /// <summary>Office / EPUB 必要嘅檔案冇咗（回傳缺咗邊個；冇問題 = null）。</summary>

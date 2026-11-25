@@ -46,17 +46,9 @@ internal static class LocalImage
                 new Part("vae", "Comfy-Org/z_image_turbo", f => f.Contains("vae/", StringComparison.OrdinalIgnoreCase) && f.EndsWith(".safetensors", StringComparison.OrdinalIgnoreCase), new[] { "ae.safetensors" }),
             },
             (m, prompt, w, h, outFile) => Common(m, prompt, w, h, outFile) + " --cfg-scale 1.0 --steps 8 --diffusion-fa"),
-        new("qwenimage21-turbo", "Qwen-Image-2.1 Turbo", "≈ 10 GB", "畫質最好嘅免費模型，字都寫得準；只限非商業用途（Qwen Research License）", 24, 16,
-            new[]
-            {
-                new Part("diffusion", "unsloth/Qwen-Image-2.1-Turbo-GGUF", Gguf, Q4),
-                new Part("llm", "Qwen/Qwen3-VL-8B-Instruct-GGUF", Gguf, Q4),
-                new Part("vae", "Comfy-Org/Qwen-Image-2.1", f => f.Contains("vae/", StringComparison.OrdinalIgnoreCase) && f.Contains("qwen_image_2.1_vae", StringComparison.OrdinalIgnoreCase) && f.EndsWith(".safetensors", StringComparison.OrdinalIgnoreCase), new[] { "bf16" }),
-            },
-            (m, prompt, w, h, outFile) => Common(m, prompt, w, h, outFile) + " --sigmas qwen-image-2.1-turbo --steps 8 --cfg-scale 1.0 --sampling-method euler") { MinVram = 6, NeedVram = 12 },
     };
 
-    // stable-diffusion.cpp（MIT）：固定一個已經支援 Z-Image 同 Qwen-Image-2.1 Turbo 嘅版本
+    // stable-diffusion.cpp（MIT）：固定一個已經支援 Z-Image 嘅版本
     private const string BinTag = "master-1047-984eb06";
     private const string BinUrl = "https://github.com/leejet/stable-diffusion.cpp/releases/download/" + BinTag + "/sd-master-984eb06-bin-win-vulkan-x64.zip";
 

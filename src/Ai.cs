@@ -45,6 +45,57 @@ internal abstract class AiProvider
         catch { return null; }
     }
 
+    // ---------------- 模型版本（例如 Claude 嘅 Opus / Sonnet） ----------------
+    /// <summary>可以揀嘅版本（值 = 交俾工具嘅名，例如 opus）；空 = 只有「預設」同「自訂」。</summary>
+    public virtual (string Value, string Label)[] ModelChoices => Array.Empty<(string, string)>();
+    private string ModelFile => Path.Combine(WorkDir, "model_" + Key + ".txt");
+    private string? _model;
+    /// <summary>用家揀咗嘅版本（存喺 data\ai\model_xxx.txt）；空 = 由工具自己決定（預設）。</summary>
+    public string Model
+    {
+        get
+        {
+            if (_model != null) return _model;
+            try { _model = File.Exists(ModelFile) ? File.ReadAllText(ModelFile).Trim() : ""; } catch { _model = ""; }
+            if (!ValidModel(_model)) _model = "";
+            return _model;
+        }
+        set
+        {
+            _model = ValidModel(value ?? "") ? value!.Trim() : "";
+            LastModel = "";
+            try { Directory.CreateDirectory(WorkDir); File.WriteAllText(ModelFile, _model); } catch (Exception ex) { AppPaths.LogError("儲存 AI 模型", ex); }
+        }
+    }
+    /// <summary>模型名會直接放入指令列，所以只准字母、數字同少量符號（費事有人塞其他指令入去）。</summary>
+    public static bool ValidModel(string s) => s.Length > 0 && s.Length <= 80 && System.Text.RegularExpressions.Regex.IsMatch(s, @"^[A-Za-z0-9][A-Za-z0-9._:\-\[\]/]*$");
+    /// <summary>最近一次回答實際用咗邊個模型（工具有報先知）。</summary>
+    public string LastModel = "";
+    /// <summary>未問過嘢之前，估到預設係邊個就講（例如 Codex 設定檔寫咗）；估唔到 = 空。</summary>
+    public virtual string DefaultModelHint() => "";
+    /// <summary>claude-opus-5-5-20260101 → Opus 5.5；認唔到嘅格式就原樣顯示。</summary>
+    public static string PrettyModel(string id)
+    {
+        string t = System.Text.RegularExpressions.Regex.Replace(id, @"^(claude|models/)[-]?", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        t = System.Text.RegularExpressions.Regex.Replace(t, @"-\d{8}$", "");
+        var m = System.Text.RegularExpressions.Regex.Match(t, @"^([a-z]+)-(\d+(?:-\d+)*)$");
+        return m.Success ? char.ToUpperInvariant(m.Groups[1].Value[0]) + m.Groups[1].Value[1..] + " " + m.Groups[2].Value.Replace('-', '.') : t;
+    }
+    /// <summary>JSON 入面一個「模型名 → 用量」嘅物件：揀輸出最多嗰個（主模型）。</summary>
+    protected static string TopModel(JsonElement usage, params string[] tokenPath)
+    {
+        string best = ""; long max = -1;
+        if (usage.ValueKind != JsonValueKind.Object) return best;
+        foreach (var p in usage.EnumerateObject())
+        {
+            long n = 0; var e = p.Value;
+            foreach (string k in tokenPath) { if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty(k, out var x)) e = x; else { e = default; break; } }
+            if (e.ValueKind == JsonValueKind.Number) e.TryGetInt64(out n);
+            if (n > max) { max = n; best = p.Name; }
+        }
+        return best;
+    }
+
     public sealed record Auth(bool? LoggedIn, string? Plan);
     public sealed record Answer(string Text, string? SessionId, bool IsError);
 
@@ -176,6 +227,7 @@ internal sealed class ClaudeProvider : AiProvider
     public override string Key => "claude";
     public override string Name => "Claude";
     public override string ToolName => "Claude Code";
+    public override (string Value, string Label)[] ModelChoices => new[] { ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku"), ("fable", "Fable") };
     public override string InstallUrl => "https://claude.com/claude-code";
     protected override string Command => "claude";
     protected override string LoginArgs => "auth login";
@@ -237,7 +289,7 @@ internal sealed class ClaudeProvider : AiProvider
         }
         string args = "-p --output-format json" +
                       (sessionId != null ? $" --resume {sessionId}" : "") +
-                      (quick ? " --model haiku --no-session-persistence" : "") + tools;
+                      (quick ? " --model haiku --no-session-persistence" : Model.Length > 0 ? " --model " + Model : "") + tools;
         var (code, output, err) = await RunPromptAsync(exe, args, prompt, started, folder);
         // {"type":"result","result":"...","session_id":"...","is_error":false}
         try
@@ -250,6 +302,8 @@ internal sealed class ClaudeProvider : AiProvider
                 string text = r.TryGetProperty("result", out var t) ? t.GetString() ?? "" : "";
                 string? sid = r.TryGetProperty("session_id", out var s) ? s.GetString() : null;
                 bool isErr = r.TryGetProperty("is_error", out var e) && e.ValueKind == JsonValueKind.True;
+                // modelUsage：{"claude-opus-…":{"outputTokens":…}}＝今次實際用咗邊個模型
+                if (!quick && r.TryGetProperty("modelUsage", out var mu)) { string top = TopModel(mu, "outputTokens"); if (top.Length > 0) LastModel = top; }
                 return new Answer(text.Length > 0 ? text : Lang.T("(冇回覆)"), sid, isErr);
             }
         }
@@ -264,6 +318,17 @@ internal sealed class CodexProvider : AiProvider
     public override string Key => "codex";
     public override string Name => "ChatGPT";
     public override string ToolName => "Codex CLI";
+    public override string DefaultModelHint()
+    {
+        try
+        {
+            string f = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "config.toml");
+            if (!File.Exists(f)) return "";
+            var m = System.Text.RegularExpressions.Regex.Match(File.ReadAllText(f), "(?m)^\\s*model\\s*=\\s*\"([^\"]+)\"");
+            return m.Success ? m.Groups[1].Value : "";
+        }
+        catch { return ""; }
+    }
     public override string InstallUrl => "https://github.com/openai/codex";
     protected override string Command => "codex";
     protected override string LoginArgs => "login";
@@ -312,7 +377,7 @@ internal sealed class CodexProvider : AiProvider
         string mode = folder != null ? "workspace-write" : "read-only";
         // workspace-write：淨係寫得入工作目錄；sandbox 入面唔准上網、唔使問就唔行指令
         if (folder != null) mode += " -c sandbox_workspace_write.network_access=false -c approval_policy=never";
-        string common = $"--json --skip-git-repo-check -c sandbox_mode={mode} -o \"{outFile}\"" + (quick ? " --ephemeral" : "");
+        string common = $"--json --skip-git-repo-check -c sandbox_mode={mode} -o \"{outFile}\"" + (quick ? " --ephemeral" : "") + (!quick && Model.Length > 0 ? " -c model=" + Model : "");
         // --search：俾佢上網搵資料（唔使逐次批准）
         // 附件：新對話嘅圖片用 -i 直接俾佢睇；其他（同接續對話）講明路徑，佢自己用唯讀 shell 讀
         string imgs = "";
@@ -360,6 +425,7 @@ internal sealed class GeminiProvider : AiProvider
     public override string Key => "gemini";
     public override string Name => "Gemini";
     public override string ToolName => "Gemini CLI";
+    public override (string Value, string Label)[] ModelChoices => new[] { ("gemini-2.5-pro", "Gemini 2.5 Pro"), ("gemini-2.5-flash", "Gemini 2.5 Flash") };
     public override string InstallUrl => "https://github.com/google-gemini/gemini-cli";
     protected override string Command => "gemini";
     protected override string LoginArgs => "";
@@ -388,7 +454,7 @@ internal sealed class GeminiProvider : AiProvider
         // 新對話自己定 session id，之後用佢接返上文
         string sid = sessionId ?? Guid.NewGuid().ToString();
         string args = "--output-format json --skip-trust " + (sessionId != null ? $"--resume {sid}" : $"--session-id {sid}") +
-                      (folder != null ? " --approval-mode auto_edit" : "");
+                      (folder != null ? " --approval-mode auto_edit" : "") + (!quick && Model.Length > 0 ? " -m " + Model : "");
         // 附件：@路徑 = 將檔案內容（圖片、PDF、文字）附入問題
         if (files is { Count: > 0 })
         {
@@ -407,6 +473,8 @@ internal sealed class GeminiProvider : AiProvider
                 using var doc = JsonDocument.Parse(json[brace..(json.LastIndexOf('}') + 1)]);
                 var r = doc.RootElement;
                 if (r.TryGetProperty("session_id", out var s) && s.ValueKind == JsonValueKind.String) sid = s.GetString() ?? sid;
+                // stats.models：{"gemini-…":{"tokens":{"candidates":…}}}＝今次實際用咗邊個模型
+                if (!quick && r.TryGetProperty("stats", out var st) && st.ValueKind == JsonValueKind.Object && st.TryGetProperty("models", out var gm)) { string top = TopModel(gm, "tokens", "candidates"); if (top.Length > 0) LastModel = top; }
                 if (r.TryGetProperty("response", out var t) && t.ValueKind == JsonValueKind.String && (t.GetString() ?? "").Length > 0)
                     return new Answer(t.GetString()!, sid, false);
                 if (r.TryGetProperty("error", out var e))
@@ -422,6 +490,7 @@ internal sealed class GeminiProvider : AiProvider
 internal sealed class AiPage : Panel
 {
     private readonly Label _status;
+    private readonly FancyButton _modelBtn;
     private readonly FancyButton _detect, _login, _newChat, _send, _settings, _attachBtn, _drawBtn, _videoBtn, _webBtn;
     private readonly AttachBar _attach = new();
     private readonly System.Windows.Forms.Timer _voiceKey = new() { Interval = 30 };
@@ -483,14 +552,18 @@ internal sealed class AiPage : Panel
             dlg.ShowDialog(FindForm());
         });
         _folderBtn = Btn("", BtnKind.Ghost, ShowFolderMenu);
+        _modelBtn = Btn("", BtnKind.Ghost, ShowModelMenu);
+        _tipAttach.SetToolTip(_modelBtn, Lang.T("而家用緊邊個模型；撳一下可以轉"));
         UpdateFolderButton();
-        _top.Controls.AddRange(new Control[] { title, _status, _detect, _login, _settings, _folderBtn });
+        UpdateModelButton();
+        _top.Controls.AddRange(new Control[] { title, _status, _detect, _login, _settings, _folderBtn, _modelBtn });
         _top.Layout += (_, _) =>
         {
             _status.Location = new Point(title.Right + Ui.S(14), Ui.S(13));
             int x = _top.ClientSize.Width;
             // 資料夾掣放第二行（左邊），唔會同狀態字疊埋
             _folderBtn.Location = new Point(0, Ui.S(50));
+            _modelBtn.Location = new Point(_folderBtn.Right + Ui.S(8), Ui.S(50));
             foreach (var b in new[] { _settings, _login, _detect })
             {
                 x -= b.Width;
@@ -689,6 +762,7 @@ internal sealed class AiPage : Panel
         if (_provider == p) return;
         _provider = p;
         try { File.WriteAllText(ProviderFile, p.Key); } catch { }
+        UpdateModelButton();
         _ = RefreshStatusAsync();
     }
 
@@ -756,6 +830,61 @@ internal sealed class AiPage : Panel
     }
 
     // ---------- 連接資料夾 ----------
+    /// <summary>第二行嘅「模型：…」掣：顯示用緊邊個版本（工具報咗實際模型就寫埋），撳一下可以轉。</summary>
+    private void UpdateModelButton()
+    {
+        if (_modelBtn == null) return;
+        var p = _provider;
+        _modelBtn.Visible = p != null;
+        if (p == null) return;
+        string name;
+        if (p is LocalProvider) name = LocalAi.Current?.Label ?? Lang.T("未揀");
+        else
+        {
+            name = p.Model.Length == 0 ? Lang.T("預設") : p.ModelChoices.FirstOrDefault(c => c.Value == p.Model).Label ?? p.Model;
+            string actual = p.LastModel.Length > 0 ? AiProvider.PrettyModel(p.LastModel) : p.Model.Length == 0 ? p.DefaultModelHint() : "";
+            if (actual.Length > 0 && !actual.StartsWith(name, StringComparison.OrdinalIgnoreCase)) name += "（" + actual + "）";
+            else if (actual.Length > name.Length) name = actual;
+        }
+        _modelBtn.Text = Lang.T("模型：") + name + "  ▾";
+        _modelBtn.Size = new Size(Math.Min(Ui.S(420), Math.Max(Ui.S(84), _modelBtn.GetPreferredSize(Size.Empty).Width + Ui.S(16))), Ui.S(34));
+        _modelBtn.Invalidate();
+        _top?.PerformLayout();
+    }
+
+    private void ShowModelMenu()
+    {
+        var p = _provider;
+        if (p == null || _running != null) return;
+        if (p is LocalProvider) { OpenLocalSetup(); UpdateModelButton(); return; }
+        var menu = new ContextMenuStrip();
+        try { menu.Renderer = DarkTheme.MenuRenderer(); } catch { }
+        menu.BackColor = Ui.CardHi;
+        menu.ForeColor = Ui.Text;
+        void Pick(string v) { p.Model = v; UpdateModelButton(); }
+        var def = new ToolStripMenuItem(Lang.F("預設（由 {0} 決定）", p.ToolName)) { Checked = p.Model.Length == 0 };
+        def.Click += (_, _) => Pick("");
+        menu.Items.Add(def);
+        foreach (var (v, label) in p.ModelChoices)
+        {
+            var it = new ToolStripMenuItem(v == "fable" ? label + Lang.T("（可能要另外計用量）") : label) { Checked = p.Model == v };
+            it.Click += (_, _) => Pick(v);
+            menu.Items.Add(it);
+        }
+        bool custom = p.Model.Length > 0 && !p.ModelChoices.Any(c => c.Value == p.Model);
+        var other = new ToolStripMenuItem(custom ? Lang.F("自訂：{0}", p.Model) : Lang.T("自訂…")) { Checked = custom };
+        other.Click += (_, _) => BeginInvoke(() =>
+        {
+            string? v = MultiTool.Mail.AskText.Show(FindForm(), Lang.T("自訂模型"), Lang.F("輸入 {0} 認得嘅模型名（留空 = 預設）", p.ToolName), p.Model);
+            if (v == null) return;
+            v = v.Trim();
+            if (v.Length > 0 && !AiProvider.ValidModel(v)) { MessageBox.Show(FindForm(), Lang.T("模型名只可以有英文字母、數字同 . - _ : / [ ]"), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            Pick(v);
+        });
+        menu.Items.Add(other);
+        menu.Show(_modelBtn, new Point(0, _modelBtn.Height));
+    }
+
     private void UpdateFolderButton()
     {
         var f = Folder;
@@ -881,6 +1010,7 @@ internal sealed class AiPage : Panel
     private void UpdateButtons()
     {
         bool busy = _running != null;
+        if (!busy) UpdateModelButton();   // 答完先知實際用咗邊個模型
         _send.Text = busy ? Lang.T("停止") : Lang.T("傳送");
         _send.Kind = busy ? BtnKind.Danger : BtnKind.Primary;
         _send.Enabled = true;

@@ -27,9 +27,13 @@ internal static class LocalAi
     /// <summary>NeedGb = 建議嘅電腦記憶體（RAM）；MinGb = 少過呢個就唔俾下載（一定行唔到）。</summary>
     /// <remarks>Hidden = 已經唔再提供（太弱），只係下載咗嘅舊用家先見到，可以繼續用或者刪除。</remarks>
     /// <remarks>Vision = 模型本身識睇圖片（要另外下載「圖片識別組件」mmproj 先用到）。</remarks>
-    public sealed record Model(string Key, string Repo, string Label, string Size, string Note, int NeedGb, int MinGb, bool Hidden = false, bool Vision = true);
+    /// <remarks>File / Custom：用家自己加嘅模型（File = repo 入面嘅檔名，或者成條 https 直接連結）。</remarks>
+    public sealed record Model(string Key, string Repo, string Label, string Size, string Note, int NeedGb, int MinGb, bool Hidden = false, bool Vision = true, string? File = null, bool Custom = false);
 
-    public static readonly Model[] Models =
+    /// <summary>內置模型 + 用家自己加嘅模型。</summary>
+    public static Model[] Models => Builtin.Concat(Custom).ToArray();
+
+    private static readonly Model[] Builtin =
     {
         new("qwen35-2b", "unsloth/Qwen3.5-2B-GGUF", "Qwen3.5 2B", "≈ 1.3 GB", "最輕量、最快，適合簡單問答同舊電腦", 4, 3),
         new("qwen35-4b", "unsloth/Qwen3.5-4B-GGUF", "Qwen3.5 4B", "≈ 2.7 GB", "聰明啲，速度適中，日常問答同寫作", 8, 5),
@@ -39,6 +43,94 @@ internal static class LocalAi
         new("qwen38-27b", "unsloth/Qwen3.8-27B-GGUF", "Qwen3.8 27B", "≈ 16.5 GB", "最勁（接近雲端 AI）；有 24 GB 顯示卡會快好多", 32, 20),
         new("glm47-flash", "unsloth/GLM-4.7-Flash-GGUF", "GLM-4.7 Flash", "≈ 18.3 GB", "智譜出品；大模型但行得快，寫程式同推理好強", 32, 22, Vision: false),
     };
+
+    // ---------------- 自訂模型（用家自己貼 Hugging Face 網址 / .gguf 連結） ----------------
+    private static string CustomFile => Path.Combine(Dir, "custom.json");
+    private static List<Model>? _custom;
+    public static List<Model> Custom
+    {
+        get
+        {
+            if (_custom != null) return _custom;
+            try { _custom = System.IO.File.Exists(CustomFile) ? JsonSerializer.Deserialize<List<Model>>(System.IO.File.ReadAllText(CustomFile)) : null; } catch (Exception ex) { AppPaths.LogError("讀自訂模型", ex); }
+            return _custom ??= new List<Model>();
+        }
+    }
+    private static void SaveCustom() { try { Directory.CreateDirectory(Dir); System.IO.File.WriteAllText(CustomFile, JsonSerializer.Serialize(Custom)); } catch (Exception ex) { AppPaths.LogError("儲存自訂模型", ex); } }
+    public static void AddCustom(Model m) { if (!Custom.Any(x => x.Key == m.Key)) { Custom.Add(m); SaveCustom(); } }
+    public static void RemoveCustom(Model m) { Custom.RemoveAll(x => x.Key == m.Key); SaveCustom(); }
+
+    /// <summary>
+    /// 用家貼嘅嘢 → 模型。支援：Hugging Face 模型頁網址、「作者/模型」、「作者/模型:Q5_K_M」、指住某個 .gguf 嘅網址、其他網站嘅 .gguf 直接連結。
+    /// 只收 GGUF（llama.cpp 用嘅格式）；要登入先落到嘅、分開幾個檔嘅暫時唔支援。
+    /// </summary>
+    public static async Task<(Model Model, string License)> ResolveCustomAsync(string input, CancellationToken ct)
+    {
+        string s = input.Trim().Trim('"', '\'', ' ');
+        string? repo = null, file = null, tag = null;
+        var hf = Regex.Match(s, @"^(?:https?://)?(?:www\.)?(?:huggingface\.co|hf\.co)/([\w.\-]+/[\w.\-]+)(?:/(?:blob|resolve|tree)/[^/?#]+(?:/([^?#]+))?)?/?(?:[?#].*)?$", RegexOptions.IgnoreCase);
+        var bare = Regex.Match(s, @"^([\w.\-]+/[\w.\-]+)(?::([\w.\-]+))?$");
+        string Key(string id) => "c-" + Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(Encoding.UTF8.GetBytes(id.ToLowerInvariant())))[..12].ToLowerInvariant();
+        static string SizeText(long b) => b > 0 ? $"≈ {b / 1073741824.0:0.#} GB" : "";
+        static (int Need, int Min) Mem(long b) { double gb = b / 1073741824.0; return (Math.Max(4, (int)Math.Ceiling(gb * 1.5 + 2)), Math.Max(2, (int)Math.Ceiling(gb * 1.1 + 1))); }
+        if (hf.Success && !Regex.IsMatch(hf.Groups[1].Value, @"^(datasets|spaces|docs|api|models)/", RegexOptions.IgnoreCase))
+        {
+            repo = hf.Groups[1].Value;
+            if (hf.Groups[2].Success && hf.Groups[2].Value.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase)) file = Uri.UnescapeDataString(hf.Groups[2].Value);
+        }
+        else if (bare.Success) { repo = bare.Groups[1].Value; if (bare.Groups[2].Success) tag = bare.Groups[2].Value; }
+        else if (Uri.TryCreate(s, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps && u.AbsolutePath.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
+        {
+            // 其他網站嘅直接連結
+            long size = 0;
+            try
+            {
+                using var http0 = NewClient();
+                using var req = new HttpRequestMessage(HttpMethod.Head, u);
+                using var resp = await http0.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+                if (resp.IsSuccessStatusCode) size = resp.Content.Headers.ContentLength ?? 0;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { }
+            string name = Path.GetFileNameWithoutExtension(Uri.UnescapeDataString(u.AbsolutePath));
+            var (need0, min0) = Mem(size);
+            return (new Model(Key(u.AbsoluteUri), "", name, SizeText(size), u.Host, need0, min0, Vision: false, File: u.AbsoluteUri, Custom: true), "");
+        }
+        else throw new InvalidOperationException(Lang.T("認唔到呢個網址。請貼上 Hugging Face 模型頁網址（例如 https://huggingface.co/作者/模型-GGUF）或者 .gguf 檔案嘅直接連結。"));
+
+        using var http = NewClient();
+        string json;
+        try { json = await http.GetStringAsync($"https://huggingface.co/api/models/{repo}?blobs=true", ct); }
+        catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        { throw new InvalidOperationException(Lang.F("搵唔到呢個模型（{0}），或者佢要登入先睇到。", repo)); }
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        if (root.TryGetProperty("gated", out var g) && g.ValueKind != JsonValueKind.False)
+            throw new InvalidOperationException(Lang.T("呢個模型要登入 Hugging Face 同意條款先下載到，暫時未支援。"));
+        var all = root.GetProperty("siblings").EnumerateArray()
+            .Select(x => (Name: x.GetProperty("rfilename").GetString() ?? "", Size: x.TryGetProperty("size", out var z) && z.ValueKind == JsonValueKind.Number ? z.GetInt64() : 0L))
+            .Where(f => f.Name.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase)).ToList();
+        bool vision = all.Any(f => f.Name.Contains("mmproj", StringComparison.OrdinalIgnoreCase) && !f.Name.Contains('/'));
+        var ggufs = all.Where(f => !f.Name.Contains("mmproj", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (ggufs.Count == 0) throw new InvalidOperationException(Lang.T("呢個模型冇 GGUF 檔案。本地 AI 只支援 GGUF 格式嘅模型。"));
+        var single = ggufs.Where(f => !Regex.IsMatch(f.Name, @"-\d{5}-of-\d{5}\.gguf$", RegexOptions.IgnoreCase)).ToList();
+        (string Name, long Size) pick = default;
+        if (file != null) pick = single.FirstOrDefault(f => string.Equals(f.Name, file, StringComparison.OrdinalIgnoreCase));
+        else
+            foreach (string q in new[] { tag ?? Quant, "Q4_K_M", "Q4_K_S", "Q4_0", "Q5_K_M", "Q6_K", "Q8_0", "" })
+            {
+                pick = single.OrderBy(f => f.Name.Contains('/') ? 1 : 0).FirstOrDefault(f => f.Name.Contains(q, StringComparison.OrdinalIgnoreCase));
+                if (pick.Name != null) break;
+            }
+        if (pick.Name == null) throw new InvalidOperationException(single.Count == 0 || (file != null && ggufs.Any(f => string.Equals(f.Name, file, StringComparison.OrdinalIgnoreCase)))
+            ? Lang.T("呢個模型分成幾個檔案，暫時未支援。") : Lang.T("搵唔到模型檔案。"));
+        string lic = "";
+        if (root.TryGetProperty("cardData", out var cd) && cd.ValueKind == JsonValueKind.Object && cd.TryGetProperty("license", out var lv) && lv.ValueKind == JsonValueKind.String) lic = lv.GetString() ?? "";
+        if (lic.Length == 0 && root.TryGetProperty("tags", out var tags) && tags.ValueKind == JsonValueKind.Array)
+            lic = tags.EnumerateArray().Select(t => t.GetString() ?? "").FirstOrDefault(t => t.StartsWith("license:"))?[8..] ?? "";
+        var (need, min) = Mem(pick.Size);
+        return (new Model(Key(repo + "/" + pick.Name), repo, Path.GetFileNameWithoutExtension(Path.GetFileName(pick.Name)), SizeText(pick.Size), repo, need, min, Vision: vision, File: pick.Name, Custom: true), lic);
+    }
 
     /// <summary>
     /// 部機未達模型最低要求仍然想下載：彈警告 + 免責聲明，預設揀「否」。回傳用家係咪堅持下載。
@@ -226,6 +318,7 @@ internal static class LocalAi
     /// <summary>搵 repo 入面嘅圖片識別組件（mmproj）同大細；冇就 null。</summary>
     public static async Task<(string File, long Size)?> ResolveMmprojAsync(Model m, CancellationToken ct)
     {
+        if (m.Repo.Length == 0) return null;
         using var http = NewClient();
         string json = await http.GetStringAsync($"https://huggingface.co/api/models/{m.Repo}?blobs=true", ct);
         using var doc = JsonDocument.Parse(json);
@@ -395,6 +488,7 @@ internal static class LocalAi
     /// <summary>問 Hugging Face 個 repo 有咩檔，揀 Q4_K_M 嗰個 .gguf（費事寫死檔名）。</summary>
     private static async Task<string> ResolveFileAsync(Model m, CancellationToken ct)
     {
+        if (m.File != null) return m.File;   // 自訂模型：加入嗰陣已經揀好
         using var http = NewClient();
         string json = await http.GetStringAsync($"https://huggingface.co/api/models/{m.Repo}", ct);
         using var doc = JsonDocument.Parse(json);
@@ -432,7 +526,8 @@ internal static class LocalAi
         {
             progress(Lang.T("搵緊模型…"), -1);
             string file = await ResolveFileAsync(m, ct);
-            await DownloadAsync($"https://huggingface.co/{m.Repo}/resolve/main/{file}", ModelFile(m),
+            string url = file.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? file : $"https://huggingface.co/{m.Repo}/resolve/main/{file}";
+            await DownloadAsync(url, ModelFile(m),
                 (d, t) => progress(Lang.F("下載模型 {0}…", m.Label), t > 0 ? (double)d / t : -1), ct);
         }
         // 識睇圖嘅模型：順手下載埋圖片識別組件（失敗唔影響用嚟傾偈，之後可以喺「圖片識別」再裝）
@@ -679,9 +774,9 @@ internal sealed class LocalAiDialog : Form
         double ram = LocalAi.RamGb;
         var rec = LocalAi.Recommended;
         // 已經唔再提供嘅模型：下載咗先顯示
-        var shown = LocalAi.Models.Where(m => !m.Hidden || LocalAi.ModelReady(m)).ToArray();
-        int listH = Math.Min(rowH * shown.Length, Math.Max(rowH * 3, Screen.FromPoint(Cursor.Position).WorkingArea.Height - Ui.S(200)));
-        ClientSize = new Size(W, Ui.S(92) + listH + Ui.S(10));
+        int customH = Ui.S(74);
+        int listH = Math.Min(rowH * Math.Max(4, LocalAi.Models.Count(m => !m.Hidden || LocalAi.ModelReady(m))), Math.Max(rowH * 3, Screen.FromPoint(Cursor.Position).WorkingArea.Height - Ui.S(200) - customH));
+        ClientSize = new Size(W, Ui.S(92) + listH + Ui.S(10) + customH);
         FormClosing += (_, _) => _cts?.Cancel();
         Controls.Add(new Label
         {
@@ -693,6 +788,47 @@ internal sealed class LocalAiDialog : Form
         var list = new Panel { AutoScroll = true, BackColor = Ui.Card, Bounds = new Rectangle(0, Ui.S(88), W, listH) };
         Controls.Add(list);
         var rows = new List<Action>();
+        var starters = new Dictionary<string, Func<Task>>();
+        // 自訂模型：貼網址 → 搵檔案 → 確認（免責聲明）→ 加入清單再自動下載
+        Controls.Add(new Label { Text = Lang.T("自訂模型（進階）：貼上 Hugging Face 模型網址，或者 .gguf 檔案嘅直接連結"), ForeColor = Ui.TextDim, Font = Ui.F(8.75f), AutoSize = false, AutoEllipsis = true, Bounds = new Rectangle(Ui.S(16), Ui.S(96) + listH, W - Ui.S(32), Ui.S(18)) });
+        var urlBox = new TextBox { BorderStyle = BorderStyle.FixedSingle, BackColor = Ui.Input, ForeColor = Ui.Text, Font = Ui.F(9.5f), PlaceholderText = "https://huggingface.co/…", Bounds = new Rectangle(Ui.S(16), Ui.S(118) + listH, W - Ui.S(32) - btnW - Ui.S(8), Ui.S(26)) };
+        var addBtn = new FancyButton { Text = Lang.T("加入並下載"), Kind = BtnKind.Ghost, Font = Ui.F(9.25f), Bounds = new Rectangle(W - Ui.S(16) - btnW, Ui.S(117) + listH, btnW, Ui.S(28)) };
+        Controls.Add(urlBox); Controls.Add(addBtn);
+        Action build = () => { };
+        async Task AddCustomAsync()
+        {
+            if (_cts != null || urlBox.Text.Trim().Length == 0) return;
+            addBtn.Enabled = false; string old = addBtn.Text; addBtn.Text = Lang.T("搵緊模型…");
+            try
+            {
+                var (m, lic) = await LocalAi.ResolveCustomAsync(urlBox.Text, CancellationToken.None);
+                if (IsDisposed) return;
+                if (LocalAi.Models.Any(x => x.Key == m.Key)) { MessageBox.Show(this, Lang.T("呢個模型已經喺清單入面。"), Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+                string msg = Lang.F("加入自訂模型：{0}　{1}\n來源：{2}\n授權：{3}", m.Label, m.Size, m.Repo.Length > 0 ? "huggingface.co/" + m.Repo : m.Note, lic.Length > 0 ? lic : Lang.T("未註明")) + "\n\n" +
+                             Lang.F("自訂模型由第三方提供，{0} 冇檢查過佢嘅內容、質素同授權。可唔可以使用（包括商業用途）請自行查閱模型頁嘅授權條款；下載同使用嘅風險由你自行承擔。", Program.AppName) + "\n\n" +
+                             Lang.T("加入並下載？");
+                if (MessageBox.Show(this, msg, Program.AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
+                LocalAi.AddCustom(m);
+                urlBox.Text = "";
+                build();
+                if (starters.TryGetValue(m.Key, out var go)) await go();
+            }
+            catch (Exception ex)
+            {
+                AppPaths.LogError("加自訂模型", ex);
+                if (!IsDisposed) MessageBox.Show(this, ex is InvalidOperationException ? ex.Message : Lang.T("下載失敗：") + ex.Message, Program.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally { if (!IsDisposed) { addBtn.Text = old; addBtn.Enabled = true; } }
+        }
+        addBtn.Click += async (_, _) => await AddCustomAsync();
+        urlBox.KeyDown += async (_, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; await AddCustomAsync(); } };
+        build = () =>
+        {
+        foreach (Control c in list.Controls.Cast<Control>().ToArray()) c.Dispose();
+        list.Controls.Clear(); rows.Clear(); starters.Clear();
+        list.AutoScrollPosition = Point.Empty;
+        // 已經唔再提供嘅模型：下載咗先顯示
+        var shown = LocalAi.Models.Where(m => !m.Hidden || LocalAi.ModelReady(m)).ToArray();
         int y = 0;
         foreach (var m in shown)
         {
@@ -706,8 +842,8 @@ internal sealed class LocalAiDialog : Form
             var vis = new Label { Text = m.Vision ? "👁 " + Lang.T("識睇圖片") : Lang.T("唔識睇圖片"), Font = Ui.F(8.75f), AutoSize = true, ForeColor = m.Vision ? Ui.Success : Ui.TextFaint };
             void PlaceTags() => vis.Location = new Point(need.Right + Ui.S(12), Ui.S(32));
             need.SizeChanged += (_, _) => PlaceTags();
-            var note = new Label { Text = Lang.T(m.Note), Font = Ui.F(8.75f), ForeColor = Ui.TextFaint, AutoSize = false, AutoEllipsis = true, Bounds = new Rectangle(Ui.S(12), Ui.S(52), textW, Ui.S(18)) };
-            new ToolTip().SetToolTip(note, Lang.T(m.Note));
+            var note = new Label { Text = m.Custom ? Lang.T("自訂模型") + " · " + m.Note : Lang.T(m.Note), Font = Ui.F(8.75f), ForeColor = Ui.TextFaint, AutoSize = false, AutoEllipsis = true, Bounds = new Rectangle(Ui.S(12), Ui.S(52), textW, Ui.S(18)) };
+            new ToolTip().SetToolTip(note, m.Custom ? m.Note + (m.File != null ? "\n" + m.File : "") : Lang.T(m.Note));
             var state = new Label { Font = Ui.F(8.75f), AutoSize = false, AutoEllipsis = true, Bounds = new Rectangle(Ui.S(12), Ui.S(72), textW, Ui.S(18)) };
             var bar = new ProgressBar { Bounds = new Rectangle(Ui.S(12), Ui.S(90), panel.Width - Ui.S(24), Ui.S(4)), Visible = false };
             var main = new FancyButton { Kind = BtnKind.Primary, Font = Ui.F(9.5f), Bounds = new Rectangle(bx, Ui.S(10), btnW, Ui.S(30)) };
@@ -778,6 +914,7 @@ internal sealed class LocalAiDialog : Form
                 rows.ForEach(r => r());
             }
 
+            starters[m.Key] = async () => { if (fit == 2 && !LocalAi.ConfirmWeak(this, m.Label, fitText)) return; await Run(false); };
             main.Click += async (_, _) =>
             {
                 if (LocalAi.BinReady && LocalAi.ModelReady(m))
@@ -797,10 +934,22 @@ internal sealed class LocalAiDialog : Form
                 if (MessageBox.Show(this, Lang.F("刪除 {0}？", m.Label), Program.AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
                 LocalAi.Delete(m);
                 Changed?.Invoke();
+                if (m.Custom) { LocalAi.RemoveCustom(m); BeginInvoke(build); return; }   // 自訂模型：連清單嗰行一齊移除
                 rows.ForEach(r => r());
             };
+            // 自訂模型未下載都可以由清單移除
+            if (m.Custom)
+            {
+                var rm = new FancyButton { Text = Lang.T("移除"), Kind = BtnKind.Ghost, Font = Ui.F(8.75f), Bounds = new Rectangle(bx, Ui.S(44), btnW, Ui.S(22)) };
+                panel.Controls.Add(rm);
+                rows.Add(() => rm.Visible = !(LocalAi.BinReady && LocalAi.ModelReady(m)) && _cts == null);
+                rm.Click += (_, _) => { LocalAi.Delete(m); LocalAi.RemoveCustom(m); BeginInvoke(build); };
+            }
             Refresh();
+            rows[^1]();
             y += rowH;
         }
+        };
+        build();
     }
 }

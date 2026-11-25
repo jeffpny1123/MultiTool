@@ -127,6 +127,7 @@ internal static class PdfEditLib
 internal static class DocShell
 {
     public const string PdfMsg = "\u0002pdf";
+    public const string DesignMsg = "\u0002design";
     private const string CapKey = @"Software\RabiToolkit\Capabilities";
 
     /// <summary>一種檔案：副檔名、登記名、邊個工具負責、圖示（exe 入面嘅 resource）。</summary>
@@ -153,6 +154,14 @@ internal static class DocShell
     /// <summary>命令列：--pdf 檔案… / --doc 檔案…（冇就 null）。回傳嘅陣列第一格係 PdfMsg。</summary>
     public static string[]? Args(string[] args)
     {
+        // --design [檔案…]：用設計工具開（冇檔案就開一個空白嘅設計工具視窗）
+        int di = Array.IndexOf(args, "--design");
+        if (di >= 0)
+        {
+            var df = new List<string> { DesignMsg };
+            for (int k = di + 1; k < args.Length && !args[k].StartsWith("--"); k++) df.Add(args[k]);
+            return df.ToArray();
+        }
         int i = -1;
         foreach (var k in Kinds) { i = Array.IndexOf(args, k.Flag); if (i >= 0) break; }
         if (i < 0) return null;
@@ -164,6 +173,12 @@ internal static class DocShell
     /// <summary>開檔訊息（第一格 PdfMsg）：每個檔一個新視窗，睇副檔名決定用邊個工具。</summary>
     public static bool Handle(string[] msg)
     {
+        if (msg.Length >= 1 && msg[0] == DesignMsg)
+        {
+            if (msg.Length == 1) DesignWindow.Open(null);
+            for (int i = 1; i < msg.Length; i++) if (File.Exists(msg[i])) DesignWindow.Open(msg[i]);
+            return true;
+        }
         if (msg.Length < 2 || msg[0] != PdfMsg) return false;
         for (int i = 1; i < msg.Length; i++)
         {

@@ -1,0 +1,12 @@
+{
+  "name": "rabi-design",
+  "private": true,
+  "description": "設計工具嘅網頁部分（修圖、之後加向量繪圖）。npm install 之後行 build.sh，輸出去 lib/design。",
+  "dependencies": {
+    "esbuild": "^0.25.0",
+    "jspdf": "^2.5.2",
+    "jszip": "^3.10.1",
+    "paper": "^0.12.18",
+    "svg2pdf.js": "^2.2.4"
+  }
+}

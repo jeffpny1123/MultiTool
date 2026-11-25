@@ -39,7 +39,7 @@ internal static class Tables
         return ext switch
         {
             ".xlsx" or ".xlsm" => ReadXlsx(path),
-            ".xls" => throw new NotSupportedException(Lang.T("舊版 .xls 唔支援：請用 Excel「另存新檔」做 .xlsx")),
+            ".xls" => throw new NotSupportedException(Lang.T("舊版 .xls 唔支援：請先另存做 .xlsx")),
             ".json" => new() { new(Path.GetFileNameWithoutExtension(path), ReadJson(File.ReadAllText(path, DetectEncoding(path)))) },
             _ => new() { new(Path.GetFileNameWithoutExtension(path), ReadDelimited(File.ReadAllText(path, DetectEncoding(path)), ext == ".tsv" ? '\t' : null)) }
         };
@@ -394,7 +394,7 @@ internal sealed class DocConvertPage : ToolPage
     };
     private static readonly (string Key, string Name)[] Encs =
     {
-        ("utf8bom", Lang.T("UTF-8（Excel 開到中文，建議）")), ("utf8", Lang.T("UTF-8 冇 BOM（程式用）")), ("big5", Lang.T("Big5 繁體（舊系統）")), ("gbk", Lang.T("GBK 簡體（舊系統）"))
+        ("utf8bom", Lang.T("UTF-8（試算表軟件開到中文，建議）")), ("utf8", Lang.T("UTF-8 冇 BOM（程式用）")), ("big5", Lang.T("Big5 繁體（舊系統）")), ("gbk", Lang.T("GBK 簡體（舊系統）"))
     };
     private static readonly string[] InExts = { ".xlsx", ".xlsm", ".xls", ".csv", ".tsv", ".txt", ".json" };
 
@@ -423,7 +423,7 @@ internal sealed class DocConvertPage : ToolPage
         }, 0, BtnKind.Primary);
         var clear = TUi.Btn(Lang.T("清空"), () => { if (!_busy) { _jobs.Clear(); BuildRows(); } });
         _list = new FlowLayoutPanel { AutoSize = true, BackColor = Ui.Card, FlowDirection = FlowDirection.TopDown, WrapContents = false };
-        Card(Lang.T("文件轉檔"), Lang.T("Excel (.xlsx)、CSV、TSV、JSON 互轉，亦可以改 CSV 編碼（例如 Excel 開 CSV 中文亂碼）。可以直接拖檔案入嚟。"),
+        Card(Lang.T("文件轉檔"), Lang.T("試算表 (.xlsx)、CSV、TSV、JSON 互轉，亦可以改 CSV 編碼（例如試算表軟件開 CSV 中文亂碼）。可以直接拖檔案入嚟。"),
             TUi.Col(TUi.Row(add, clear), _list));
 
         _fmtBtn = TUi.Btn("", () => TUi.Pick(_fmtBtn!, Outs.Select(o => (o.Name, o.Ext)), _fmt, v => { _fmt = v; UpdateLabels(); }), 170);
@@ -442,11 +442,11 @@ internal sealed class DocConvertPage : ToolPage
             menu.Items.Add(same); menu.Items.Add(pick);
             menu.Show(_outBtn!, new Point(0, _outBtn!.Height));
         }, 240);
-        _merge = TUi.Check(Lang.T("轉 Excel 時合併做一個檔（每個檔案一張工作表）"), false, _ => { });
+        _merge = TUi.Check(Lang.T("轉試算表時合併做一個檔（每個檔案一張工作表）"), false, _ => { });
         _header = TUi.Check(Lang.T("第一行係標題（轉 JSON 用）"), true, _ => { });
         _start = TUi.Btn(Lang.T("▶ 開始轉檔"), () => _ = StartAsync(), 130, BtnKind.Success);
         _status = TUi.L("");
-        Card(Lang.T("輸出"), Lang.T("Excel 有幾張工作表、轉做 CSV / TSV / JSON 時會每張出一個檔。數字、日期會照 Excel 顯示嘅值輸出；公式淨係輸出計好嘅結果。"),
+        Card(Lang.T("輸出"), Lang.T("試算表有幾張工作表、轉做 CSV / TSV / JSON 時會每張出一個檔。數字、日期會照試算表顯示嘅值輸出；公式淨係輸出計好嘅結果。"),
             TUi.Col(
                 TUi.Row(TUi.L(Lang.T("格式")), _fmtBtn, TUi.L(Lang.T("編碼")), _encBtn),
                 TUi.Row(_merge),
